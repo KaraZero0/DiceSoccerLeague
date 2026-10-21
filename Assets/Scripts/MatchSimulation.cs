@@ -80,6 +80,14 @@ namespace DiceSoccer
         public int HomeExtraBonus { get; set; }
         public int AwayExtraBonus { get; set; }
 
+        public void AdvanceLocation(int side)
+        {
+            if (side == 0)
+                _location = Math.Min(MaxLocation, _location + 1);
+            else
+                _location = Math.Max(MinLocation, _location - 1);
+        }
+
         public void AdjustHomeTotal(int delta)
         {
             if (_pendingEncounter != null)
@@ -207,23 +215,56 @@ namespace DiceSoccer
                     break;
             }
 
-            var homeRoll = RollSlots(_home, homeSlots, _homeRedCards, _possession == 0 ? HomeExtraBonus : 0);
-            var awayRoll = RollSlots(_away, awaySlots, _awayRedCards, _possession == 1 ? AwayExtraBonus : 0);
+            int homeExtra = (_possession == 0 ? HomeExtraBonus : 0);
+            int awayExtra = (_possession == 1 ? AwayExtraBonus : 0);
 
-            SetLastRolls(0, (homeRoll.Rolls, homeRoll.Total, homeRoll.Faces),
-                         1, (awayRoll.Rolls, awayRoll.Total, awayRoll.Faces));
+            // Entourage 2: Callie McLooney (+1 to total when your team has possession)
+            if (_possession == 0 && Array.IndexOf(_homeEntourages, 2) >= 0) homeExtra += 1;
+            if (_possession == 1 && Array.IndexOf(_awayEntourages, 2) >= 0) awayExtra += 1;
+
+            // Entourage 15: Torna Hammstring (Permanent +1 bonus when losing)
+            if (HomeScore < AwayScore && Array.IndexOf(_homeEntourages, 15) >= 0) homeExtra += 1;
+            if (AwayScore < HomeScore && Array.IndexOf(_awayEntourages, 15) >= 0) awayExtra += 1;
+
+            var homeRoll = RollSlots(_home, homeSlots, _homeRedCards, homeExtra);
+            var awayRoll = RollSlots(_away, awaySlots, _awayRedCards, awayExtra);
+
+            int homeTotal = homeRoll.Total;
+            int awayTotal = awayRoll.Total;
+            int[] homeFinalFaces = FinalFaces(homeRoll.Rolls);
+            int[] awayFinalFaces = FinalFaces(awayRoll.Rolls);
+
+            ApplyEntourageRollBonuses(_homeEntourages, _home, homeFinalFaces, ref homeTotal);
+            ApplyEntourageRollBonuses(_awayEntourages, _away, awayFinalFaces, ref awayTotal);
+
+            // Entourage 20: Pierre Bear Stare (give yellow card if enemy dice rolls > 7)
+            if (Array.IndexOf(_homeEntourages, 20) >= 0)
+            {
+                for (int i = 0; i < awayFinalFaces.Length; i++)
+                    if (awayFinalFaces[i] > 7 && i < awaySlots.Length)
+                        _awayYellowCards[awaySlots[i]] = true;
+            }
+            if (Array.IndexOf(_awayEntourages, 20) >= 0)
+            {
+                for (int i = 0; i < homeFinalFaces.Length; i++)
+                    if (homeFinalFaces[i] > 7 && i < homeSlots.Length)
+                        _homeYellowCards[homeSlots[i]] = true;
+            }
+
+            SetLastRolls(0, (homeRoll.Rolls, homeTotal, homeRoll.Faces),
+                         1, (awayRoll.Rolls, awayTotal, awayRoll.Faces));
 
             _pendingEncounter = new PendingEncounter(
                 isShot,
                 _possession,
-                homeRoll.Total,
-                awayRoll.Total,
+                homeTotal,
+                awayTotal,
                 homeRoll.Faces,
                 awayRoll.Faces,
                 homeSlots,
                 awaySlots,
-                FinalFaces(homeRoll.Rolls),
-                FinalFaces(awayRoll.Rolls));
+                homeFinalFaces,
+                awayFinalFaces);
         }
 
         public string CompleteEncounter()
@@ -425,6 +466,39 @@ namespace DiceSoccer
             for (var i = 0; i < rolls.Length; i++)
                 faces[i] = rolls[i].Face;
             return faces;
+        }
+
+        private static void ApplyEntourageRollBonuses(int[] entourages, PlayerData[] team, int[] faces, ref int total)
+        {
+            if (entourages == null || entourages.Length == 0 || faces == null || faces.Length == 0) return;
+
+            bool hasPair = false;
+            for (int a = 0; a < faces.Length; a++)
+                for (int b = a + 1; b < faces.Length; b++)
+                    if (faces[a] == faces[b] && faces[a] > 0) hasPair = true;
+
+            bool hasTriple = faces.Length >= 3 && faces[0] == faces[1] && faces[1] == faces[2] && faces[0] > 0;
+
+            if (hasPair)
+            {
+                // Entourage 6: Milan Mariott (Add +1 on pair)
+                if (Array.IndexOf(entourages, 6) >= 0) total += 1;
+
+                // Entourage 5: Remy Romantique (Add +2 on pair if female on team)
+                if (Array.IndexOf(entourages, 5) >= 0 && Array.Exists(team, p => p != null && p.gender == 1)) total += 2;
+
+                // Entourage 19: Le Professeur (Add +2 on pair)
+                if (Array.IndexOf(entourages, 19) >= 0) total += 2;
+            }
+
+            if (hasTriple)
+            {
+                // Entourage 1: Mary Hail (Adds +5 on triple)
+                if (Array.IndexOf(entourages, 1) >= 0) total += 5;
+
+                // Entourage 4: Maria Single (Add +1 to all dice = +3 on triple)
+                if (Array.IndexOf(entourages, 4) >= 0) total += 3;
+            }
         }
 
         private static (DieRoll[] Rolls, int Total, string Faces) RollSlots(
