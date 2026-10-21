@@ -3767,13 +3767,31 @@ namespace DiceSoccer
                 case 8: // Total is EVEN
                     return (total % 2 == 0);
 
-                case 19: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 1 : Array.IndexOf(faces, 1) >= 0; // Rolls a 1
-                case 20: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 2 : Array.IndexOf(faces, 2) >= 0; // Rolls a 2
-                case 21: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 3 : Array.IndexOf(faces, 3) >= 0; // Rolls a 3
-                case 22: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 4 : Array.IndexOf(faces, 4) >= 0; // Rolls a 4
-                case 23: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 5 : Array.IndexOf(faces, 5) >= 0; // Rolls a 5
-                case 24: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 6 : Array.IndexOf(faces, 6) >= 0; // Rolls a 6
-                case 26: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 8 : Array.IndexOf(faces, 8) >= 0; // Rolls an 8
+                case 9:
+                case 10:
+                case 11:
+                case 12:
+                case 13:
+                case 14:
+                case 15:
+                case 16:
+                case 17:
+                case 18:
+                    int val9 = trigger - 8;
+                    return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == val9 : Array.IndexOf(faces, val9) >= 0;
+
+                case 19:
+                case 20:
+                case 21:
+                case 22:
+                case 23:
+                case 24:
+                case 25:
+                case 26:
+                case 27:
+                case 28:
+                    int val19 = trigger - 18;
+                    return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == val19 : Array.IndexOf(faces, val19) >= 0;
 
                 default:
                     return false;
@@ -3884,19 +3902,18 @@ namespace DiceSoccer
                     if (_awayDieRoots[i] != null) _awayDieRoots[i].transform.localScale = Vector3.one;
             }
 
-            // SUSPENSE HOLD: Brief pause to read dice faces before counting
+            // Snapshot base rolled faces before any superpowers modify them
+            int[] originalHomeFaces = (int[])homeFaces.Clone();
+            int[] originalAwayFaces = (int[])awayFaces.Clone();
+            bool[] homeBoosted = new bool[homeFaces.Length];
+            bool[] awayBoosted = new bool[awayFaces.Length];
+            bool[] homeReduced = new bool[homeFaces.Length];
+            bool[] awayReduced = new bool[awayFaces.Length];
+
+            // 5. Reveal base duel totals with counting animation
             _matchReport.text = "Counting the dice...";
             if (_buffBeltText != null) _buffBeltText.text = "COUNTING THE DICE...";
-            yield return new WaitForSeconds(0.65f);
 
-            var oldHomeScore = _match.HomeScore;
-            var oldAwayScore = _match.AwayScore;
-            var oldPossession = _match.Possession;
-
-            var report = _match.CompleteEncounter();
-            report = CompactMatchReport(report, _match.ClockText());
-
-            // 5. Reveal duel totals with counting animation (matching arcade dice games)
             if (_homeTotalText != null && _awayTotalText != null)
             {
                 Vector2 hTotPos = new Vector2(0.14f, 0.50f);
@@ -3939,21 +3956,11 @@ namespace DiceSoccer
                 _awayTotalText.rectTransform.localScale = Vector3.one;
             }
 
-            _matchScore.text = $"{_match.HomeScore} - {_match.AwayScore}";
-            if (_matchClock != null) _matchClock.text = _match.ClockText();
-            _matchReport.text = report;
-            if (_buffBeltText != null) _buffBeltText.text = report;
+            yield return new WaitForSeconds(0.50f);
 
-            // Pause on revealed totals for dramatic outcome appreciation
-            yield return new WaitForSeconds(0.70f);
-
-            // 6. Interactive Superpower & Ability activation (matching Cocos2d BuffTargetLayer & media_1792421110113_45d0305f.png)
-            // An ability ONLY activates if an active player currently in the duel has that superpower equipped,
-            // its specific BuffTrigger condition is satisfied, and BuffTarget == 1!
-            PlayerData[] currentLineup = (_catalog != null && _lineupIds != null) ? _catalog.ResolveLineup(_lineupIds) : null;
-            AbilityData activeAbility = null;
-            int triggeringSlot = -1;
-
+            // 6. Interactive Superpower & Ability activation (matching Cocos2d leftBuffArray and rightBuffArray)
+            PlayerData[] currentLineup = _match.HomeTeam ?? ((_catalog != null && _lineupIds != null) ? _catalog.ResolveLineup(_lineupIds) : null);
+            var homeAbilities = new List<(AbilityData ability, int slot, PlayerData player)>();
             for (int i = 0; i < activeHome.Length; i++)
             {
                 int s = activeHome[i];
@@ -3965,15 +3972,33 @@ namespace DiceSoccer
                         var ab = _catalog?.TryGetAbility(spId);
                         if (ab != null && IsAbilityTriggered(ab.trigger, i, homeFaces, _match.LastHomeTotal))
                         {
-                            activeAbility = ab;
-                            triggeringSlot = i;
-                            break; // First triggering active superpower in duel
+                            homeAbilities.Add((ab, i, currentLineup[s]));
                         }
                     }
                 }
             }
 
-            if (activeAbility != null)
+            PlayerData[] awayLineup = _match.AwayTeam ?? ((_catalog != null && _currentFixture != null && _currentFixture.lineup != null) ? _catalog.ResolveLineup(_currentFixture.lineup) : null);
+            var awayAbilities = new List<(AbilityData ability, int slot, PlayerData player)>();
+            for (int i = 0; i < activeAway.Length; i++)
+            {
+                int s = activeAway[i];
+                if (awayLineup != null && s < awayLineup.Length && awayLineup[s] != null)
+                {
+                    int spId = awayLineup[s].superpower;
+                    if (spId > 0)
+                    {
+                        var ab = _catalog?.TryGetAbility(spId);
+                        if (ab != null && IsAbilityTriggered(ab.trigger, i, awayFaces, _match.LastAwayTotal))
+                        {
+                            awayAbilities.Add((ab, i, awayLineup[s]));
+                        }
+                    }
+                }
+            }
+
+            // Execute Home team triggered superpowers
+            foreach (var (activeAbility, triggeringSlot, triggeringPlayer) in homeAbilities)
             {
                 int burstDie = triggeringSlot >= 0 && triggeringSlot < homeFaces.Length ? triggeringSlot : 0;
                 Vector2 burstPos = (_homeDieRoots != null && burstDie < _homeDieRoots.Length && _homeDieRoots[burstDie] != null)
@@ -4016,7 +4041,7 @@ namespace DiceSoccer
                     {
                         _buffBeltGo.SetActive(true);
                         _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
-                        _buffBeltText.text = "DEFENSIVE WALL +1!";
+                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} +1!";
                     }
                     AudioManager.Instance.PlayBuff();
                     for (int d = 0; d < homeFaces.Length; d++)
@@ -4063,17 +4088,23 @@ namespace DiceSoccer
                         int oldVal = awayFaces[d];
                         int newVal = (activeAbility.id == 38) ? Mathf.FloorToInt(oldVal / 2f) : Math.Max(0, oldVal - teamRed);
                         awayFaces[d] = newVal;
+                        awayReduced[d] = true;
                         if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null)
                             SetDieFace(_awayDice[d], newVal);
+                        if (_awayDieBuffBadges != null && d < _awayDieBuffBadges.Length && _awayDieBuffBadges[d] != null)
+                        {
+                            _awayDieBuffBadges[d].sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffMinus");
+                            _awayDieBuffBadges[d].enabled = true;
+                        }
                         _match.AdjustAwayTotal(newVal - oldVal);
                     }
                     if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
                     yield return new WaitForSeconds(0.70f);
                 }
-                // E. Multiplier (BuffType 2, e.g. Critical Striker x2, Bicycle Kick x3, x4):
+                // E. Multiplier (BuffType 2, e.g. Critical Striker x2, Bicycle Kick x3, Critical Striker x4)
                 else if (activeAbility.type == 2)
                 {
-                    int multiplier = (activeAbility.id == 40) ? 3 : ((activeAbility.id == 21) ? 4 : 2);
+                    int multiplier = (activeAbility.id == 21) ? 4 : ((activeAbility.id == 40) ? 3 : 2);
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
                         _buffBeltGo.SetActive(true);
@@ -4118,6 +4149,7 @@ namespace DiceSoccer
                         int originalVal = homeFaces[chosenDie];
                         int boost = originalVal * (multiplier - 1);
                         homeFaces[chosenDie] *= multiplier;
+                        homeBoosted[chosenDie] = true;
                         if (_homeDice != null && chosenDie < _homeDice.Length && _homeDice[chosenDie] != null)
                             SetDieFace(_homeDice[chosenDie], homeFaces[chosenDie]);
 
@@ -4127,60 +4159,64 @@ namespace DiceSoccer
                         yield return new WaitForSeconds(0.70f);
                     }
                 }
-                // F. Reroll (BuffType 5, e.g. Assist on 1, Parry on 3, Cross):
+                // F. Reroll (BuffType 5, e.g. Assist on 1/2, Parry on 3/4, Perfect Cross on 3)
                 else if (activeAbility.type == 5)
                 {
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                    int rerollCount = (activeAbility.id == 25) ? Mathf.Min(2, homeFaces.Length) : 1;
+                    for (int r = 0; r < rerollCount; r++)
                     {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffReroll");
-                        _buffBeltText.text = "PLEASE SELECT TARGET";
-                    }
-
-                    int[] eligible = new int[homeFaces.Length];
-                    for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
-
-                    int bestDie = 0;
-                    int minVal = 999;
-                    for (int d = 0; d < homeFaces.Length; d++)
-                        if (homeFaces[d] < minVal) { minVal = homeFaces[d]; bestDie = d; }
-
-                    int chosenDie = -1;
-                    yield return StartCoroutine(SelectBuffTarget(0, eligible, bestDie, chosen => chosenDie = chosen));
-
-                    if (chosenDie >= 0 && chosenDie < homeFaces.Length)
-                    {
-                        if (_homeDieBuffBadges != null && chosenDie < _homeDieBuffBadges.Length && _homeDieBuffBadges[chosenDie] != null)
+                        if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                         {
-                            _homeDieBuffBadges[chosenDie].sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffReroll");
-                            _homeDieBuffBadges[chosenDie].enabled = true;
+                            _buffBeltGo.SetActive(true);
+                            _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffReroll");
+                            _buffBeltText.text = (rerollCount > 1) ? $"SELECT DIE {r + 1} OF {rerollCount}" : "PLEASE SELECT TARGET";
                         }
 
-                        AudioManager.Instance.PlayDiceRoll();
-                        for (int f = 1; f <= 7; f++)
+                        int[] eligible = new int[homeFaces.Length];
+                        for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
+
+                        int bestDie = 0;
+                        int minVal = 999;
+                        for (int d = 0; d < homeFaces.Length; d++)
+                            if (homeFaces[d] < minVal) { minVal = homeFaces[d]; bestDie = d; }
+
+                        int chosenDie = -1;
+                        yield return StartCoroutine(SelectBuffTarget(0, eligible, bestDie, chosen => chosenDie = chosen));
+
+                        if (chosenDie >= 0 && chosenDie < homeFaces.Length)
                         {
-                            var rollSprite = GetUiSprite($"Original/sprites/PlayerBody3/DiceRoll{f:00}");
+                            if (_homeDieBuffBadges != null && chosenDie < _homeDieBuffBadges.Length && _homeDieBuffBadges[chosenDie] != null)
+                            {
+                                _homeDieBuffBadges[chosenDie].sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffReroll");
+                                _homeDieBuffBadges[chosenDie].enabled = true;
+                            }
+
+                            AudioManager.Instance.PlayDiceRoll();
+                            for (int f = 1; f <= 7; f++)
+                            {
+                                var rollSprite = GetUiSprite($"Original/sprites/PlayerBody3/DiceRoll{f:00}");
+                                if (_homeDieRoots != null && _homeDieRoots[chosenDie] != null)
+                                    _homeDieRoots[chosenDie].GetComponent<Image>().sprite = rollSprite;
+                                yield return new WaitForSeconds(0.045f);
+                            }
                             if (_homeDieRoots != null && _homeDieRoots[chosenDie] != null)
-                                _homeDieRoots[chosenDie].GetComponent<Image>().sprite = rollSprite;
-                            yield return new WaitForSeconds(0.045f);
+                                _homeDieRoots[chosenDie].GetComponent<Image>().sprite = GetUiSprite("Original/sprites/Buff6/DiceBackground");
+
+                            int oldVal = homeFaces[chosenDie];
+                            int newVal = UnityEngine.Random.Range(2, 7);
+                            homeFaces[chosenDie] = newVal;
+                            if (_homeDice != null && chosenDie < _homeDice.Length && _homeDice[chosenDie] != null)
+                                SetDieFace(_homeDice[chosenDie], newVal);
+
+                            _match.AdjustHomeTotal(newVal - oldVal);
+                            if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                            if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} REROLLED TO {newVal}!";
+                            yield return new WaitForSeconds(0.60f);
                         }
-                        if (_homeDieRoots != null && _homeDieRoots[chosenDie] != null)
-                            _homeDieRoots[chosenDie].GetComponent<Image>().sprite = GetUiSprite("Original/sprites/Buff6/DiceBackground");
-
-                        int oldVal = homeFaces[chosenDie];
-                        int newVal = UnityEngine.Random.Range(2, 7);
-                        homeFaces[chosenDie] = newVal;
-                        if (_homeDice != null && chosenDie < _homeDice.Length && _homeDice[chosenDie] != null)
-                            SetDieFace(_homeDice[chosenDie], newVal);
-
-                        _match.AdjustHomeTotal(newVal - oldVal);
-                        if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                        if (_buffBeltText != null) _buffBeltText.text = $"REROLLED TO {newVal}!";
-                        yield return new WaitForSeconds(0.70f);
                     }
                 }
-                // G. Single-die Tackle / Debuff (BuffType 0, e.g. Hard Tackle, Charge):
-                else if (activeAbility.type == 0 && awayFaces.Length > 0)
+                // G. Single-die Tackle / Debuff (BuffType 0, Target 1)
+                else if (activeAbility.type == 0 && activeAbility.target == 1 && awayFaces.Length > 0)
                 {
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
@@ -4217,6 +4253,7 @@ namespace DiceSoccer
 
                         int newVal = Math.Max(0, oldVal - reduction);
                         awayFaces[chosenDie] = newVal;
+                        awayReduced[chosenDie] = true;
                         if (_awayDice != null && chosenDie < _awayDice.Length && _awayDice[chosenDie] != null)
                             SetDieFace(_awayDice[chosenDie], newVal);
 
@@ -4226,202 +4263,476 @@ namespace DiceSoccer
                         yield return new WaitForSeconds(0.70f);
                     }
                 }
-                // H. Feint (ID 46, 49, 50, 55): Steal opponent's positive bonus
-                else if (activeAbility.type == 3 && (activeAbility.id == 46 || activeAbility.id == 49 || activeAbility.id == 50 || activeAbility.id == 55) && awayFaces.Length > burstDie)
+                // H. Feint / Swaps (BuffType 3: ID 46, 49, 50, 55)
+                else if (activeAbility.type == 3 && awayFaces.Length > 0)
                 {
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
                         _buffBeltGo.SetActive(true);
                         _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
-                        _buffBeltText.text = "FEINT SWAP!";
+                        _buffBeltText.text = $"{activeAbility.name.ToUpper()}!";
                     }
                     AudioManager.Instance.PlayTransform();
-                    int myVal = homeFaces[burstDie];
-                    int oppVal = awayFaces[burstDie];
-                    if (oppVal > myVal)
-                    {
-                        homeFaces[burstDie] = oppVal;
-                        awayFaces[burstDie] = myVal;
-                        if (_homeDice != null && _homeDice[burstDie] != null) SetDieFace(_homeDice[burstDie], oppVal);
-                        if (_awayDice != null && _awayDice[burstDie] != null) SetDieFace(_awayDice[burstDie], myVal);
-                        _match.AdjustHomeTotal(oppVal - myVal);
-                        _match.AdjustAwayTotal(myVal - oppVal);
-                        if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
-                        yield return new WaitForSeconds(0.70f);
-                    }
-                }
-            }
 
-            // Check if Away team has an active superpower that triggers (AI / Opponent autoTargetBuff)
-            PlayerData[] awayLineup = (_catalog != null && _currentFixture != null && _currentFixture.lineup != null)
-                ? _catalog.ResolveLineup(_currentFixture.lineup) : null;
-            AbilityData awayAbility = null;
-            int awayTriggeringSlot = -1;
-
-            for (int i = 0; i < activeAway.Length; i++)
-            {
-                int s = activeAway[i];
-                if (awayLineup != null && s < awayLineup.Length && awayLineup[s] != null)
-                {
-                    int spId = awayLineup[s].superpower;
-                    if (spId > 0)
+                    if (activeAbility.id == 49) // Team swap
                     {
-                        var ab = _catalog?.TryGetAbility(spId);
-                        if (ab != null && IsAbilityTriggered(ab.trigger, i, awayFaces, _match.LastAwayTotal))
+                        for (int d = 0; d < Mathf.Min(homeFaces.Length, awayFaces.Length); d++)
                         {
-                            awayAbility = ab;
-                            awayTriggeringSlot = i;
-                            break;
+                            if (awayFaces[d] > homeFaces[d])
+                            {
+                                int temp = homeFaces[d];
+                                homeFaces[d] = awayFaces[d];
+                                awayFaces[d] = temp;
+                                if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null) SetDieFace(_homeDice[d], homeFaces[d]);
+                                if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null) SetDieFace(_awayDice[d], awayFaces[d]);
+                                _match.AdjustHomeTotal(homeFaces[d] - temp);
+                                _match.AdjustAwayTotal(temp - homeFaces[d]);
+                            }
                         }
                     }
+                    else // Single swap
+                    {
+                        int minHomeDie = 0;
+                        int minHVal = 999;
+                        for (int d = 0; d < homeFaces.Length; d++)
+                            if (homeFaces[d] < minHVal) { minHVal = homeFaces[d]; minHomeDie = d; }
+
+                        int maxAwayDie = 0;
+                        int maxAVal = -1;
+                        for (int d = 0; d < awayFaces.Length; d++)
+                            if (awayFaces[d] > maxAVal) { maxAVal = awayFaces[d]; maxAwayDie = d; }
+
+                        if (maxAVal > minHVal)
+                        {
+                            homeFaces[minHomeDie] = maxAVal;
+                            awayFaces[maxAwayDie] = minHVal;
+                            if (_homeDice != null && minHomeDie < _homeDice.Length && _homeDice[minHomeDie] != null) SetDieFace(_homeDice[minHomeDie], maxAVal);
+                            if (_awayDice != null && maxAwayDie < _awayDice.Length && _awayDice[maxAwayDie] != null) SetDieFace(_awayDice[maxAwayDie], minHVal);
+                            _match.AdjustHomeTotal(maxAVal - minHVal);
+                            _match.AdjustAwayTotal(minHVal - maxAVal);
+                        }
+                    }
+
+                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                    yield return new WaitForSeconds(0.70f);
                 }
-            }
-
-                if (awayAbility != null)
+                // I. Clear Reductions (BuffType 1: Step-Over ID 28, 29, 30; Shielding ID 48)
+                else if (activeAbility.type == 1 && (activeAbility.id == 28 || activeAbility.id == 29 || activeAbility.id == 30 || activeAbility.id == 48))
                 {
-                    int burstDie = awayTriggeringSlot >= 0 && awayTriggeringSlot < awayFaces.Length ? awayTriggeringSlot : 0;
-                    Vector2 burstPos = (_awayDieRoots != null && burstDie < _awayDieRoots.Length && _awayDieRoots[burstDie] != null)
-                        ? _awayDieRoots[burstDie].GetComponent<RectTransform>().anchorMin
-                        : new Vector2(0.73f, 0.50f);
-
-                    string badgeSpritePath = (awayAbility.trigger == 2)
-                        ? "Original/sprites/BuffTrigger1/Trigger2"
-                        : "Original/sprites/BuffTrigger/Trigger21";
-
-                    yield return StartCoroutine(PlayAbilityBurst(burstPos, badgeSpritePath, awayAbility.name));
-
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
                         _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = GetUiSprite(awayAbility.type == 0 ? "Original/sprites/Buff6/DisplayBuffMinus" : "Original/sprites/Buff6/DisplayBuffTimes");
-                        _buffBeltText.text = $"{awayAbility.name.ToUpper()} ACTIVATED!";
+                        _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
+                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} CLEARED REDUCTIONS!";
                     }
+                    AudioManager.Instance.PlayBuff();
 
-                    // Symmetrical Away executions:
-                    if (awayAbility.id == 47 || awayAbility.id == 80)
+                    int totalRestored = 0;
+                    for (int d = 0; d < homeFaces.Length; d++)
                     {
-                        if (_match.Possession == 1)
+                        if (homeFaces[d] < originalHomeFaces[d])
                         {
-                            AudioManager.Instance.PlayWhistle();
-                            int oldLoc = _match.Location;
-                            _match.AdvanceLocation(1);
-                            int newLoc = _match.Location;
-                            if (oldLoc != newLoc)
-                            {
-                                yield return StartCoroutine(SmoothShiftFieldAndBall(oldLoc, newLoc, 1));
-                                SetBallPosition(_match.Location, _match.Possession, false);
-                            }
-                            yield return new WaitForSeconds(0.60f);
+                            int diff = originalHomeFaces[d] - homeFaces[d];
+                            homeFaces[d] = originalHomeFaces[d];
+                            totalRestored += diff;
+                            if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null) SetDieFace(_homeDice[d], homeFaces[d]);
+                            if (_homeDieBuffBadges != null && d < _homeDieBuffBadges.Length && _homeDieBuffBadges[d] != null) _homeDieBuffBadges[d].enabled = false;
+                            if (activeAbility.id == 48) break; // Shielding restores single die
                         }
                     }
-                    else if (awayAbility.id == 27 || awayAbility.id == 59)
+                    if (totalRestored > 0)
                     {
-                        AudioManager.Instance.PlayBuff();
-                        for (int d = 0; d < awayFaces.Length; d++)
-                        {
-                            awayFaces[d] += 1;
-                            if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null)
-                                SetDieFace(_awayDice[d], awayFaces[d]);
-                            _match.AdjustAwayTotal(1);
-                        }
-                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
-                        yield return new WaitForSeconds(0.70f);
-                    }
-                    else if (awayAbility.type == 0 && awayAbility.target == 2 && homeFaces.Length > 0)
-                    {
-                        AudioManager.Instance.PlayDebuff();
-                        int teamRed = (awayAbility.id == 20) ? 3 : ((awayAbility.id == 36) ? 2 : 1);
-                        for (int d = 0; d < homeFaces.Length; d++)
-                        {
-                            int oldVal = homeFaces[d];
-                            int newVal = (awayAbility.id == 38) ? Mathf.FloorToInt(oldVal / 2f) : Math.Max(0, oldVal - teamRed);
-                            homeFaces[d] = newVal;
-                            if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null)
-                                SetDieFace(_homeDice[d], newVal);
-                            _match.AdjustHomeTotal(newVal - oldVal);
-                        }
+                        _match.AdjustHomeTotal(totalRestored);
                         if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                        yield return new WaitForSeconds(0.70f);
                     }
-                    else if (awayAbility.type == 2)
-                    {
-                        int multiplier = (awayAbility.id == 40) ? 3 : ((awayAbility.id == 21) ? 4 : 2);
-                        int bestDie = 0;
-                        int maxVal = -1;
-                        for (int d = 0; d < awayFaces.Length; d++)
-                            if (awayFaces[d] > maxVal) { maxVal = awayFaces[d]; bestDie = d; }
-
-                        if (_awayDieBuffBadges != null && bestDie < _awayDieBuffBadges.Length && _awayDieBuffBadges[bestDie] != null)
-                        {
-                            _awayDieBuffBadges[bestDie].sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
-                            _awayDieBuffBadges[bestDie].enabled = true;
-                        }
-
-                        AudioManager.Instance.PlayPowerup(1);
-                        AudioManager.Instance.PlayBuff();
-
-                        if (_awayDieRoots != null && bestDie < _awayDieRoots.Length && _awayDieRoots[bestDie] != null)
-                        {
-                            for (int f = 0; f < 6; f++)
-                            {
-                                float p = f / 5f;
-                                float punch = 1f + Mathf.Sin(p * Mathf.PI) * 0.32f;
-                                _awayDieRoots[bestDie].transform.localScale = new Vector3(punch, punch, 1f);
-                                yield return new WaitForSeconds(0.025f);
-                            }
-                            _awayDieRoots[bestDie].transform.localScale = Vector3.one;
-                        }
-
-                        int originalVal = awayFaces[bestDie];
-                        int boost = originalVal * (multiplier - 1);
-                        awayFaces[bestDie] *= multiplier;
-                        if (_awayDice != null && bestDie < _awayDice.Length && _awayDice[bestDie] != null)
-                            SetDieFace(_awayDice[bestDie], awayFaces[bestDie]);
-
-                        _match.AdjustAwayTotal(boost);
-                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
-                        yield return new WaitForSeconds(0.70f);
-                    }
-                    else if (awayAbility.type == 0 && homeFaces.Length > 0)
-                    {
-                        int bestDie = 0;
-                        int maxVal = -1;
-                        for (int d = 0; d < homeFaces.Length; d++)
-                            if (homeFaces[d] > maxVal) { maxVal = homeFaces[d]; bestDie = d; }
-
-                        if (_homeDieBuffBadges != null && bestDie < _homeDieBuffBadges.Length && _homeDieBuffBadges[bestDie] != null)
-                        {
-                            _homeDieBuffBadges[bestDie].sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffMinus");
-                            _homeDieBuffBadges[bestDie].enabled = true;
-                        }
-
-                        AudioManager.Instance.PlayTap();
-                        int oldVal = homeFaces[bestDie];
-                        int reduction = 1;
-                        if (awayAbility.id == 19) reduction = 3;
-                        else if (awayAbility.id == 34 || awayAbility.id == 69 || awayAbility.id == 70 || awayAbility.id == 71) reduction = 2;
-                        else if (awayAbility.id == 37 || awayAbility.id == 72 || awayAbility.id == 73) reduction = Mathf.CeilToInt(oldVal / 2f);
-
-                        int newVal = Math.Max(0, oldVal - reduction);
-                        homeFaces[bestDie] = newVal;
-                        if (_homeDice != null && bestDie < _homeDice.Length && _homeDice[bestDie] != null)
-                            SetDieFace(_homeDice[bestDie], newVal);
-
-                        _match.AdjustHomeTotal(newVal - oldVal);
-                        if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                        yield return new WaitForSeconds(0.70f);
-                    }
-                    else
-                    {
-                        yield return new WaitForSeconds(0.35f);
-                    }
+                    yield return new WaitForSeconds(0.70f);
                 }
-
-                if (activeAbility == null && awayAbility == null)
+                // J. Strip Bonuses / Marking (BuffType 4: Man Marking ID 41, 56, 58; Zonal Marking ID 22, 57)
+                else if (activeAbility.type == 4)
                 {
-                    yield return new WaitForSeconds(0.35f);
+                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                    {
+                        _buffBeltGo.SetActive(true);
+                        _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffMinus");
+                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} STRIPPED BONUSES!";
+                    }
+                    AudioManager.Instance.PlayDebuff();
+
+                    int totalStripped = 0;
+                    for (int d = 0; d < awayFaces.Length; d++)
+                    {
+                        if (awayFaces[d] > originalAwayFaces[d] || awayBoosted[d])
+                        {
+                            int diff = awayFaces[d] - originalAwayFaces[d];
+                            awayFaces[d] = originalAwayFaces[d];
+                            awayBoosted[d] = false;
+                            totalStripped += diff;
+                            if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null) SetDieFace(_awayDice[d], awayFaces[d]);
+                            if (_awayDieBuffBadges != null && d < _awayDieBuffBadges.Length && _awayDieBuffBadges[d] != null) _awayDieBuffBadges[d].enabled = false;
+                            if (activeAbility.target == 1) break; // Man marking strips single die
+                        }
+                    }
+                    if (totalStripped > 0)
+                    {
+                        _match.AdjustAwayTotal(-totalStripped);
+                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                    }
+                    yield return new WaitForSeconds(0.70f);
                 }
+                else
+                {
+                    // Generic activation notice
+                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                    {
+                        _buffBeltGo.SetActive(true);
+                        _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
+                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} ACTIVATED!";
+                    }
+                    yield return new WaitForSeconds(0.50f);
+                }
+            }
+
+            // Execute Away (CPU AI) triggered superpowers with 100% symmetrical capabilities
+            foreach (var (awayAbility, awayTriggeringSlot, awayTriggeringPlayer) in awayAbilities)
+            {
+                int burstDie = awayTriggeringSlot >= 0 && awayTriggeringSlot < awayFaces.Length ? awayTriggeringSlot : 0;
+                Vector2 burstPos = (_awayDieRoots != null && burstDie < _awayDieRoots.Length && _awayDieRoots[burstDie] != null)
+                    ? _awayDieRoots[burstDie].GetComponent<RectTransform>().anchorMin
+                    : new Vector2(0.73f, 0.50f);
+
+                string badgeSpritePath = (awayAbility.trigger == 2)
+                    ? "Original/sprites/BuffTrigger1/Trigger2"
+                    : "Original/sprites/BuffTrigger/Trigger21";
+
+                yield return StartCoroutine(PlayAbilityBurst(burstPos, badgeSpritePath, awayAbility.name));
+
+                if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                {
+                    _buffBeltGo.SetActive(true);
+                    _buffBeltMedal.sprite = GetUiSprite(awayAbility.type == 0 ? "Original/sprites/Buff6/DisplayBuffMinus" : "Original/sprites/Buff6/DisplayBuffTimes");
+                    _buffBeltText.text = $"{awayAbility.name.ToUpper()} ACTIVATED!";
+                }
+
+                // Symmetrical Away executions:
+                // A. Through Pass (ID 47, 80)
+                if (awayAbility.id == 47 || awayAbility.id == 80)
+                {
+                    if (_match.Possession == 1)
+                    {
+                        AudioManager.Instance.PlayWhistle();
+                        int oldLoc = _match.Location;
+                        _match.AdvanceLocation(1);
+                        int newLoc = _match.Location;
+                        if (oldLoc != newLoc)
+                        {
+                            yield return StartCoroutine(SmoothShiftFieldAndBall(oldLoc, newLoc, 1));
+                            SetBallPosition(_match.Location, _match.Possession, false);
+                        }
+                        yield return new WaitForSeconds(0.60f);
+                    }
+                }
+                // B. Defensive Wall (ID 27, 59): +1 to all teammates
+                else if (awayAbility.id == 27 || awayAbility.id == 59)
+                {
+                    AudioManager.Instance.PlayBuff();
+                    for (int d = 0; d < awayFaces.Length; d++)
+                    {
+                        awayFaces[d] += 1;
+                        if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null)
+                            SetDieFace(_awayDice[d], awayFaces[d]);
+                        _match.AdjustAwayTotal(1);
+                    }
+                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                    yield return new WaitForSeconds(0.70f);
+                }
+                // C. Dribble +1, +2, +3 (ID 16, 17, 18)
+                else if (awayAbility.id >= 16 && awayAbility.id <= 18)
+                {
+                    int bonus = awayAbility.id - 15;
+                    AudioManager.Instance.PlayPowerup(2);
+                    awayFaces[burstDie] += bonus;
+                    if (_awayDice != null && burstDie < _awayDice.Length && _awayDice[burstDie] != null)
+                        SetDieFace(_awayDice[burstDie], awayFaces[burstDie]);
+                    _match.AdjustAwayTotal(bonus);
+                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                    yield return new WaitForSeconds(0.70f);
+                }
+                // D. Team-wide Debuff against Home (Target == 2, e.g. Sliding Tackle ID 20, 36; Clearance ID 35; Offside Trap ID 38)
+                else if (awayAbility.type == 0 && awayAbility.target == 2 && homeFaces.Length > 0)
+                {
+                    AudioManager.Instance.PlayDebuff();
+                    int teamRed = (awayAbility.id == 20) ? 3 : ((awayAbility.id == 36) ? 2 : 1);
+                    for (int d = 0; d < homeFaces.Length; d++)
+                    {
+                        int oldVal = homeFaces[d];
+                        int newVal = (awayAbility.id == 38) ? Mathf.FloorToInt(oldVal / 2f) : Math.Max(0, oldVal - teamRed);
+                        homeFaces[d] = newVal;
+                        homeReduced[d] = true;
+                        if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null)
+                            SetDieFace(_homeDice[d], newVal);
+                        if (_homeDieBuffBadges != null && d < _homeDieBuffBadges.Length && _homeDieBuffBadges[d] != null)
+                        {
+                            _homeDieBuffBadges[d].sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffMinus");
+                            _homeDieBuffBadges[d].enabled = true;
+                        }
+                        _match.AdjustHomeTotal(newVal - oldVal);
+                    }
+                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                    yield return new WaitForSeconds(0.70f);
+                }
+                // E. Multiplier (BuffType 2: CPU targets highest die)
+                else if (awayAbility.type == 2)
+                {
+                    int multiplier = (awayAbility.id == 21) ? 4 : ((awayAbility.id == 40) ? 3 : 2);
+                    int bestDie = 0;
+                    int maxVal = -1;
+                    for (int d = 0; d < awayFaces.Length; d++)
+                        if (awayFaces[d] > maxVal) { maxVal = awayFaces[d]; bestDie = d; }
+
+                    if (_awayDieBuffBadges != null && bestDie < _awayDieBuffBadges.Length && _awayDieBuffBadges[bestDie] != null)
+                    {
+                        _awayDieBuffBadges[bestDie].sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
+                        _awayDieBuffBadges[bestDie].enabled = true;
+                    }
+
+                    AudioManager.Instance.PlayPowerup(1);
+                    AudioManager.Instance.PlayBuff();
+
+                    if (_awayDieRoots != null && bestDie < _awayDieRoots.Length && _awayDieRoots[bestDie] != null)
+                    {
+                        for (int f = 0; f < 6; f++)
+                        {
+                            float p = f / 5f;
+                            float punch = 1f + Mathf.Sin(p * Mathf.PI) * 0.32f;
+                            _awayDieRoots[bestDie].transform.localScale = new Vector3(punch, punch, 1f);
+                            yield return new WaitForSeconds(0.025f);
+                        }
+                        _awayDieRoots[bestDie].transform.localScale = Vector3.one;
+                    }
+
+                    int originalVal = awayFaces[bestDie];
+                    int boost = originalVal * (multiplier - 1);
+                    awayFaces[bestDie] *= multiplier;
+                    awayBoosted[bestDie] = true;
+                    if (_awayDice != null && bestDie < _awayDice.Length && _awayDice[bestDie] != null)
+                        SetDieFace(_awayDice[bestDie], awayFaces[bestDie]);
+
+                    _match.AdjustAwayTotal(boost);
+                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                    if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} x{multiplier}!";
+                    yield return new WaitForSeconds(0.70f);
+                }
+                // F. Reroll (BuffType 5: CPU targets lowest die, or 2 lowest if SP 25)
+                else if (awayAbility.type == 5 && awayFaces.Length > 0)
+                {
+                    int rerollCount = (awayAbility.id == 25) ? Mathf.Min(2, awayFaces.Length) : 1;
+                    for (int r = 0; r < rerollCount; r++)
+                    {
+                        int minDie = 0;
+                        int minVal = 999;
+                        for (int d = 0; d < awayFaces.Length; d++)
+                            if (awayFaces[d] < minVal) { minVal = awayFaces[d]; minDie = d; }
+
+                        if (_awayDieBuffBadges != null && minDie < _awayDieBuffBadges.Length && _awayDieBuffBadges[minDie] != null)
+                        {
+                            _awayDieBuffBadges[minDie].sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffReroll");
+                            _awayDieBuffBadges[minDie].enabled = true;
+                        }
+
+                        AudioManager.Instance.PlayDiceRoll();
+                        for (int f = 1; f <= 7; f++)
+                        {
+                            var rollSprite = GetUiSprite($"Original/sprites/PlayerBody3/DiceRoll{f:00}");
+                            if (_awayDieRoots != null && _awayDieRoots[minDie] != null)
+                                _awayDieRoots[minDie].GetComponent<Image>().sprite = rollSprite;
+                            yield return new WaitForSeconds(0.045f);
+                        }
+                        if (_awayDieRoots != null && _awayDieRoots[minDie] != null)
+                            _awayDieRoots[minDie].GetComponent<Image>().sprite = GetUiSprite("Original/sprites/Buff6/DiceBackground");
+
+                        int oldVal = awayFaces[minDie];
+                        int newVal = UnityEngine.Random.Range(2, 7);
+                        awayFaces[minDie] = newVal;
+                        if (_awayDice != null && minDie < _awayDice.Length && _awayDice[minDie] != null)
+                            SetDieFace(_awayDice[minDie], newVal);
+
+                        _match.AdjustAwayTotal(newVal - oldVal);
+                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                        if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} REROLLED TO {newVal}!";
+                        yield return new WaitForSeconds(0.60f);
+                    }
+                }
+                // G. Single-die Tackle / Debuff (BuffType 0, Target 1: CPU targets Home highest die)
+                else if (awayAbility.type == 0 && awayAbility.target == 1 && homeFaces.Length > 0)
+                {
+                    int bestDie = 0;
+                    int maxVal = -1;
+                    for (int d = 0; d < homeFaces.Length; d++)
+                        if (homeFaces[d] > maxVal) { maxVal = homeFaces[d]; bestDie = d; }
+
+                    if (_homeDieBuffBadges != null && bestDie < _homeDieBuffBadges.Length && _homeDieBuffBadges[bestDie] != null)
+                    {
+                        _homeDieBuffBadges[bestDie].sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffMinus");
+                        _homeDieBuffBadges[bestDie].enabled = true;
+                    }
+
+                    AudioManager.Instance.PlayTap();
+                    int oldVal = homeFaces[bestDie];
+                    int reduction = 1;
+                    if (awayAbility.id == 19) reduction = 3;
+                    else if (awayAbility.id == 34 || awayAbility.id == 69 || awayAbility.id == 70 || awayAbility.id == 71) reduction = 2;
+                    else if (awayAbility.id == 37 || awayAbility.id == 72 || awayAbility.id == 73) reduction = Mathf.CeilToInt(oldVal / 2f);
+
+                    int newVal = Math.Max(0, oldVal - reduction);
+                    homeFaces[bestDie] = newVal;
+                    homeReduced[bestDie] = true;
+                    if (_homeDice != null && bestDie < _homeDice.Length && _homeDice[bestDie] != null)
+                        SetDieFace(_homeDice[bestDie], newVal);
+
+                    _match.AdjustHomeTotal(newVal - oldVal);
+                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                    if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} -{reduction}!";
+                    yield return new WaitForSeconds(0.70f);
+                }
+                // H. Feint / Swaps (BuffType 3: CPU swaps its lowest die with Home's highest die)
+                else if (awayAbility.type == 3 && homeFaces.Length > 0 && awayFaces.Length > 0)
+                {
+                    AudioManager.Instance.PlayTransform();
+                    if (awayAbility.id == 49) // Team swap
+                    {
+                        for (int d = 0; d < Mathf.Min(homeFaces.Length, awayFaces.Length); d++)
+                        {
+                            if (homeFaces[d] > awayFaces[d])
+                            {
+                                int temp = awayFaces[d];
+                                awayFaces[d] = homeFaces[d];
+                                homeFaces[d] = temp;
+                                if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null) SetDieFace(_homeDice[d], homeFaces[d]);
+                                if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null) SetDieFace(_awayDice[d], awayFaces[d]);
+                                _match.AdjustAwayTotal(awayFaces[d] - temp);
+                                _match.AdjustHomeTotal(temp - awayFaces[d]);
+                            }
+                        }
+                    }
+                    else // Single swap
+                    {
+                        int minAwayDie = 0;
+                        int minAVal = 999;
+                        for (int d = 0; d < awayFaces.Length; d++)
+                            if (awayFaces[d] < minAVal) { minAVal = awayFaces[d]; minAwayDie = d; }
+
+                        int maxHomeDie = 0;
+                        int maxHVal = -1;
+                        for (int d = 0; d < homeFaces.Length; d++)
+                            if (homeFaces[d] > maxHVal) { maxHVal = homeFaces[d]; maxHomeDie = d; }
+
+                        if (maxHVal > minAVal)
+                        {
+                            awayFaces[minAwayDie] = maxHVal;
+                            homeFaces[maxHomeDie] = minAVal;
+                            if (_awayDice != null && minAwayDie < _awayDice.Length && _awayDice[minAwayDie] != null) SetDieFace(_awayDice[minAwayDie], maxHVal);
+                            if (_homeDice != null && maxHomeDie < _homeDice.Length && _homeDice[maxHomeDie] != null) SetDieFace(_homeDice[maxHomeDie], minAVal);
+                            _match.AdjustAwayTotal(maxHVal - minAVal);
+                            _match.AdjustHomeTotal(minAVal - maxHVal);
+                        }
+                    }
+
+                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                    if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} FEINT SWAP!";
+                    yield return new WaitForSeconds(0.70f);
+                }
+                // I. Clear Reductions (BuffType 1: Step-Over ID 28, 29, 30; Shielding ID 48)
+                else if (awayAbility.type == 1 && (awayAbility.id == 28 || awayAbility.id == 29 || awayAbility.id == 30 || awayAbility.id == 48))
+                {
+                    AudioManager.Instance.PlayBuff();
+                    int totalRestored = 0;
+                    for (int d = 0; d < awayFaces.Length; d++)
+                    {
+                        if (awayFaces[d] < originalAwayFaces[d])
+                        {
+                            int diff = originalAwayFaces[d] - awayFaces[d];
+                            awayFaces[d] = originalAwayFaces[d];
+                            totalRestored += diff;
+                            if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null) SetDieFace(_awayDice[d], awayFaces[d]);
+                            if (_awayDieBuffBadges != null && d < _awayDieBuffBadges.Length && _awayDieBuffBadges[d] != null) _awayDieBuffBadges[d].enabled = false;
+                            if (awayAbility.id == 48) break;
+                        }
+                    }
+                    if (totalRestored > 0)
+                    {
+                        _match.AdjustAwayTotal(totalRestored);
+                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                    }
+                    if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} CLEARED REDUCTIONS!";
+                    yield return new WaitForSeconds(0.70f);
+                }
+                // J. Strip Bonuses / Marking (BuffType 4: Man Marking ID 41, 56, 58; Zonal Marking ID 22, 57)
+                else if (awayAbility.type == 4)
+                {
+                    AudioManager.Instance.PlayDebuff();
+                    int totalStripped = 0;
+                    for (int d = 0; d < homeFaces.Length; d++)
+                    {
+                        if (homeFaces[d] > originalHomeFaces[d] || homeBoosted[d])
+                        {
+                            int diff = homeFaces[d] - originalHomeFaces[d];
+                            homeFaces[d] = originalHomeFaces[d];
+                            homeBoosted[d] = false;
+                            totalStripped += diff;
+                            if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null) SetDieFace(_homeDice[d], homeFaces[d]);
+                            if (_homeDieBuffBadges != null && d < _homeDieBuffBadges.Length && _homeDieBuffBadges[d] != null) _homeDieBuffBadges[d].enabled = false;
+                            if (awayAbility.target == 1) break;
+                        }
+                    }
+                    if (totalStripped > 0)
+                    {
+                        _match.AdjustHomeTotal(-totalStripped);
+                        if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                    }
+                    if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} STRIPPED BONUSES!";
+                    yield return new WaitForSeconds(0.70f);
+                }
+                else
+                {
+                    yield return new WaitForSeconds(0.50f);
+                }
+            }
+
+            if (homeAbilities.Count == 0 && awayAbilities.Count == 0)
+            {
+                yield return new WaitForSeconds(0.35f);
+            }
+
+            // Captain Tie-Breaker Notification
+            if (_match.LastHomeTotal == _match.LastAwayTotal && (_match.HomeWinOnTie || _match.AwayWinOnTie))
+            {
+                if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                {
+                    _buffBeltGo.SetActive(true);
+                    _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
+                    _buffBeltText.text = "CAPTAIN BREAKS THE TIE!";
+                }
+                AudioManager.Instance.PlayPowerup(1);
+                yield return new WaitForSeconds(0.70f);
+            }
+
+            // 7. Complete encounter evaluation using the BUFFED totals!
+            var oldHomeScore = _match.HomeScore;
+            var oldAwayScore = _match.AwayScore;
+            var oldPossession = _match.Possession;
+
+            var report = _match.CompleteEncounter();
+            report = CompactMatchReport(report, _match.ClockText());
+
+            _matchScore.text = $"{_match.HomeScore} - {_match.AwayScore}";
+            if (_matchClock != null) _matchClock.text = _match.ClockText();
+            _matchReport.text = report;
+            if (_buffBeltText != null) _buffBeltText.text = report;
+
+            // Pause on revealed outcome
+            yield return new WaitForSeconds(0.75f);
 
             // 7. Smoke poof on dice before hiding them
             if (_homeDieRoots != null && _awayDieRoots != null)

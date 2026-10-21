@@ -146,7 +146,102 @@ namespace DiceSoccer.Editor
                 Debug.Log($"[TEST] AudioClip {clipName} verified: Channels={clip.channels}, Frequency={clip.frequency}, Length={clip.length}s, LoadState={clip.loadState}");
             }
 
+            // 9. Comprehensive Ability Mechanics & Symmetry Verification
+            VerifyAbilitySymmetry(bootstrap);
+
             Debug.Log("[TEST] ALL GAMEPLAY, UI AND AUDIO VERIFICATION TESTS PASSED COMPLETELY!");
+        }
+
+        private static void VerifyAbilitySymmetry(DiceSoccerBootstrap bootstrap)
+        {
+            Debug.Log("[TEST] Verifying Ability Mechanics & Symmetry...");
+            var isTriggered = typeof(DiceSoccerBootstrap).GetMethod("IsAbilityTriggered", BindingFlags.Static | BindingFlags.NonPublic);
+            if (isTriggered == null) throw new Exception("IsAbilityTriggered method not found!");
+
+            // Test Pair (trigger 2)
+            bool pairTrue = (bool)isTriggered.Invoke(null, new object[] { 2, 0, new int[] { 3, 3, 1 }, 7 });
+            bool pairFalse = (bool)isTriggered.Invoke(null, new object[] { 2, 0, new int[] { 3, 4, 1 }, 8 });
+            if (!pairTrue || pairFalse) throw new Exception("Pair trigger failed!");
+
+            // Test Odd Flush (trigger 3)
+            bool oddFlushTrue = (bool)isTriggered.Invoke(null, new object[] { 3, 0, new int[] { 1, 3, 5 }, 9 });
+            bool oddFlushFalse = (bool)isTriggered.Invoke(null, new object[] { 3, 0, new int[] { 1, 4, 5 }, 10 });
+            if (!oddFlushTrue || oddFlushFalse) throw new Exception("Odd Flush trigger failed!");
+
+            // Test Even Flush (trigger 4)
+            bool evenFlushTrue = (bool)isTriggered.Invoke(null, new object[] { 4, 0, new int[] { 2, 4, 6 }, 12 });
+            bool evenFlushFalse = (bool)isTriggered.Invoke(null, new object[] { 4, 0, new int[] { 2, 3, 6 }, 11 });
+            if (!evenFlushTrue || evenFlushFalse) throw new Exception("Even Flush trigger failed!");
+
+            // Test Straight (trigger 5)
+            bool straightTrue = (bool)isTriggered.Invoke(null, new object[] { 5, 0, new int[] { 4, 2, 3 }, 9 });
+            bool straightFalse = (bool)isTriggered.Invoke(null, new object[] { 5, 0, new int[] { 1, 2, 4 }, 7 });
+            if (!straightTrue || straightFalse) throw new Exception("Straight trigger failed!");
+
+            // Test Triple (trigger 6)
+            bool tripleTrue = (bool)isTriggered.Invoke(null, new object[] { 6, 0, new int[] { 4, 4, 4 }, 12 });
+            bool tripleFalse = (bool)isTriggered.Invoke(null, new object[] { 6, 0, new int[] { 4, 4, 5 }, 13 });
+            if (!tripleTrue || tripleFalse) throw new Exception("Triple trigger failed!");
+
+            // Test Odd Sum (trigger 7) and Even Sum (trigger 8)
+            bool oddSumTrue = (bool)isTriggered.Invoke(null, new object[] { 7, 0, new int[] { 2, 4, 1 }, 7 });
+            bool evenSumTrue = (bool)isTriggered.Invoke(null, new object[] { 8, 0, new int[] { 2, 4, 2 }, 8 });
+            if (!oddSumTrue || !evenSumTrue) throw new Exception("Odd/Even sum trigger failed!");
+
+            // Test Trigger 21 (Rolls a 3)
+            bool roll3True = (bool)isTriggered.Invoke(null, new object[] { 21, 0, new int[] { 3, 1, 2 }, 6 });
+            bool roll3False = (bool)isTriggered.Invoke(null, new object[] { 21, 0, new int[] { 2, 1, 2 }, 5 });
+            if (!roll3True || roll3False) throw new Exception("Roll 3 trigger failed!");
+
+            // Test Captain (Superpower 82) on MatchSimulation
+            var catalog = GameCatalog.Load();
+            var origHome = catalog.ResolveLineup(new int[] { 1, 2, 3, 4, 7, 6, 8 });
+            var origAway = catalog.ResolveLineup(new int[] { 9, 10, 11, 12, 13, 14, 15 });
+
+            PlayerData CloneP(PlayerData p, int sp) => new PlayerData
+            {
+                id = p.id, name = p.name, position = p.position,
+                superpower = sp, diceSides = (int[])p.diceSides.Clone()
+            };
+
+            var homeRoster = new PlayerData[7];
+            var awayRoster = new PlayerData[7];
+            for (int i = 0; i < 7; i++)
+            {
+                homeRoster[i] = CloneP(origHome[i], origHome[i].superpower);
+                awayRoster[i] = CloneP(origAway[i], origAway[i].superpower);
+            }
+
+            // Set Captain (SP 82) on Home player
+            homeRoster[0].superpower = 82;
+            awayRoster[0].superpower = 0;
+            var simHomeCaptain = new MatchSimulation(homeRoster, awayRoster, "Opponents");
+            if (!simHomeCaptain.HomeWinOnTie || simHomeCaptain.AwayWinOnTie)
+                throw new Exception("Home Captain tie breaker not initialized correctly!");
+
+            // Set Captain (SP 82) on Away player
+            homeRoster[0].superpower = 0;
+            awayRoster[0].superpower = 82;
+            var simAwayCaptain = new MatchSimulation(homeRoster, awayRoster, "Opponents");
+            if (simAwayCaptain.HomeWinOnTie || !simAwayCaptain.AwayWinOnTie)
+                throw new Exception("Away Captain tie breaker not initialized correctly!");
+
+            // Test Symmetrical Total Adjustments with Pending Encounter
+            simHomeCaptain.BeginEncounter();
+            int baseHome = simHomeCaptain.LastHomeTotal;
+            int baseAway = simHomeCaptain.LastAwayTotal;
+            simHomeCaptain.AdjustHomeTotal(5); // Home buff (+5)
+            simHomeCaptain.AdjustAwayTotal(-2); // Away debuff (-2)
+            if (simHomeCaptain.LastHomeTotal != baseHome + 5)
+                throw new Exception($"AdjustHomeTotal failed: expected {baseHome + 5}, got {simHomeCaptain.LastHomeTotal}");
+            if (simHomeCaptain.LastAwayTotal != Math.Max(0, baseAway - 2))
+                throw new Exception($"AdjustAwayTotal failed: expected {Math.Max(0, baseAway - 2)}, got {simHomeCaptain.LastAwayTotal}");
+
+            // Verify CompleteEncounter completes successfully using adjusted totals
+            string rep = simHomeCaptain.CompleteEncounter();
+            if (string.IsNullOrEmpty(rep)) throw new Exception("CompleteEncounter returned empty report!");
+
+            Debug.Log("[TEST] Verified Ability Mechanics & Symmetry: All triggers, Captain passive, and Home/Away symmetrical adjustments passed perfectly!");
         }
     }
 }
