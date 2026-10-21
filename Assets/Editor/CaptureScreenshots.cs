@@ -78,10 +78,18 @@ namespace DiceSoccer.Editor
                 method?.Invoke(bootstrap, args);
             }
 
-            // 1. Home
+            // 1. Profile Select & New Profile
+            try { Call("ShowProfileSelect"); SaveScreen("ProfileSelect"); } catch (Exception e) { Debug.LogWarning(e); }
+            try { Call("ShowNewProfileModal", 1); SaveScreen("NewProfile"); } catch (Exception e) { Debug.LogWarning(e); }
+
+            // 2. Home
+            Call("ShowHome");
             SaveScreen("Home");
 
-            // 2. Fixtures
+            // 3. League / Season Select Carousel
+            try { Call("ShowLeagueSelect"); SaveScreen("LeagueSelect"); } catch (Exception e) { Debug.LogWarning(e); }
+
+            // 4. Fixtures
             try { Call("StartCareerMatch"); SaveScreen("Fixtures"); } catch (Exception e) { Debug.LogWarning(e); }
 
             // 3. Match
@@ -112,6 +120,15 @@ namespace DiceSoccer.Editor
                 showMatchScreenMethod?.Invoke(bootstrap, new object[] { homeLineup });
                 SaveScreen("Match");
 
+                var buffBeltField = typeof(DiceSoccerBootstrap).GetField("_buffBeltGo", BindingFlags.Instance | BindingFlags.NonPublic);
+                var buffBeltGo = (GameObject)buffBeltField?.GetValue(bootstrap);
+                if (buffBeltGo != null)
+                {
+                    buffBeltGo.SetActive(true);
+                    SaveScreen("Match_BuffBelt");
+                    buffBeltGo.SetActive(false);
+                }
+
                 // Capture Offensive Zone
                 var locField = typeof(MatchSimulation).GetField("_location", BindingFlags.Instance | BindingFlags.NonPublic);
                 var updatePositionsMethod = typeof(DiceSoccerBootstrap).GetMethod("UpdatePlayerPositions", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -139,6 +156,92 @@ namespace DiceSoccer.Editor
                     updatePositionsMethod?.Invoke(bootstrap, new object[] { null });
                     setBallMethod?.Invoke(bootstrap, new object[] { 0, 0, false, -1 });
                 }
+
+                // 3b. Goal Celebration (media_1792577925152_01871c83.png)
+                try
+                {
+                    var overlayField = typeof(DiceSoccerBootstrap).GetField("_overlayContainer", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var overlay = (RectTransform)overlayField?.GetValue(bootstrap);
+                    var getSpriteMethod = typeof(DiceSoccerBootstrap).GetMethod("GetUiSprite", BindingFlags.Static | BindingFlags.NonPublic);
+                    if (overlay != null && getSpriteMethod != null)
+                    {
+                        // Rotating sunburst pattern
+                        var sunburstGo = new GameObject("GoalSunburst", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+                        sunburstGo.transform.SetParent(overlay, false);
+                        var sbRect = sunburstGo.GetComponent<RectTransform>();
+                        sbRect.anchorMin = sbRect.anchorMax = new Vector2(0.5f, 0.52f);
+                        sbRect.sizeDelta = new Vector2(1600f, 1600f);
+                        var sbImg = sunburstGo.GetComponent<UnityEngine.UI.Image>();
+                        sbImg.sprite = (Sprite)getSpriteMethod.Invoke(null, new object[] { "Original/sprites/GoalAnimationSS4/GoalSunburstPattern" });
+
+                        // Multicolored drifting confetti
+                        Color32[] confettiColors = new Color32[]
+                        {
+                            new Color32(235, 45, 45, 255), // Red
+                            new Color32(40, 120, 245, 255), // Blue
+                            new Color32(255, 60, 180, 255), // Pink/Magenta
+                            new Color32(255, 220, 20, 255), // Yellow
+                            new Color32(45, 200, 75, 255),  // Green
+                            new Color32(160, 50, 230, 255)  // Purple
+                        };
+                        var confettiList = new System.Collections.Generic.List<GameObject>();
+                        for (int i = 0; i < 35; i++)
+                        {
+                            int cId = (i % 3) + 1;
+                            float x = UnityEngine.Random.Range(0.04f, 0.96f);
+                            float y = UnityEngine.Random.Range(0.35f, 0.98f);
+                            var cGo = new GameObject($"Confetti_{i}", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+                            cGo.transform.SetParent(overlay, false);
+                            var cRect = cGo.GetComponent<RectTransform>();
+                            cRect.anchorMin = cRect.anchorMax = new Vector2(x, y);
+                            cRect.sizeDelta = new Vector2(28f, 28f);
+                            cRect.localEulerAngles = new Vector3(0, 0, UnityEngine.Random.Range(0f, 360f));
+                            var cImg = cGo.GetComponent<UnityEngine.UI.Image>();
+                            cImg.sprite = (Sprite)getSpriteMethod.Invoke(null, new object[] { $"Original/sprites/ConfettiSS/Confetti{cId}" });
+                            cImg.color = confettiColors[i % confettiColors.Length];
+                            cImg.preserveAspect = true;
+                            confettiList.Add(cGo);
+                        }
+
+                        // Comic GOAL! explosion banner
+                        var bannerGo = new GameObject("GoalBanner", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+                        bannerGo.transform.SetParent(overlay, false);
+                        var bnRect = bannerGo.GetComponent<RectTransform>();
+                        bnRect.anchorMin = bnRect.anchorMax = new Vector2(0.5f, 0.54f);
+                        bnRect.sizeDelta = new Vector2(580f, 475f);
+                        var bnImg = bannerGo.GetComponent<UnityEngine.UI.Image>();
+                        bnImg.sprite = (Sprite)getSpriteMethod.Invoke(null, new object[] { "Original/sprites/Prompt1/Goal" });
+                        bnImg.preserveAspect = true;
+
+                        // Naked Streaker running joyfully across bottom grass
+                        var streakerGo = new GameObject("Streaker", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+                        streakerGo.transform.SetParent(overlay, false);
+                        var stRect = streakerGo.GetComponent<RectTransform>();
+                        stRect.anchorMin = stRect.anchorMax = new Vector2(0.72f, 0.17f);
+                        stRect.sizeDelta = new Vector2(120f, 175f);
+                        var stImg = streakerGo.GetComponent<UnityEngine.UI.Image>();
+                        stImg.sprite = (Sprite)getSpriteMethod.Invoke(null, new object[] { "Original/sprites/GoalAnimationSS4/Streaker01" });
+                        stImg.preserveAspect = true;
+
+                        // Bring top scoreboard to front and update score to 1 - 0
+                        var homeScoreField = typeof(MatchSimulation).GetField("_homeScore", BindingFlags.Instance | BindingFlags.NonPublic);
+                        homeScoreField?.SetValue(match, 1);
+                        var scoreField = typeof(DiceSoccerBootstrap).GetField("_matchScore", BindingFlags.Instance | BindingFlags.NonPublic);
+                        var scoreText = (UnityEngine.UI.Text)scoreField?.GetValue(bootstrap);
+                        if (scoreText != null) scoreText.text = "1 - 0";
+                        var scoreboardField = typeof(DiceSoccerBootstrap).GetField("_matchScoreboard", BindingFlags.Instance | BindingFlags.NonPublic);
+                        var scoreboardImg = (UnityEngine.UI.Image)scoreboardField?.GetValue(bootstrap);
+                        if (scoreboardImg != null) scoreboardImg.transform.SetAsLastSibling();
+
+                        SaveScreen("Goal");
+
+                        UnityEngine.Object.DestroyImmediate(streakerGo);
+                        UnityEngine.Object.DestroyImmediate(bannerGo);
+                        foreach (var c in confettiList) UnityEngine.Object.DestroyImmediate(c);
+                        UnityEngine.Object.DestroyImmediate(sunburstGo);
+                    }
+                }
+                catch (Exception e) { Debug.LogWarning(e); }
 
                 // 4. Pause Menu
                 Call("ShowPauseMenu");
