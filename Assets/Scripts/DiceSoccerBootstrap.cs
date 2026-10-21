@@ -103,7 +103,6 @@ namespace DiceSoccer
         private float _shakeQuietSince = -1f;
         private float _shakeRearmAfter;
         private RectTransform _overlayContainer;
-        private GameObject _tutorialArrowGo;
         private Image _ballShadow;
         private bool _inEncounterAnimation;
         private Coroutine _idleBobbingCoroutine;
@@ -134,7 +133,17 @@ namespace DiceSoccer
             CreateCanvas();
             ApplySafeArea();
             LoadCareerProgress();
-            ShowHome();
+            bool hasProfile = PlayerPrefs.GetInt("diceSoccer.profile.0.exists", 0) == 1 ||
+                              PlayerPrefs.GetInt("diceSoccer.profile.1.exists", 0) == 1 ||
+                              PlayerPrefs.GetInt("diceSoccer.profile.2.exists", 0) == 1;
+            if (!hasProfile)
+            {
+                ShowProfileSelect();
+            }
+            else
+            {
+                ShowHome();
+            }
         }
 
         private void InitBasePositions()
@@ -342,35 +351,18 @@ namespace DiceSoccer
             // Authentic v1.2.5 Native Main Menu Buttons: Campaign, Multiplayer, Manage
             var campaignBtn = AddSpriteButton("Campaign", "Original/images/MainMenuButtons01",
                 "Original/images/MainMenuButtons01Pressed", _safeArea,
-                new Vector2(0.5f, 0.44f), new Vector2(0.70f, 0.11f), () =>
-                {
-                    HideTutorialArrow();
-                    ShowLeagueSelect();
-                });
+                new Vector2(0.5f, 0.44f), new Vector2(0.70f, 0.11f), ShowLeagueSelect);
             campaignBtn.interactable = catalogAvailable;
 
             var mpBtn = AddSpriteButton("Multiplayer", "Original/images/MainMenuButtons02",
                 "Original/images/MainMenuButtons02Pressed", _safeArea,
-                new Vector2(0.5f, 0.32f), new Vector2(0.70f, 0.11f), () =>
-                {
-                    HideTutorialArrow();
-                    ShowMultiplayer();
-                });
+                new Vector2(0.5f, 0.32f), new Vector2(0.70f, 0.11f), ShowMultiplayer);
             mpBtn.interactable = catalogAvailable;
 
             var manageBtn = AddSpriteButton("Manage", "Original/images/MainMenuButtons03",
                 "Original/images/MainMenuButtons03Pressed", _safeArea,
-                new Vector2(0.5f, 0.20f), new Vector2(0.70f, 0.11f), () =>
-                {
-                    HideTutorialArrow();
-                    ShowManage();
-                });
+                new Vector2(0.5f, 0.20f), new Vector2(0.70f, 0.11f), ShowManage);
             manageBtn.interactable = catalogAvailable;
-
-            if (_seasonIndex == 0 && _fixtureIndex == 0 && PlayerPrefs.GetInt("diceSoccer.tutorial.5", 0) == 0)
-            {
-                ShowTutorialArrow(_safeArea, new Vector2(0f, -10f), 0f);
-            }
 
             if (!catalogAvailable)
             {
@@ -560,13 +552,19 @@ namespace DiceSoccer
             logo.raycastTarget = false;
 
             float[] slotYs = { 0.58f, 0.44f, 0.30f };
+            bool anyExists = false;
+            for (int s = 0; s < 3; s++)
+            {
+                if (PlayerPrefs.GetInt($"diceSoccer.profile.{s}.exists", 0) == 1)
+                    anyExists = true;
+            }
 
             for (int i = 0; i < 3; i++)
             {
                 int slot = i;
                 float y = slotYs[i];
-                bool exists = PlayerPrefs.GetInt($"diceSoccer.profile.{slot}.exists", slot == 0 ? 1 : 0) == 1;
-                string pName = PlayerPrefs.GetString($"diceSoccer.profile.{slot}.name", slot == 0 ? "SANUKU" : "New Profile");
+                bool exists = PlayerPrefs.GetInt($"diceSoccer.profile.{slot}.exists", 0) == 1;
+                string pName = PlayerPrefs.GetString($"diceSoccer.profile.{slot}.name", "New Profile");
                 int pCrest = Mathf.Clamp(PlayerPrefs.GetInt($"diceSoccer.profile.{slot}.crest", 1), 1, 3);
                 int pSeason = PlayerPrefs.GetInt($"diceSoccer.profile.{slot}.season", 0);
                 int pCash = PlayerPrefs.GetInt($"diceSoccer.profile.{slot}.cash", 1000);
@@ -641,12 +639,35 @@ namespace DiceSoccer
                 }
             }
 
-            // Bottom Continue button
-            AddButton("ENTER GAME", _safeArea, Grass,
-                new Vector2(0.50f, 0.14f), new Vector2(0.60f, 0.08f), () =>
-                {
-                    SelectProfile(_currentProfileSlot);
-                });
+            // Bottom Action button
+            if (anyExists)
+            {
+                AddButton("ENTER GAME", _safeArea, Grass,
+                    new Vector2(0.50f, 0.14f), new Vector2(0.60f, 0.08f), () =>
+                    {
+                        int targetSlot = _currentProfileSlot;
+                        if (PlayerPrefs.GetInt($"diceSoccer.profile.{targetSlot}.exists", 0) != 1)
+                        {
+                            for (int s = 0; s < 3; s++)
+                            {
+                                if (PlayerPrefs.GetInt($"diceSoccer.profile.{s}.exists", 0) == 1)
+                                {
+                                    targetSlot = s;
+                                    break;
+                                }
+                            }
+                        }
+                        SelectProfile(targetSlot);
+                    });
+            }
+            else
+            {
+                AddButton("CREATE PROFILE", _safeArea, Grass,
+                    new Vector2(0.50f, 0.14f), new Vector2(0.60f, 0.08f), () =>
+                    {
+                        ShowNewProfileModal(0);
+                    });
+            }
         }
 
         private void ShowNewProfileModal(int slot)
@@ -1626,11 +1647,6 @@ namespace DiceSoccer
             tapFieldBtn.transition = Selectable.Transition.None;
             tapFieldBtn.onClick.AddListener(PlayEncounter);
             _encounterButton = tapFieldBtn;
-
-            if (_seasonIndex == 0 && _fixtureIndex == 0 && PlayerPrefs.GetInt("diceSoccer.tutorial.roll", 0) == 0)
-            {
-                ShowTutorialArrow(_safeArea, new Vector2(0f, -80f), 0f);
-            }
 
             UpdatePlayerPositions();
             SetBallPosition(_match.Location, _match.Possession, false);
@@ -3691,7 +3707,6 @@ namespace DiceSoccer
             if (_match == null || !_match.CanBeginEncounter || !_encounterButton.interactable || _inEncounterAnimation)
                 return;
 
-            HideTutorialArrow();
             PlayerPrefs.SetInt("diceSoccer.tutorial.roll", 1);
             PlayerPrefs.Save();
 
@@ -3708,14 +3723,15 @@ namespace DiceSoccer
                 _match.LastHomeFaces, _match.LastAwayFaces, attackingSide));
         }
 
-        private static bool IsAbilityTriggered(int trigger, int[] faces, int total)
+        private static bool IsAbilityTriggered(int trigger, int playerSlot, int[] faces, int total)
         {
             if (faces == null || faces.Length == 0) return false;
 
             switch (trigger)
             {
-                case 0: // Always active / Unconditional
-                    return true;
+                case 0: // Local reroll (processed during player's roll phase)
+                case 1: // Captain tie breaker
+                    return false;
 
                 case 2: // PAIR: at least two dice show identical positive values
                     if (faces.Length < 2) return false;
@@ -3751,13 +3767,13 @@ namespace DiceSoccer
                 case 8: // Total is EVEN
                     return (total % 2 == 0);
 
-                case 19: return Array.IndexOf(faces, 1) >= 0; // Team rolls a 1
-                case 20: return Array.IndexOf(faces, 2) >= 0; // Team rolls a 2
-                case 21: return Array.IndexOf(faces, 3) >= 0; // Team rolls a 3
-                case 22: return Array.IndexOf(faces, 4) >= 0; // Team rolls a 4
-                case 23: return Array.IndexOf(faces, 5) >= 0; // Team rolls a 5
-                case 24: return Array.IndexOf(faces, 6) >= 0; // Team rolls a 6
-                case 26: return Array.IndexOf(faces, 8) >= 0; // Team rolls an 8
+                case 19: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 1 : Array.IndexOf(faces, 1) >= 0; // Rolls a 1
+                case 20: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 2 : Array.IndexOf(faces, 2) >= 0; // Rolls a 2
+                case 21: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 3 : Array.IndexOf(faces, 3) >= 0; // Rolls a 3
+                case 22: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 4 : Array.IndexOf(faces, 4) >= 0; // Rolls a 4
+                case 23: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 5 : Array.IndexOf(faces, 5) >= 0; // Rolls a 5
+                case 24: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 6 : Array.IndexOf(faces, 6) >= 0; // Rolls a 6
+                case 26: return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == 8 : Array.IndexOf(faces, 8) >= 0; // Rolls an 8
 
                 default:
                     return false;
@@ -3947,7 +3963,7 @@ namespace DiceSoccer
                     if (spId > 0)
                     {
                         var ab = _catalog?.TryGetAbility(spId);
-                        if (ab != null && IsAbilityTriggered(ab.trigger, homeFaces, _match.LastHomeTotal))
+                        if (ab != null && IsAbilityTriggered(ab.trigger, i, homeFaces, _match.LastHomeTotal))
                         {
                             activeAbility = ab;
                             triggeringSlot = i;
@@ -4236,32 +4252,31 @@ namespace DiceSoccer
                     }
                 }
             }
-            else
-            {
-                // Check if Away team has an active superpower that triggers (AI / Opponent autoTargetBuff)
-                PlayerData[] awayLineup = (_catalog != null && _currentFixture != null && _currentFixture.lineup != null)
-                    ? _catalog.ResolveLineup(_currentFixture.lineup) : null;
-                AbilityData awayAbility = null;
-                int awayTriggeringSlot = -1;
 
-                for (int i = 0; i < activeAway.Length; i++)
+            // Check if Away team has an active superpower that triggers (AI / Opponent autoTargetBuff)
+            PlayerData[] awayLineup = (_catalog != null && _currentFixture != null && _currentFixture.lineup != null)
+                ? _catalog.ResolveLineup(_currentFixture.lineup) : null;
+            AbilityData awayAbility = null;
+            int awayTriggeringSlot = -1;
+
+            for (int i = 0; i < activeAway.Length; i++)
+            {
+                int s = activeAway[i];
+                if (awayLineup != null && s < awayLineup.Length && awayLineup[s] != null)
                 {
-                    int s = activeAway[i];
-                    if (awayLineup != null && s < awayLineup.Length && awayLineup[s] != null)
+                    int spId = awayLineup[s].superpower;
+                    if (spId > 0)
                     {
-                        int spId = awayLineup[s].superpower;
-                        if (spId > 0)
+                        var ab = _catalog?.TryGetAbility(spId);
+                        if (ab != null && IsAbilityTriggered(ab.trigger, i, awayFaces, _match.LastAwayTotal))
                         {
-                            var ab = _catalog?.TryGetAbility(spId);
-                            if (ab != null && IsAbilityTriggered(ab.trigger, awayFaces, _match.LastAwayTotal))
-                            {
-                                awayAbility = ab;
-                                awayTriggeringSlot = i;
-                                break;
-                            }
+                            awayAbility = ab;
+                            awayTriggeringSlot = i;
+                            break;
                         }
                     }
                 }
+            }
 
                 if (awayAbility != null)
                 {
@@ -4402,11 +4417,11 @@ namespace DiceSoccer
                         yield return new WaitForSeconds(0.35f);
                     }
                 }
-                else
+
+                if (activeAbility == null && awayAbility == null)
                 {
                     yield return new WaitForSeconds(0.35f);
                 }
-            }
 
             // 7. Smoke poof on dice before hiding them
             if (_homeDieRoots != null && _awayDieRoots != null)
@@ -5359,27 +5374,27 @@ namespace DiceSoccer
 
             var box = AddResourceImage("OptionsBox", "Original/sprites/AchievementsSS4/LongDialogBox", optionsBackdrop.transform,
                 new Vector2(0.5f, 0.52f), new Vector2(0.5f, 0.52f));
-            box.rectTransform.sizeDelta = new Vector2(360f, 440f);
+            box.rectTransform.sizeDelta = new Vector2(480f, 760f);
             box.preserveAspect = true;
 
             var title = AddText("OPTIONS", box.transform, 22, Ink,
-                new Vector2(0.1f, 0.84f), new Vector2(0.9f, 0.94f));
+                new Vector2(0.12f, 0.86f), new Vector2(0.88f, 0.94f));
             title.fontStyle = FontStyle.Bold;
 
             // Music & Sound Checkbox
             var tickBox = AddResourceImage("SoundTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
-                new Vector2(0.16f, 0.68f), new Vector2(0.16f, 0.68f));
-            tickBox.rectTransform.sizeDelta = new Vector2(32f, 32f);
+                new Vector2(0.20f, 0.68f), new Vector2(0.20f, 0.68f));
+            tickBox.rectTransform.sizeDelta = new Vector2(36f, 36f);
             tickBox.preserveAspect = true;
 
             var tickImg = AddResourceImage("SoundTick", "Original/sprites/OptionsSS/OptionsTick", tickBox.transform,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            tickImg.rectTransform.sizeDelta = new Vector2(28f, 28f);
+            tickImg.rectTransform.sizeDelta = new Vector2(30f, 30f);
             tickImg.preserveAspect = true;
             tickImg.gameObject.SetActive(_soundEnabled);
 
-            var soundLabel = AddText("SOUND & MUSIC", box.transform, 16, Ink,
-                new Vector2(0.28f, 0.64f), new Vector2(0.85f, 0.72f));
+            var soundLabel = AddText("SOUND & MUSIC", box.transform, 17, Ink,
+                new Vector2(0.30f, 0.64f), new Vector2(0.85f, 0.72f));
             soundLabel.alignment = TextAnchor.MiddleLeft;
 
             var soundBtn = tickBox.gameObject.AddComponent<Button>();
@@ -5422,27 +5437,27 @@ namespace DiceSoccer
 
             var box = AddResourceImage("HandbookBox", "Original/sprites/AchievementsSS4/LongDialogBox", hbBackdrop.transform,
                 new Vector2(0.5f, 0.52f), new Vector2(0.5f, 0.52f));
-            box.rectTransform.sizeDelta = new Vector2(360f, 460f);
+            box.rectTransform.sizeDelta = new Vector2(480f, 760f);
             box.preserveAspect = true;
 
-            var title = AddText("HANDBOOK", box.transform, 20, Ink,
-                new Vector2(0.1f, 0.85f), new Vector2(0.9f, 0.93f));
+            var title = AddText("HANDBOOK", box.transform, 22, Ink,
+                new Vector2(0.12f, 0.86f), new Vector2(0.88f, 0.93f));
             title.fontStyle = FontStyle.Bold;
 
             var body = AddText(
                 "DICE SOCCER RULES:\n\n" +
-                "• Shake or tap to roll your team's dice.\n" +
-                "• Highest total moves the ball forward toward the goal.\n" +
-                "• CF in opposing penalty box shoots on goal!\n" +
-                "• Match superpowers and dice triggers to turn the tide!\n" +
+                "• Shake or tap to roll your team's dice.\n\n" +
+                "• Highest total moves the ball forward toward the goal.\n\n" +
+                "• CF in opposing penalty box shoots on goal!\n\n" +
+                "• Match superpowers and dice triggers to turn the tide!\n\n" +
                 "• Hire new talent and equip Entourage staff for permanent buffs.",
-                box.transform, 13, Ink,
-                new Vector2(0.08f, 0.24f), new Vector2(0.92f, 0.82f));
+                box.transform, 14, Ink,
+                new Vector2(0.12f, 0.22f), new Vector2(0.88f, 0.82f));
             body.alignment = TextAnchor.UpperLeft;
 
             AddSpriteButton("CloseHandbook", "Original/images/DoneButton",
                 "Original/images/DoneButtonPressed", box.transform,
-                new Vector2(0.5f, 0.11f), new Vector2(0.55f, 0.10f), () =>
+                new Vector2(0.5f, 0.11f), new Vector2(0.48f, 0.08f), () =>
                 {
                     Destroy(hbBackdrop.gameObject);
                 });
@@ -5456,11 +5471,11 @@ namespace DiceSoccer
 
             var box = AddResourceImage("CreditsBox", "Original/sprites/AchievementsSS4/LongDialogBox", crBackdrop.transform,
                 new Vector2(0.5f, 0.52f), new Vector2(0.5f, 0.52f));
-            box.rectTransform.sizeDelta = new Vector2(360f, 460f);
+            box.rectTransform.sizeDelta = new Vector2(480f, 760f);
             box.preserveAspect = true;
 
-            var title = AddText("CREDITS", box.transform, 20, Ink,
-                new Vector2(0.1f, 0.85f), new Vector2(0.9f, 0.93f));
+            var title = AddText("CREDITS", box.transform, 22, Ink,
+                new Vector2(0.12f, 0.86f), new Vector2(0.88f, 0.93f));
             title.fontStyle = FontStyle.Bold;
 
             var body = AddText(
@@ -5472,13 +5487,13 @@ namespace DiceSoccer
                 "100% Faithful Unity Remake\n" +
                 "Preserving all ARMv7 rules,\n" +
                 "assets, animations & typography.",
-                box.transform, 13, Ink,
-                new Vector2(0.08f, 0.24f), new Vector2(0.92f, 0.82f));
+                box.transform, 14, Ink,
+                new Vector2(0.12f, 0.22f), new Vector2(0.88f, 0.82f));
             body.alignment = TextAnchor.MiddleCenter;
 
             AddSpriteButton("CloseCredits", "Original/images/DoneButton",
                 "Original/images/DoneButtonPressed", box.transform,
-                new Vector2(0.5f, 0.11f), new Vector2(0.55f, 0.10f), () =>
+                new Vector2(0.5f, 0.11f), new Vector2(0.48f, 0.08f), () =>
                 {
                     Destroy(crBackdrop.gameObject);
                 });
@@ -5520,17 +5535,17 @@ namespace DiceSoccer
 
                 var box = AddResourceImage("TutorialBox", "Original/sprites/AchievementsSS4/LongDialogBox", backdropGo.transform,
                     new Vector2(0.5f, 0.52f), new Vector2(0.5f, 0.52f));
-                box.rectTransform.sizeDelta = new Vector2(360f, 440f);
+                box.rectTransform.sizeDelta = new Vector2(480f, 760f);
                 box.preserveAspect = true;
 
                 // Speaker portrait: KidHead or Coach
                 var headImg = AddResourceImage("SpeakerHead", "Original/sprites/AchievementsSS4/KidHead", box.transform,
-                    new Vector2(0.20f, 0.85f), new Vector2(0.20f, 0.85f));
-                headImg.rectTransform.sizeDelta = new Vector2(64f, 64f);
+                    new Vector2(0.20f, 0.88f), new Vector2(0.20f, 0.88f));
+                headImg.rectTransform.sizeDelta = new Vector2(68f, 68f);
                 headImg.preserveAspect = true;
 
-                var title = AddText("COACH HATTRICK", box.transform, 17, Ink,
-                    new Vector2(0.35f, 0.82f), new Vector2(0.92f, 0.89f));
+                var title = AddText("COACH HATTRICK", box.transform, 19, Ink,
+                    new Vector2(0.32f, 0.84f), new Vector2(0.88f, 0.92f));
                 title.alignment = TextAnchor.MiddleLeft;
                 title.fontStyle = FontStyle.Bold;
 
@@ -5542,24 +5557,29 @@ namespace DiceSoccer
                         ? $"Original/sprites/CustomPopup2/Custom{cpId}"
                         : $"Original/sprites/CustomPopup1/Custom{cpId}";
                     var cpImg = AddResourceImage("CustomIllustration", cpPath, box.transform,
-                        new Vector2(0.5f, 0.56f), new Vector2(0.5f, 0.56f));
-                    cpImg.rectTransform.sizeDelta = new Vector2(240f, 160f);
+                        new Vector2(0.5f, 0.60f), new Vector2(0.5f, 0.60f));
+                    cpImg.rectTransform.sizeDelta = new Vector2(260f, 180f);
                     cpImg.preserveAspect = true;
                 }
 
                 // Text
                 var textContent = tut.popupText[currentTextIndex];
-                var textYMin = (tut.customPopup != null && tut.customPopup.Length > 0) ? 0.20f : 0.25f;
-                var textYMax = (tut.customPopup != null && tut.customPopup.Length > 0) ? 0.38f : 0.75f;
-                var promptText = AddText(textContent, box.transform, 14, Ink,
-                    new Vector2(0.08f, textYMin), new Vector2(0.92f, textYMax));
+                bool hasCp = (tut.customPopup != null && tut.customPopup.Length > 0);
+                var textYMin = hasCp ? 0.20f : 0.24f;
+                var textYMax = hasCp ? 0.44f : 0.80f;
+                var promptText = AddText(textContent, box.transform, 16, Ink,
+                    new Vector2(0.12f, textYMin), new Vector2(0.88f, textYMax));
                 promptText.alignment = TextAnchor.MiddleCenter;
+                promptText.resizeTextForBestFit = true;
+                promptText.resizeTextMinSize = 13;
+                promptText.resizeTextMaxSize = 17;
+                promptText.verticalOverflow = VerticalWrapMode.Truncate;
 
                 // Button: NEXT or DONE
                 var isLast = currentTextIndex >= tut.popupText.Length - 1;
                 AddSpriteButton("TutorialDone", "Original/images/DoneButton",
                     "Original/images/DoneButtonPressed", box.transform,
-                    new Vector2(0.5f, 0.10f), new Vector2(0.55f, 0.09f), () =>
+                    new Vector2(0.5f, 0.11f), new Vector2(0.48f, 0.08f), () =>
                     {
                         AudioManager.Instance.PlayTap();
                         if (isLast)
@@ -6023,50 +6043,6 @@ namespace DiceSoccer
                     pos.x = -500f;
                 }
                 cloudRect.anchoredPosition = pos;
-                yield return null;
-            }
-        }
-
-        private GameObject ShowTutorialArrow(Transform parent, Vector2 anchoredPos, float angle = 0f)
-        {
-            HideTutorialArrow();
-
-            _tutorialArrowGo = new GameObject("TutorialArrow", typeof(RectTransform), typeof(Image));
-            _tutorialArrowGo.transform.SetParent(parent, false);
-            var rect = _tutorialArrowGo.GetComponent<RectTransform>();
-            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.anchoredPosition = anchoredPos;
-            rect.sizeDelta = new Vector2(40f, 98f);
-            rect.localEulerAngles = new Vector3(0f, 0f, angle);
-
-            var img = _tutorialArrowGo.GetComponent<Image>();
-            img.sprite = GetUiSprite("Original/sprites/GoalAnimationSS4/SubstitutionSelectArrow");
-            img.preserveAspect = true;
-            img.raycastTarget = false;
-
-            StartCoroutine(AnimateTutorialArrowBob(rect, anchoredPos, angle));
-            return _tutorialArrowGo;
-        }
-
-        private void HideTutorialArrow()
-        {
-            if (_tutorialArrowGo != null)
-            {
-                Destroy(_tutorialArrowGo);
-                _tutorialArrowGo = null;
-            }
-        }
-
-        private IEnumerator AnimateTutorialArrowBob(RectTransform rect, Vector2 basePos, float angle)
-        {
-            float elapsed = 0f;
-            Vector2 dir = Quaternion.Euler(0f, 0f, angle) * Vector2.up;
-            while (rect != null)
-            {
-                elapsed += Time.deltaTime;
-                float offset = Mathf.Sin(elapsed * 6f) * 14f;
-                rect.anchoredPosition = basePos + dir * offset;
                 yield return null;
             }
         }
