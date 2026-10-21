@@ -103,6 +103,7 @@ namespace DiceSoccer
         private float _shakeQuietSince = -1f;
         private float _shakeRearmAfter;
         private RectTransform _overlayContainer;
+        private GameObject _tutorialArrowGo;
         private Image _ballShadow;
         private bool _inEncounterAnimation;
         private Coroutine _idleBobbingCoroutine;
@@ -341,18 +342,35 @@ namespace DiceSoccer
             // Authentic v1.2.5 Native Main Menu Buttons: Campaign, Multiplayer, Manage
             var campaignBtn = AddSpriteButton("Campaign", "Original/images/MainMenuButtons01",
                 "Original/images/MainMenuButtons01Pressed", _safeArea,
-                new Vector2(0.5f, 0.44f), new Vector2(0.70f, 0.11f), ShowLeagueSelect);
+                new Vector2(0.5f, 0.44f), new Vector2(0.70f, 0.11f), () =>
+                {
+                    HideTutorialArrow();
+                    ShowLeagueSelect();
+                });
             campaignBtn.interactable = catalogAvailable;
 
             var mpBtn = AddSpriteButton("Multiplayer", "Original/images/MainMenuButtons02",
                 "Original/images/MainMenuButtons02Pressed", _safeArea,
-                new Vector2(0.5f, 0.32f), new Vector2(0.70f, 0.11f), ShowMultiplayer);
+                new Vector2(0.5f, 0.32f), new Vector2(0.70f, 0.11f), () =>
+                {
+                    HideTutorialArrow();
+                    ShowMultiplayer();
+                });
             mpBtn.interactable = catalogAvailable;
 
             var manageBtn = AddSpriteButton("Manage", "Original/images/MainMenuButtons03",
                 "Original/images/MainMenuButtons03Pressed", _safeArea,
-                new Vector2(0.5f, 0.20f), new Vector2(0.70f, 0.11f), ShowManage);
+                new Vector2(0.5f, 0.20f), new Vector2(0.70f, 0.11f), () =>
+                {
+                    HideTutorialArrow();
+                    ShowManage();
+                });
             manageBtn.interactable = catalogAvailable;
+
+            if (_seasonIndex == 0 && _fixtureIndex == 0 && PlayerPrefs.GetInt("diceSoccer.tutorial.5", 0) == 0)
+            {
+                ShowTutorialArrow(_safeArea, new Vector2(0f, -10f), 0f);
+            }
 
             if (!catalogAvailable)
             {
@@ -1479,58 +1497,18 @@ namespace DiceSoccer
             rightImg.preserveAspect = false;
             rightImg.raycastTarget = false;
 
-            // Field decorations (Season 0 authentic props):
-            // Center circle props:
-            var signDeco = AddResourceImage("SignDeco", "Original/sprites/Season0Field1(1.1)/Object9",
-                _fieldPitchRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            signDeco.rectTransform.anchoredPosition = new Vector2(105f, 225f);
-            signDeco.rectTransform.sizeDelta = new Vector2(75f, 70f);
-            signDeco.preserveAspect = true;
-            signDeco.raycastTarget = false;
+            // Authentic Season Field Objects & Scenery (Seasons 0 to 4):
+            CreateSeasonFieldObjects(_seasonIndex, _fieldPitchRoot, pitchScale);
 
-            var grassDeco = AddResourceImage("CenterGrassDeco", "Original/sprites/Season0Field1(1.1)/Object8",
+            // Sky clouds floating gently above field:
+            var matchClouds = AddResourceImage("PitchSkyClouds",
+                "Original/sprites/StartScreenSS/StartScreenClouds",
                 _fieldPitchRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            grassDeco.rectTransform.anchoredPosition = new Vector2(-25f, -80f);
-            grassDeco.rectTransform.sizeDelta = new Vector2(45f, 32f);
-            grassDeco.preserveAspect = true;
-            grassDeco.raycastTarget = false;
-
-            var boneDeco = AddResourceImage("CenterBoneDeco", "Original/sprites/Season0Field1(1.1)/Object3",
-                _fieldPitchRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            boneDeco.rectTransform.anchoredPosition = new Vector2(-170f, 210f);
-            boneDeco.rectTransform.sizeDelta = new Vector2(48f, 26f);
-            boneDeco.preserveAspect = true;
-            boneDeco.raycastTarget = false;
-
-            var boneDeco2 = AddResourceImage("BottomBoneDeco", "Original/sprites/Season0Field1(1.1)/Object3",
-                _fieldPitchRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            boneDeco2.rectTransform.anchoredPosition = new Vector2(-140f, -220f);
-            boneDeco2.rectTransform.sizeDelta = new Vector2(48f, 26f);
-            boneDeco2.preserveAspect = true;
-            boneDeco2.raycastTarget = false;
-
-            // Away goal area props (right side):
-            var awaySkullDeco = AddResourceImage("AwaySkullDeco", "Original/sprites/Season0Field1(1.1)/Object11",
-                _fieldPitchRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            awaySkullDeco.rectTransform.anchoredPosition = new Vector2(570f, -40f);
-            awaySkullDeco.rectTransform.sizeDelta = new Vector2(40f, 30f);
-            awaySkullDeco.preserveAspect = true;
-            awaySkullDeco.raycastTarget = false;
-
-            // Home goal area props (left side):
-            var homeShoeDeco = AddResourceImage("HomeShoeDeco", "Original/sprites/Season0Field1(1.1)/Object1",
-                _fieldPitchRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            homeShoeDeco.rectTransform.anchoredPosition = new Vector2(-510f, -190f);
-            homeShoeDeco.rectTransform.sizeDelta = new Vector2(52f, 34f);
-            homeShoeDeco.preserveAspect = true;
-            homeShoeDeco.raycastTarget = false;
-
-            var homeSkullDeco = AddResourceImage("HomeSkullDeco", "Original/sprites/Season0Field1(1.1)/Object11",
-                _fieldPitchRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            homeSkullDeco.rectTransform.anchoredPosition = new Vector2(-570f, -40f);
-            homeSkullDeco.rectTransform.sizeDelta = new Vector2(40f, 30f);
-            homeSkullDeco.preserveAspect = true;
-            homeSkullDeco.raycastTarget = false;
+            matchClouds.rectTransform.anchoredPosition = new Vector2(0f, 380f * pitchScale);
+            matchClouds.rectTransform.sizeDelta = new Vector2(800f * pitchScale, 180f * pitchScale);
+            matchClouds.color = new Color(1f, 1f, 1f, 0.55f);
+            matchClouds.raycastTarget = false;
+            StartCoroutine(AnimateCloudsDrift(matchClouds.rectTransform, 10f));
 
             // 2. Play Area Container (Fixed 640x960 reference box centered in pitch, preserving 1:1 tactical layout in all aspect ratios)
             var playRootGo = new GameObject("MatchPlayRoot", typeof(RectTransform));
@@ -1648,6 +1626,11 @@ namespace DiceSoccer
             tapFieldBtn.transition = Selectable.Transition.None;
             tapFieldBtn.onClick.AddListener(PlayEncounter);
             _encounterButton = tapFieldBtn;
+
+            if (_seasonIndex == 0 && _fixtureIndex == 0 && PlayerPrefs.GetInt("diceSoccer.tutorial.roll", 0) == 0)
+            {
+                ShowTutorialArrow(_safeArea, new Vector2(0f, -80f), 0f);
+            }
 
             UpdatePlayerPositions();
             SetBallPosition(_match.Location, _match.Possession, false);
@@ -3708,6 +3691,10 @@ namespace DiceSoccer
             if (_match == null || !_match.CanBeginEncounter || !_encounterButton.interactable || _inEncounterAnimation)
                 return;
 
+            HideTutorialArrow();
+            PlayerPrefs.SetInt("diceSoccer.tutorial.roll", 1);
+            PlayerPrefs.Save();
+
             _shakeArmed = false;
             _shakeQuietSince = -1f;
             _shakeRearmAfter = Time.unscaledTime + ShakeCooldownSeconds;
@@ -3960,8 +3947,7 @@ namespace DiceSoccer
                     if (spId > 0)
                     {
                         var ab = _catalog?.TryGetAbility(spId);
-                        // BuffTarget == 1 means interactive single-die selection ("Choose a die", "Select a die", "Re-roll any one die of your choice")
-                        if (ab != null && ab.target == 1 && IsAbilityTriggered(ab.trigger, homeFaces, _match.LastHomeTotal))
+                        if (ab != null && IsAbilityTriggered(ab.trigger, homeFaces, _match.LastHomeTotal))
                         {
                             activeAbility = ab;
                             triggeringSlot = i;
@@ -3973,21 +3959,105 @@ namespace DiceSoccer
 
             if (activeAbility != null)
             {
-                // Multiplier (BuffType 2, e.g. Critical Striker, Bicycle Kick):
-                if (activeAbility.type == 2)
+                int burstDie = triggeringSlot >= 0 && triggeringSlot < homeFaces.Length ? triggeringSlot : 0;
+                Vector2 burstPos = (_homeDieRoots != null && burstDie < _homeDieRoots.Length && _homeDieRoots[burstDie] != null)
+                    ? _homeDieRoots[burstDie].GetComponent<RectTransform>().anchorMin
+                    : new Vector2(0.27f, 0.50f);
+
+                string badgeSpritePath = (activeAbility.trigger == 2)
+                    ? "Original/sprites/BuffTrigger1/Trigger2"
+                    : "Original/sprites/BuffTrigger/Trigger21";
+
+                yield return StartCoroutine(PlayAbilityBurst(burstPos, badgeSpritePath, activeAbility.name));
+
+                // A. Through Pass (ID 47, 80)
+                if (activeAbility.id == 47 || activeAbility.id == 80)
                 {
-                    int burstDie = triggeringSlot >= 0 && triggeringSlot < homeFaces.Length ? triggeringSlot : 0;
-                    Vector2 burstPos = (_homeDieRoots != null && burstDie < _homeDieRoots.Length && _homeDieRoots[burstDie] != null)
-                        ? _homeDieRoots[burstDie].GetComponent<RectTransform>().anchorMin
-                        : new Vector2(0.27f, 0.50f);
-
-                    string badgeSpritePath = (activeAbility.trigger == 2)
-                        ? "Original/sprites/BuffTrigger1/Trigger2"
-                        : "Original/sprites/BuffTrigger/Trigger21";
-
-                    yield return StartCoroutine(PlayAbilityBurst(burstPos, badgeSpritePath, activeAbility.name));
-
-                    // Show Buff Belt prompt "PLEASE SELECT TARGET" (media_1792421110113_45d0305f.png)
+                    if (_match.Possession == 0)
+                    {
+                        if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                        {
+                            _buffBeltGo.SetActive(true);
+                            _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
+                            _buffBeltText.text = "THROUGH PASS! ADVANCING!";
+                        }
+                        AudioManager.Instance.PlayWhistle();
+                        int oldLoc = _match.Location;
+                        _match.AdvanceLocation(0);
+                        int newLoc = _match.Location;
+                        if (oldLoc != newLoc)
+                        {
+                            yield return StartCoroutine(SmoothShiftFieldAndBall(oldLoc, newLoc, 0));
+                            SetBallPosition(_match.Location, _match.Possession, false);
+                        }
+                        yield return new WaitForSeconds(0.60f);
+                    }
+                }
+                // B. Defensive Wall (ID 27, 59): +1 to all teammates
+                else if (activeAbility.id == 27 || activeAbility.id == 59)
+                {
+                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                    {
+                        _buffBeltGo.SetActive(true);
+                        _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
+                        _buffBeltText.text = "DEFENSIVE WALL +1!";
+                    }
+                    AudioManager.Instance.PlayBuff();
+                    for (int d = 0; d < homeFaces.Length; d++)
+                    {
+                        homeFaces[d] += 1;
+                        if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null)
+                            SetDieFace(_homeDice[d], homeFaces[d]);
+                        _match.AdjustHomeTotal(1);
+                    }
+                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                    yield return new WaitForSeconds(0.70f);
+                }
+                // C. Dribble +1, +2, +3 (ID 16, 17, 18)
+                else if (activeAbility.id >= 16 && activeAbility.id <= 18)
+                {
+                    int bonus = activeAbility.id - 15;
+                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                    {
+                        _buffBeltGo.SetActive(true);
+                        _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
+                        _buffBeltText.text = $"DRIBBLE +{bonus}!";
+                    }
+                    AudioManager.Instance.PlayPowerup(2);
+                    homeFaces[burstDie] += bonus;
+                    if (_homeDice != null && burstDie < _homeDice.Length && _homeDice[burstDie] != null)
+                        SetDieFace(_homeDice[burstDie], homeFaces[burstDie]);
+                    _match.AdjustHomeTotal(bonus);
+                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                    yield return new WaitForSeconds(0.70f);
+                }
+                // D. Team-wide Debuffs against Opponent (Target == 2, e.g. Sliding Tackle ID 20, 36; Clearance ID 35; Offside Trap ID 38)
+                else if (activeAbility.type == 0 && activeAbility.target == 2 && awayFaces.Length > 0)
+                {
+                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                    {
+                        _buffBeltGo.SetActive(true);
+                        _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffMinus");
+                        _buffBeltText.text = $"{activeAbility.name.ToUpper()}!";
+                    }
+                    AudioManager.Instance.PlayDebuff();
+                    int teamRed = (activeAbility.id == 20) ? 3 : ((activeAbility.id == 36) ? 2 : 1);
+                    for (int d = 0; d < awayFaces.Length; d++)
+                    {
+                        int oldVal = awayFaces[d];
+                        int newVal = (activeAbility.id == 38) ? Mathf.FloorToInt(oldVal / 2f) : Math.Max(0, oldVal - teamRed);
+                        awayFaces[d] = newVal;
+                        if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null)
+                            SetDieFace(_awayDice[d], newVal);
+                        _match.AdjustAwayTotal(newVal - oldVal);
+                    }
+                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                    yield return new WaitForSeconds(0.70f);
+                }
+                // E. Multiplier (BuffType 2, e.g. Critical Striker x2, Bicycle Kick x3, x4):
+                else if (activeAbility.type == 2)
+                {
+                    int multiplier = (activeAbility.id == 40) ? 3 : ((activeAbility.id == 21) ? 4 : 2);
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
                         _buffBeltGo.SetActive(true);
@@ -4008,14 +4078,12 @@ namespace DiceSoccer
 
                     if (chosenDie >= 0 && chosenDie < homeFaces.Length)
                     {
-                        // Show multiplier badge overlay on chosen die
                         if (_homeDieBuffBadges != null && chosenDie < _homeDieBuffBadges.Length && _homeDieBuffBadges[chosenDie] != null)
                         {
                             _homeDieBuffBadges[chosenDie].sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
                             _homeDieBuffBadges[chosenDie].enabled = true;
                         }
 
-                        // Punch bounce + sound
                         AudioManager.Instance.PlayPowerup(1);
                         AudioManager.Instance.PlayBuff();
 
@@ -4032,26 +4100,20 @@ namespace DiceSoccer
                         }
 
                         int originalVal = homeFaces[chosenDie];
-                        homeFaces[chosenDie] *= 2;
+                        int boost = originalVal * (multiplier - 1);
+                        homeFaces[chosenDie] *= multiplier;
                         if (_homeDice != null && chosenDie < _homeDice.Length && _homeDice[chosenDie] != null)
                             SetDieFace(_homeDice[chosenDie], homeFaces[chosenDie]);
 
-                        _match.AdjustHomeTotal(originalVal);
+                        _match.AdjustHomeTotal(boost);
                         if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                        if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} x2!";
+                        if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} x{multiplier}!";
                         yield return new WaitForSeconds(0.70f);
                     }
                 }
-                // Reroll (BuffType 5, e.g. Assist on 1, Parry on 3):
+                // F. Reroll (BuffType 5, e.g. Assist on 1, Parry on 3, Cross):
                 else if (activeAbility.type == 5)
                 {
-                    int burstDie = triggeringSlot >= 0 && triggeringSlot < homeFaces.Length ? triggeringSlot : 0;
-                    Vector2 burstPos = (_homeDieRoots != null && burstDie < _homeDieRoots.Length && _homeDieRoots[burstDie] != null)
-                        ? _homeDieRoots[burstDie].GetComponent<RectTransform>().anchorMin
-                        : new Vector2(0.27f, 0.50f);
-
-                    yield return StartCoroutine(PlayAbilityBurst(burstPos, "Original/sprites/BuffTrigger/Trigger21", activeAbility.name));
-
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
                         _buffBeltGo.SetActive(true);
@@ -4101,21 +4163,9 @@ namespace DiceSoccer
                         yield return new WaitForSeconds(0.70f);
                     }
                 }
-                // Debuff / Tackle (BuffType 0, e.g. Tackle, Hard Tackle, Charge):
+                // G. Single-die Tackle / Debuff (BuffType 0, e.g. Hard Tackle, Charge):
                 else if (activeAbility.type == 0 && awayFaces.Length > 0)
                 {
-                    int burstDie = triggeringSlot >= 0 && triggeringSlot < homeFaces.Length ? triggeringSlot : 0;
-                    Vector2 burstPos = (_homeDieRoots != null && burstDie < _homeDieRoots.Length && _homeDieRoots[burstDie] != null)
-                        ? _homeDieRoots[burstDie].GetComponent<RectTransform>().anchorMin
-                        : new Vector2(0.27f, 0.50f);
-
-                    string badgeSpritePath = (activeAbility.trigger == 2)
-                        ? "Original/sprites/BuffTrigger1/Trigger2"
-                        : "Original/sprites/BuffTrigger/Trigger21";
-
-                    yield return StartCoroutine(PlayAbilityBurst(burstPos, badgeSpritePath, activeAbility.name));
-
-                    // Show Buff Belt prompt "PLEASE SELECT TARGET" targeting opponent
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
                         _buffBeltGo.SetActive(true);
@@ -4144,14 +4194,44 @@ namespace DiceSoccer
 
                         AudioManager.Instance.PlayTap();
                         int oldVal = awayFaces[chosenDie];
-                        int newVal = Math.Max(0, oldVal - 1);
+                        int reduction = 1;
+                        if (activeAbility.id == 19) reduction = 3;
+                        else if (activeAbility.id == 34 || activeAbility.id == 69 || activeAbility.id == 70 || activeAbility.id == 71) reduction = 2;
+                        else if (activeAbility.id == 37 || activeAbility.id == 72 || activeAbility.id == 73) reduction = Mathf.CeilToInt(oldVal / 2f);
+
+                        int newVal = Math.Max(0, oldVal - reduction);
                         awayFaces[chosenDie] = newVal;
                         if (_awayDice != null && chosenDie < _awayDice.Length && _awayDice[chosenDie] != null)
                             SetDieFace(_awayDice[chosenDie], newVal);
 
-                        _match.AdjustAwayTotal(-1);
+                        _match.AdjustAwayTotal(newVal - oldVal);
                         if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
-                        if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} -1!";
+                        if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} -{reduction}!";
+                        yield return new WaitForSeconds(0.70f);
+                    }
+                }
+                // H. Feint (ID 46, 49, 50, 55): Steal opponent's positive bonus
+                else if (activeAbility.type == 3 && (activeAbility.id == 46 || activeAbility.id == 49 || activeAbility.id == 50 || activeAbility.id == 55) && awayFaces.Length > burstDie)
+                {
+                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                    {
+                        _buffBeltGo.SetActive(true);
+                        _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
+                        _buffBeltText.text = "FEINT SWAP!";
+                    }
+                    AudioManager.Instance.PlayTransform();
+                    int myVal = homeFaces[burstDie];
+                    int oppVal = awayFaces[burstDie];
+                    if (oppVal > myVal)
+                    {
+                        homeFaces[burstDie] = oppVal;
+                        awayFaces[burstDie] = myVal;
+                        if (_homeDice != null && _homeDice[burstDie] != null) SetDieFace(_homeDice[burstDie], oppVal);
+                        if (_awayDice != null && _awayDice[burstDie] != null) SetDieFace(_awayDice[burstDie], myVal);
+                        _match.AdjustHomeTotal(oppVal - myVal);
+                        _match.AdjustAwayTotal(myVal - oppVal);
+                        if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
                         yield return new WaitForSeconds(0.70f);
                     }
                 }
@@ -4173,7 +4253,7 @@ namespace DiceSoccer
                         if (spId > 0)
                         {
                             var ab = _catalog?.TryGetAbility(spId);
-                            if (ab != null && ab.target == 1 && IsAbilityTriggered(ab.trigger, awayFaces, _match.LastAwayTotal))
+                            if (ab != null && IsAbilityTriggered(ab.trigger, awayFaces, _match.LastAwayTotal))
                             {
                                 awayAbility = ab;
                                 awayTriggeringSlot = i;
@@ -4203,10 +4283,55 @@ namespace DiceSoccer
                         _buffBeltText.text = $"{awayAbility.name.ToUpper()} ACTIVATED!";
                     }
 
-                    // AutoTargetBuff for Away team (symmetrical to Cocos2d AI autoTargetBuff)
-                    if (awayAbility.type == 2)
+                    // Symmetrical Away executions:
+                    if (awayAbility.id == 47 || awayAbility.id == 80)
                     {
-                        // Multiplier: pick highest away die
+                        if (_match.Possession == 1)
+                        {
+                            AudioManager.Instance.PlayWhistle();
+                            int oldLoc = _match.Location;
+                            _match.AdvanceLocation(1);
+                            int newLoc = _match.Location;
+                            if (oldLoc != newLoc)
+                            {
+                                yield return StartCoroutine(SmoothShiftFieldAndBall(oldLoc, newLoc, 1));
+                                SetBallPosition(_match.Location, _match.Possession, false);
+                            }
+                            yield return new WaitForSeconds(0.60f);
+                        }
+                    }
+                    else if (awayAbility.id == 27 || awayAbility.id == 59)
+                    {
+                        AudioManager.Instance.PlayBuff();
+                        for (int d = 0; d < awayFaces.Length; d++)
+                        {
+                            awayFaces[d] += 1;
+                            if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null)
+                                SetDieFace(_awayDice[d], awayFaces[d]);
+                            _match.AdjustAwayTotal(1);
+                        }
+                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                        yield return new WaitForSeconds(0.70f);
+                    }
+                    else if (awayAbility.type == 0 && awayAbility.target == 2 && homeFaces.Length > 0)
+                    {
+                        AudioManager.Instance.PlayDebuff();
+                        int teamRed = (awayAbility.id == 20) ? 3 : ((awayAbility.id == 36) ? 2 : 1);
+                        for (int d = 0; d < homeFaces.Length; d++)
+                        {
+                            int oldVal = homeFaces[d];
+                            int newVal = (awayAbility.id == 38) ? Mathf.FloorToInt(oldVal / 2f) : Math.Max(0, oldVal - teamRed);
+                            homeFaces[d] = newVal;
+                            if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null)
+                                SetDieFace(_homeDice[d], newVal);
+                            _match.AdjustHomeTotal(newVal - oldVal);
+                        }
+                        if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                        yield return new WaitForSeconds(0.70f);
+                    }
+                    else if (awayAbility.type == 2)
+                    {
+                        int multiplier = (awayAbility.id == 40) ? 3 : ((awayAbility.id == 21) ? 4 : 2);
                         int bestDie = 0;
                         int maxVal = -1;
                         for (int d = 0; d < awayFaces.Length; d++)
@@ -4234,17 +4359,17 @@ namespace DiceSoccer
                         }
 
                         int originalVal = awayFaces[bestDie];
-                        awayFaces[bestDie] *= 2;
+                        int boost = originalVal * (multiplier - 1);
+                        awayFaces[bestDie] *= multiplier;
                         if (_awayDice != null && bestDie < _awayDice.Length && _awayDice[bestDie] != null)
                             SetDieFace(_awayDice[bestDie], awayFaces[bestDie]);
 
-                        _match.AdjustAwayTotal(originalVal);
+                        _match.AdjustAwayTotal(boost);
                         if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
                         yield return new WaitForSeconds(0.70f);
                     }
                     else if (awayAbility.type == 0 && homeFaces.Length > 0)
                     {
-                        // Tackle: debuff highest home die
                         int bestDie = 0;
                         int maxVal = -1;
                         for (int d = 0; d < homeFaces.Length; d++)
@@ -4258,12 +4383,17 @@ namespace DiceSoccer
 
                         AudioManager.Instance.PlayTap();
                         int oldVal = homeFaces[bestDie];
-                        int newVal = Math.Max(0, oldVal - 1);
+                        int reduction = 1;
+                        if (awayAbility.id == 19) reduction = 3;
+                        else if (awayAbility.id == 34 || awayAbility.id == 69 || awayAbility.id == 70 || awayAbility.id == 71) reduction = 2;
+                        else if (awayAbility.id == 37 || awayAbility.id == 72 || awayAbility.id == 73) reduction = Mathf.CeilToInt(oldVal / 2f);
+
+                        int newVal = Math.Max(0, oldVal - reduction);
                         homeFaces[bestDie] = newVal;
                         if (_homeDice != null && bestDie < _homeDice.Length && _homeDice[bestDie] != null)
                             SetDieFace(_homeDice[bestDie], newVal);
 
-                        _match.AdjustHomeTotal(-1);
+                        _match.AdjustHomeTotal(newVal - oldVal);
                         if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
                         yield return new WaitForSeconds(0.70f);
                     }
@@ -5809,6 +5939,138 @@ namespace DiceSoccer
             return sprite;
         }
 
+        private static Vector2 ParseCocosPoint(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return Vector2.zero;
+            s = s.Trim('{', '}', ' ');
+            var parts = s.Split(',');
+            if (parts.Length == 2 &&
+                float.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float x) &&
+                float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float y))
+            {
+                return new Vector2(x, y);
+            }
+            return Vector2.zero;
+        }
+
+        private void CreateSeasonFieldObjects(int seasonIndex, RectTransform pitchRoot, float pitchScale)
+        {
+            if (_catalog?.Data?.seasons == null || seasonIndex < 0 || seasonIndex >= _catalog.Data.seasons.Length)
+                return;
+
+            var season = _catalog.Data.seasons[seasonIndex];
+            var objects = season.fieldObjects?.Normal;
+            if (objects == null || objects.Length == 0)
+                return;
+
+            for (int i = 0; i < objects.Length; i++)
+            {
+                var pt = ParseCocosPoint(objects[i]);
+                int objNum = i + 1;
+                string spritePath = $"Original/sprites/Season{seasonIndex}Field1(1.1)/Object{objNum}";
+                var sprite = GetUiSprite(spritePath);
+                if (sprite == null)
+                    continue;
+
+                var go = new GameObject($"FieldObj_{seasonIndex}_{objNum}", typeof(RectTransform), typeof(Image));
+                go.transform.SetParent(pitchRoot, false);
+                var rect = go.GetComponent<RectTransform>();
+                rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.anchoredPosition = new Vector2(pt.x * 2.0f * pitchScale, pt.y * 1.5f * pitchScale);
+                rect.sizeDelta = new Vector2(sprite.rect.width * pitchScale, sprite.rect.height * pitchScale);
+                var img = go.GetComponent<Image>();
+                img.sprite = sprite;
+                img.preserveAspect = true;
+                img.raycastTarget = false;
+            }
+
+            // For Season 3, also place authentic stadium banners along the upper sideline:
+            if (seasonIndex == 3)
+            {
+                for (int b = 1; b <= 5; b++)
+                {
+                    string bPath = $"Original/sprites/Season3Field1(1.1)/Banner{b}";
+                    var bSprite = GetUiSprite(bPath);
+                    if (bSprite != null)
+                    {
+                        var bGo = new GameObject($"Banner_{b}", typeof(RectTransform), typeof(Image));
+                        bGo.transform.SetParent(pitchRoot, false);
+                        var bRect = bGo.GetComponent<RectTransform>();
+                        bRect.anchorMin = bRect.anchorMax = new Vector2(0.5f, 0.5f);
+                        bRect.pivot = new Vector2(0.5f, 0.5f);
+                        float xPos = -600f + (b - 1) * 300f;
+                        bRect.anchoredPosition = new Vector2(xPos * pitchScale, 360f * pitchScale);
+                        bRect.sizeDelta = new Vector2(bSprite.rect.width * pitchScale, bSprite.rect.height * pitchScale);
+                        var bImg = bGo.GetComponent<Image>();
+                        bImg.sprite = bSprite;
+                        bImg.preserveAspect = true;
+                        bImg.raycastTarget = false;
+                    }
+                }
+            }
+        }
+
+        private IEnumerator AnimateCloudsDrift(RectTransform cloudRect, float speed)
+        {
+            if (cloudRect == null) yield break;
+            while (cloudRect != null && cloudRect.gameObject.activeInHierarchy)
+            {
+                var pos = cloudRect.anchoredPosition;
+                pos.x += speed * Time.deltaTime;
+                if (pos.x > 500f)
+                {
+                    pos.x = -500f;
+                }
+                cloudRect.anchoredPosition = pos;
+                yield return null;
+            }
+        }
+
+        private GameObject ShowTutorialArrow(Transform parent, Vector2 anchoredPos, float angle = 0f)
+        {
+            HideTutorialArrow();
+
+            _tutorialArrowGo = new GameObject("TutorialArrow", typeof(RectTransform), typeof(Image));
+            _tutorialArrowGo.transform.SetParent(parent, false);
+            var rect = _tutorialArrowGo.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = anchoredPos;
+            rect.sizeDelta = new Vector2(40f, 98f);
+            rect.localEulerAngles = new Vector3(0f, 0f, angle);
+
+            var img = _tutorialArrowGo.GetComponent<Image>();
+            img.sprite = GetUiSprite("Original/sprites/GoalAnimationSS4/SubstitutionSelectArrow");
+            img.preserveAspect = true;
+            img.raycastTarget = false;
+
+            StartCoroutine(AnimateTutorialArrowBob(rect, anchoredPos, angle));
+            return _tutorialArrowGo;
+        }
+
+        private void HideTutorialArrow()
+        {
+            if (_tutorialArrowGo != null)
+            {
+                Destroy(_tutorialArrowGo);
+                _tutorialArrowGo = null;
+            }
+        }
+
+        private IEnumerator AnimateTutorialArrowBob(RectTransform rect, Vector2 basePos, float angle)
+        {
+            float elapsed = 0f;
+            Vector2 dir = Quaternion.Euler(0f, 0f, angle) * Vector2.up;
+            while (rect != null)
+            {
+                elapsed += Time.deltaTime;
+                float offset = Mathf.Sin(elapsed * 6f) * 14f;
+                rect.anchoredPosition = basePos + dir * offset;
+                yield return null;
+            }
+        }
+
         private static float GetPitchOffsetForLocation(int location)
         {
             switch (location)
@@ -6579,6 +6841,7 @@ namespace DiceSoccer
                 "Original/sprites/StartScreenSS/StartScreenClouds",
                 _safeArea, new Vector2(0f, 0.7f), new Vector2(1f, 0.94f));
             clouds.raycastTarget = false;
+            StartCoroutine(AnimateCloudsDrift(clouds.rectTransform, 14f));
         }
 
         private void AddMenuHeader(string title, UnityEngine.Events.UnityAction backAction)
