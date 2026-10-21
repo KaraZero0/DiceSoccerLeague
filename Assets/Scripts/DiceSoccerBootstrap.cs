@@ -318,28 +318,41 @@ namespace DiceSoccer
             AddMenuHeader(null, ShowProfileSelect);
             AddMenuFooter();
 
-            // News button docked on upper-right matching original iOS layout (media_1792577488165_435b6f03.png)
+            // Authentic hero logo centered and prominent with signature shine overlay (v1.2.5 native)
+            var logo = AddResourceImage("StartScreenLogo", "Original/images/StartScreenLogo",
+                _safeArea, new Vector2(0.18f, 0.55f), new Vector2(0.82f, 0.89f));
+            logo.preserveAspect = true;
+            logo.raycastTarget = false;
+
+            var logoShine = AddResourceImage("StartScreenLogoShine", "Original/sprites/StartScreenLogoAnimation/LogoShine01",
+                logo.transform, Vector2.zero, Vector2.one);
+            logoShine.preserveAspect = true;
+            logoShine.raycastTarget = false;
+            logoShine.enabled = false;
+            StartCoroutine(AnimateLogoShine(logoShine));
+
+            // News button docked on upper-right matching original v1.2.5 layout
             AddSpriteButton("NewsButton", "Original/images/Button_News",
                 "Original/images/Button_NewsPressed", _safeArea,
                 new Vector2(0.88f, 0.865f), new Vector2(0.24f, 0.075f), ShowNewsModal);
 
             var catalogAvailable = Resources.Load<TextAsset>("Original/data/UnityCatalog") != null;
 
-            // Authentic 3 Pill Buttons: Play, Deck, Options (matching media_1792577488165_435b6f03.png)
-            var playBtn = AddSpriteButton("Play", "Original/images/Button_Play",
-                "Original/images/Button_PlayPressed", _safeArea,
-                new Vector2(0.5f, 0.54f), new Vector2(0.70f, 0.11f), ShowLeagueSelect);
-            playBtn.interactable = catalogAvailable;
+            // Authentic v1.2.5 Native Main Menu Buttons: Campaign, Multiplayer, Manage
+            var campaignBtn = AddSpriteButton("Campaign", "Original/images/MainMenuButtons01",
+                "Original/images/MainMenuButtons01Pressed", _safeArea,
+                new Vector2(0.5f, 0.44f), new Vector2(0.70f, 0.11f), ShowLeagueSelect);
+            campaignBtn.interactable = catalogAvailable;
 
-            var deckBtn = AddSpriteButton("Deck", "Original/images/Button_Deck",
-                "Original/images/Button_DeckPressed", _safeArea,
-                new Vector2(0.5f, 0.41f), new Vector2(0.70f, 0.11f), ShowManage);
-            deckBtn.interactable = catalogAvailable;
+            var mpBtn = AddSpriteButton("Multiplayer", "Original/images/MainMenuButtons02",
+                "Original/images/MainMenuButtons02Pressed", _safeArea,
+                new Vector2(0.5f, 0.32f), new Vector2(0.70f, 0.11f), ShowMultiplayer);
+            mpBtn.interactable = catalogAvailable;
 
-            var optionsBtn = AddSpriteButton("Options", "Original/images/Button_Options",
-                "Original/images/Button_OptionsPressed", _safeArea,
-                new Vector2(0.5f, 0.28f), new Vector2(0.70f, 0.11f), ShowOptions);
-            optionsBtn.interactable = catalogAvailable;
+            var manageBtn = AddSpriteButton("Manage", "Original/images/MainMenuButtons03",
+                "Original/images/MainMenuButtons03Pressed", _safeArea,
+                new Vector2(0.5f, 0.20f), new Vector2(0.70f, 0.11f), ShowManage);
+            manageBtn.interactable = catalogAvailable;
 
             if (!catalogAvailable)
             {
@@ -6626,8 +6639,8 @@ namespace DiceSoccer
             AddSpriteButton("Trophies", "Original/images/BottomTab02",
                 "Original/images/BottomTab02Pressed", _safeArea,
                 new Vector2(0.50f, 0.06f), new Vector2(0.32f, 0.10f), ShowTrophyRoom);
-            AddSpriteButton("Options", "Original/images/BottomTabInfo",
-                "Original/images/BottomTabInfoPressed", _safeArea,
+            AddSpriteButton("Options", "Original/images/BottomTab03",
+                "Original/images/BottomTab03Pressed", _safeArea,
                 new Vector2(0.83f, 0.06f), new Vector2(0.32f, 0.10f), ShowOptions);
         }
 
