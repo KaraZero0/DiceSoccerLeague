@@ -3727,6 +3727,9 @@ namespace DiceSoccer
 
             switch (trigger)
             {
+                case 0: // Always active / Unconditional
+                    return true;
+
                 case 2: // PAIR: at least two dice show identical positive values
                     if (faces.Length < 2) return false;
                     for (int a = 0; a < faces.Length; a++)
