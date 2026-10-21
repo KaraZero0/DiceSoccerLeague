@@ -79,6 +79,8 @@ namespace DiceSoccer
         public bool AwayWinOnTie { get; set; }
         public int HomeExtraBonus { get; set; }
         public int AwayExtraBonus { get; set; }
+        public PlayerData[] HomeTeam => _home;
+        public PlayerData[] AwayTeam => _away;
 
         public void AdvanceLocation(int side)
         {
@@ -130,9 +132,9 @@ namespace DiceSoccer
             HomeExtraBonus = homePossessionBonus;
             AwayExtraBonus = awayPossessionBonus;
 
-            // Check Entourage 16 (Flashy Spice - Win on tie)
-            if (Array.IndexOf(_homeEntourages, 16) >= 0) HomeWinOnTie = true;
-            if (Array.IndexOf(_awayEntourages, 16) >= 0) AwayWinOnTie = true;
+            // Check Entourage 16 (Flashy Spice - Win on tie) and Superpower 82 (Captain - Win on tie)
+            if (Array.IndexOf(_homeEntourages, 16) >= 0 || Array.Exists(_home, p => p != null && p.superpower == 82)) HomeWinOnTie = true;
+            if (Array.IndexOf(_awayEntourages, 16) >= 0 || Array.Exists(_away, p => p != null && p.superpower == 82)) AwayWinOnTie = true;
         }
 
         public void SubstituteHomePlayer(int slot, PlayerData replacement)
@@ -156,6 +158,7 @@ namespace DiceSoccer
             _home[slot] = replacement;
             _homeYellowCards[slot] = false;
             _homeRedCards[slot] = false;
+            HomeWinOnTie = (Array.IndexOf(_homeEntourages, 16) >= 0) || Array.Exists(_home, p => p != null && p.superpower == 82);
         }
 
         public void ForfeitMatch()
