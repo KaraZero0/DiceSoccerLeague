@@ -272,7 +272,19 @@ namespace DiceSoccer.Editor
             try { Call("ShowHiring"); SaveScreen("Hiring"); } catch (Exception e) { Debug.LogWarning(e); }
 
             // 7. Shop
-            try { Call("ShowShop"); SaveScreen("Shop"); } catch (Exception e) { Debug.LogWarning(e); }
+            try
+            {
+                var shopTabField = typeof(DiceSoccerBootstrap).GetField("_shopTab", BindingFlags.Instance | BindingFlags.NonPublic);
+                shopTabField?.SetValue(bootstrap, 0);
+                Call("ShowShop");
+                SaveScreen("Shop");
+                SaveScreen("Shop_Coins");
+
+                shopTabField?.SetValue(bootstrap, 2);
+                Call("ShowShop");
+                SaveScreen("Shop_Shorts");
+            }
+            catch (Exception e) { Debug.LogWarning(e); }
 
             // 8. Trophies
             try { Call("ShowTrophyRoom"); SaveScreen("Trophies"); } catch (Exception e) { Debug.LogWarning(e); }
