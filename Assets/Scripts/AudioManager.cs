@@ -12,6 +12,8 @@ namespace DiceSoccer
         private AudioSource _sfxSource;
         private AudioSource _crowdSource;
         private bool _soundEnabled = true;
+        private bool _musicEnabled = true;
+        private bool _sfxEnabled = true;
 
         public static AudioManager Instance
         {
@@ -43,12 +45,51 @@ namespace DiceSoccer
                 }
                 else
                 {
-                    _bgmSource?.UnPause();
-                    _crowdSource?.UnPause();
-                    if (_bgmSource != null && !_bgmSource.isPlaying && _bgmSource.clip != null)
+                    if (_musicEnabled) _bgmSource?.UnPause();
+                    if (_sfxEnabled) _crowdSource?.UnPause();
+                    if (_musicEnabled && _bgmSource != null && !_bgmSource.isPlaying && _bgmSource.clip != null)
                     {
                         _bgmSource.Play();
                     }
+                }
+            }
+        }
+
+        public bool MusicEnabled
+        {
+            get => _musicEnabled;
+            set
+            {
+                _musicEnabled = value;
+                PlayerPrefs.SetInt("diceSoccer.music", _musicEnabled ? 1 : 0);
+                PlayerPrefs.Save();
+                if (_bgmSource != null)
+                {
+                    _bgmSource.mute = !_musicEnabled;
+                    if (!_musicEnabled)
+                        _bgmSource.Pause();
+                    else if (_soundEnabled && !_bgmSource.isPlaying && _bgmSource.clip != null)
+                        _bgmSource.Play();
+                    else if (_soundEnabled)
+                        _bgmSource.UnPause();
+                }
+            }
+        }
+
+        public bool SfxEnabled
+        {
+            get => _sfxEnabled;
+            set
+            {
+                _sfxEnabled = value;
+                PlayerPrefs.SetInt("diceSoccer.sfx", _sfxEnabled ? 1 : 0);
+                PlayerPrefs.Save();
+                if (_sfxSource != null) _sfxSource.mute = !_sfxEnabled;
+                if (_crowdSource != null)
+                {
+                    _crowdSource.mute = !_sfxEnabled;
+                    if (!_sfxEnabled) _crowdSource.Pause();
+                    else if (_soundEnabled) _crowdSource.UnPause();
                 }
             }
         }
@@ -65,6 +106,8 @@ namespace DiceSoccer
             EnsureInitialized();
 
             _soundEnabled = PlayerPrefs.GetInt("diceSoccer.sound", 1) != 0;
+            _musicEnabled = PlayerPrefs.GetInt("diceSoccer.music", 1) != 0;
+            _sfxEnabled = PlayerPrefs.GetInt("diceSoccer.sfx", 1) != 0;
             AudioListener.volume = _soundEnabled ? 1f : 0f;
             AudioListener.pause = !_soundEnabled;
         }
@@ -121,7 +164,7 @@ namespace DiceSoccer
 
             _bgmSource.clip = clip;
             _bgmSource.volume = volume;
-            if (_soundEnabled)
+            if (_soundEnabled && _musicEnabled)
                 _bgmSource.Play();
         }
 
@@ -140,7 +183,7 @@ namespace DiceSoccer
             {
                 _crowdSource.clip = clip;
                 _crowdSource.volume = volume;
-                if (_soundEnabled)
+                if (_soundEnabled && _sfxEnabled)
                     _crowdSource.Play();
             }
         }
@@ -152,7 +195,7 @@ namespace DiceSoccer
 
         public void PlayEffect(string effectName, float pitch = 1.0f, float volume = 1.0f)
         {
-            if (!_soundEnabled) return;
+            if (!_soundEnabled || !_sfxEnabled) return;
             EnsureInitialized();
             var clip = LoadClip(effectName);
             if (clip == null) return;

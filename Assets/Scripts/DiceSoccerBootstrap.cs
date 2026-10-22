@@ -328,41 +328,49 @@ namespace DiceSoccer
             AddMenuHeader(null, ShowProfileSelect);
             AddMenuFooter();
 
-            // Authentic hero logo centered and prominent with signature shine overlay (v1.2.5 native)
-            var logo = AddResourceImage("StartScreenLogo", "Original/images/StartScreenLogo",
-                _safeArea, new Vector2(0.18f, 0.55f), new Vector2(0.82f, 0.89f));
-            logo.preserveAspect = true;
-            logo.raycastTarget = false;
-
-            var logoShine = AddResourceImage("StartScreenLogoShine", "Original/sprites/StartScreenLogoAnimation/LogoShine01",
-                logo.transform, Vector2.zero, Vector2.one);
-            logoShine.preserveAspect = true;
-            logoShine.raycastTarget = false;
-            logoShine.enabled = false;
-            StartCoroutine(AnimateLogoShine(logoShine));
-
-            // News button docked on upper-right matching original v1.2.5 layout
-            AddSpriteButton("NewsButton", "Original/images/Button_News",
-                "Original/images/Button_NewsPressed", _safeArea,
-                new Vector2(0.88f, 0.865f), new Vector2(0.24f, 0.075f), ShowNewsModal);
-
             var catalogAvailable = Resources.Load<TextAsset>("Original/data/UnityCatalog") != null;
 
-            // Authentic v1.2.5 Native Main Menu Buttons: Campaign, Multiplayer, Manage
+            // Manage unlocks after match 1 or if all unlocked
+            var manageUnlocked = catalogAvailable && (_fixtureIndex > 0 || _seasonIndex > 0 || PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1);
+            // Multiplayer unlocks after training season or if all unlocked
+            var mpUnlocked = catalogAvailable && (_seasonIndex > 0 || _fixtureIndex >= 9 || PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1);
+
+            // Authentic left-aligned menu buttons: Campaign, Multiplayer, Manage (matches 2012 iOS v1.2.5 layout)
             var campaignBtn = AddSpriteButton("Campaign", "Original/images/MainMenuButtons01",
                 "Original/images/MainMenuButtons01Pressed", _safeArea,
-                new Vector2(0.5f, 0.44f), new Vector2(0.70f, 0.11f), ShowLeagueSelect);
+                new Vector2(0.38f, 0.56f), new Vector2(0.54f, 0.115f), ShowLeagueSelect);
             campaignBtn.interactable = catalogAvailable;
 
-            var mpBtn = AddSpriteButton("Multiplayer", "Original/images/MainMenuButtons02",
-                "Original/images/MainMenuButtons02Pressed", _safeArea,
-                new Vector2(0.5f, 0.32f), new Vector2(0.70f, 0.11f), ShowMultiplayer);
+            var mpNormal = mpUnlocked ? "Original/images/MainMenuButtons02" : "Original/images/MainMenuButtons02Disabled";
+            var mpPressed = mpUnlocked ? "Original/images/MainMenuButtons02Pressed" : "Original/images/MainMenuButtons02Disabled";
+            var mpBtn = AddSpriteButton("Multiplayer", mpNormal, mpPressed, _safeArea,
+                new Vector2(0.38f, 0.43f), new Vector2(0.54f, 0.115f), mpUnlocked ? ShowMultiplayer : () =>
+                {
+                    AudioManager.Instance.PlayDisappoint();
+                });
             mpBtn.interactable = catalogAvailable;
 
-            var manageBtn = AddSpriteButton("Manage", "Original/images/MainMenuButtons03",
-                "Original/images/MainMenuButtons03Pressed", _safeArea,
-                new Vector2(0.5f, 0.20f), new Vector2(0.70f, 0.11f), ShowManage);
+            var manageNormal = manageUnlocked ? "Original/images/MainMenuButtons03" : "Original/images/MainMenuButtons03Disabled";
+            var managePressed = manageUnlocked ? "Original/images/MainMenuButtons03Pressed" : "Original/images/MainMenuButtons03Disabled";
+            var manageBtn = AddSpriteButton("Manage", manageNormal, managePressed, _safeArea,
+                new Vector2(0.38f, 0.30f), new Vector2(0.54f, 0.115f), manageUnlocked ? ShowManage : () =>
+                {
+                    AudioManager.Instance.PlayDisappoint();
+                });
             manageBtn.interactable = catalogAvailable;
+
+            // Authentic right vertical button stack: iCloud, Support (Handbook), News (matches 2012 iOS v1.2.5 layout)
+            AddSpriteButton("iCloudButton", "Original/sprites/iCloudSS/iCloudButton",
+                "Original/sprites/iCloudSS/iCloudButtonPressed", _safeArea,
+                new Vector2(0.86f, 0.68f), new Vector2(0.13f, 0.088f), ShowProfileSelect);
+
+            AddSpriteButton("SupportButton", "Original/sprites/StartScreenLogoAnimation2/SupportButton",
+                "Original/sprites/StartScreenLogoAnimation2/SupportButtonPressed", _safeArea,
+                new Vector2(0.86f, 0.56f), new Vector2(0.13f, 0.088f), () => ShowHandbookDialog(_safeArea));
+
+            AddSpriteButton("NewsButton", "Original/sprites/StartScreenLogoAnimation2/NewsButton",
+                "Original/sprites/StartScreenLogoAnimation2/NewsButtonPressed", _safeArea,
+                new Vector2(0.86f, 0.44f), new Vector2(0.13f, 0.088f), ShowNewsModal);
 
             if (!catalogAvailable)
             {
@@ -857,38 +865,7 @@ namespace DiceSoccer
 
         private void ShowOptions()
         {
-            ClearCanvas();
-            AddMenuBackdrop();
-            AddMenuHeader("OPTIONS", ShowHome);
-
-            AddButton("1 VS 1 PASS & PLAY", _safeArea, Gold,
-                new Vector2(0.5f, 0.76f), new Vector2(0.75f, 0.065f), ShowMultiplayer);
-
-            AddButton("SWITCH / CREATE PROFILE", _safeArea, new Color32(80, 140, 190, 255),
-                new Vector2(0.5f, 0.68f), new Vector2(0.75f, 0.065f), ShowProfileSelect);
-
-            AddButton(_soundEnabled ? "SOUND: ON" : "SOUND: OFF", _safeArea, Gold,
-                new Vector2(0.5f, 0.60f), new Vector2(0.75f, 0.065f), ToggleSound);
-
-            bool fullScreen = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0) == 1;
-            AddButton(fullScreen ? "DISPLAY: FILL SCREEN" : "DISPLAY: CLASSIC 2:3", _safeArea, new Color32(50, 120, 180, 255),
-                new Vector2(0.5f, 0.52f), new Vector2(0.75f, 0.065f), ToggleDisplayMode);
-
-            AddButton("★ UNLOCK EVERYTHING FREE", _safeArea, Grass,
-                new Vector2(0.5f, 0.44f), new Vector2(0.75f, 0.065f), () =>
-                {
-                    UnlockAllContent(false);
-                    ShowDonationModal();
-                });
-
-            AddButton("☕ BUY A COFFEE (PAYPAL)", _safeArea, new Color32(0, 112, 186, 255),
-                new Vector2(0.5f, 0.36f), new Vector2(0.75f, 0.065f), ShowDonationModal);
-
-            AddText("SHAKE OR TAP THE SCREEN EDGE TO ROLL\n100% FREE FAN REMASTER — NO ADS",
-                _safeArea, 13, Ink, new Vector2(0.08f, 0.22f), new Vector2(0.92f, 0.30f));
-
-            AddButton("BACK TO MENU", _safeArea, new Color32(68, 79, 84, 255),
-                new Vector2(0.5f, 0.12f), new Vector2(0.55f, 0.06f), ShowHome);
+            ShowOptionsDialog(_safeArea != null ? _safeArea : _canvas.transform);
         }
 
         private void ToggleDisplayMode()
@@ -1174,29 +1151,24 @@ namespace DiceSoccer
                           _fixtureIndex > 0 && !IsPreviousTournamentFixtureWon());
             var isCompleted = _selectedFixtureIndex < _fixtureIndex;
 
-            // Match Title & Opponent in the sky
-            var matchTitle = AddText($"MATCH {_selectedFixtureIndex + 1}", _safeArea, 28, Ink,
-                new Vector2(0.1f, 0.83f), new Vector2(0.9f, 0.89f));
-            matchTitle.alignment = TextAnchor.MiddleCenter;
-            matchTitle.fontStyle = FontStyle.Bold;
+            // 1. Top Sky Header: Season Name in 2 lines centered (matches 2012 iOS layout)
+            var seasonTitle = _seasonIndex == 0
+                ? "TRAINING\nSEASON"
+                : (_competitionName == "LEAGUE" ? $"SEASON {_seasonIndex}\nLEAGUE" : $"TOURNAMENT\n{_competitionName}");
+            var seasonText = AddText(seasonTitle, _safeArea, 22, Ink,
+                new Vector2(0.1f, 0.77f), new Vector2(0.9f, 0.88f));
+            seasonText.alignment = TextAnchor.MiddleCenter;
+            seasonText.fontStyle = FontStyle.Bold;
+            seasonText.lineSpacing = 0.9f;
 
-            var vsText = AddText($"vs. {fixture.teamName.ToUpperInvariant()}", _safeArea, 20, Ink,
-                new Vector2(0.1f, 0.77f), new Vector2(0.9f, 0.83f));
-            vsText.alignment = TextAnchor.MiddleCenter;
-            vsText.fontStyle = FontStyle.Bold;
+            // 2. Star Counter: e.g. "0/9 ★"
+            var completedCount = Mathf.Clamp(_fixtureIndex, 0, _seasonFixtures.Length);
+            var starCounterText = AddText($"{completedCount}/{_seasonFixtures.Length} ★", _safeArea, 16, new Color32(230, 160, 20, 255),
+                new Vector2(0.2f, 0.71f), new Vector2(0.8f, 0.77f));
+            starCounterText.alignment = TextAnchor.MiddleCenter;
+            starCounterText.fontStyle = FontStyle.Bold;
 
-            var statusStr = locked
-                ? "LOCKED"
-                : (isCompleted
-                    ? "WIN  •  REPLAY AVAILABLE"
-                    : $"WIN {fixture.cashWin:N0}   DRAW {fixture.cashDraw:N0}   LOSS {fixture.cashLose:N0}");
-            Color statusColor = locked ? (Color)new Color32(100, 100, 100, 255) : (isCompleted ? Grass : Ink);
-            var infoText = AddText(statusStr, _safeArea, 15, statusColor,
-                new Vector2(0.05f, 0.71f), new Vector2(0.95f, 0.77f));
-            infoText.alignment = TextAnchor.MiddleCenter;
-            infoText.fontStyle = FontStyle.Bold;
-
-            // Giant Soccer Ball in Center (Left half + Flipped Right half meeting seamlessly at container center)
+            // 3. Giant Soccer Ball in Center (Left half + Flipped Right half meeting seamlessly at container center)
             var ballSprite = locked
                 ? "Original/sprites/MatchSelectionSS1/SoccerBallButtonLocked"
                 : "Original/sprites/MatchSelectionSS1/SoccerBallButton";
@@ -1204,14 +1176,14 @@ namespace DiceSoccer
             var ballContainer = new GameObject("SoccerBallContainer", typeof(RectTransform));
             ballContainer.transform.SetParent(_safeArea, false);
             var containerRect = ballContainer.GetComponent<RectTransform>();
-            containerRect.anchorMin = new Vector2(0.5f, 0.52f);
-            containerRect.anchorMax = new Vector2(0.5f, 0.52f);
-            containerRect.sizeDelta = new Vector2(300f, 300f);
+            containerRect.anchorMin = new Vector2(0.5f, 0.54f);
+            containerRect.anchorMax = new Vector2(0.5f, 0.54f);
+            containerRect.sizeDelta = new Vector2(210f, 210f);
             containerRect.pivot = new Vector2(0.5f, 0.5f);
             StartCoroutine(AnimatePulse(containerRect));
 
-            float halfW = 300f * (96f / 190f); // 151.6f
-            float halfH = 300f;
+            float halfW = 210f * (96f / 190f);
+            float halfH = 210f;
 
             var ballLeft = AddResourceImage("BallLeft", ballSprite, ballContainer.transform,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
@@ -1235,13 +1207,13 @@ namespace DiceSoccer
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
             if (matchNumImg != null && matchNumImg.sprite != null)
             {
-                matchNumImg.rectTransform.sizeDelta = new Vector2(80f, 80f);
+                matchNumImg.rectTransform.sizeDelta = new Vector2(60f, 60f);
                 matchNumImg.preserveAspect = true;
             }
             else
             {
                 if (matchNumImg != null) Destroy(matchNumImg.gameObject);
-                var numTxt = AddText(matchNum.ToString(), ballContainer.transform, 44, Color.black,
+                var numTxt = AddText(matchNum.ToString(), ballContainer.transform, 36, Color.black,
                     new Vector2(0.2f, 0.2f), new Vector2(0.8f, 0.8f));
                 numTxt.alignment = TextAnchor.MiddleCenter;
                 numTxt.fontStyle = FontStyle.Bold;
@@ -1252,15 +1224,15 @@ namespace DiceSoccer
             var leftArrow = AddSpriteButton("LeftArrow",
                 canPrev ? "Original/images/LeftArrow" : "Original/images/LeftArrowDisabled",
                 canPrev ? "Original/images/LeftArrowSelected" : "Original/images/LeftArrowDisabled",
-                _safeArea, new Vector2(0.12f, 0.52f), new Vector2(0.10f, 0.12f),
+                _safeArea, new Vector2(0.12f, 0.54f), new Vector2(0.10f, 0.12f),
                 canPrev ? () => { _selectedFixtureIndex--; ShowLeagueFixtures(); } : null);
             leftArrow.interactable = canPrev;
 
             var canNext = _selectedFixtureIndex < _seasonFixtures.Length - 1;
             var rightArrow = AddSpriteButton("RightArrow",
-                canNext ? "Original/images/RightArrow" : "Original/images/RightArrowDisabled",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
-                _safeArea, new Vector2(0.88f, 0.52f), new Vector2(0.10f, 0.12f),
+                canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
+                _safeArea, new Vector2(0.88f, 0.54f), new Vector2(0.10f, 0.12f),
                 canNext ? () => { _selectedFixtureIndex++; ShowLeagueFixtures(); } : null);
             rightArrow.interactable = canNext;
 
@@ -1271,27 +1243,38 @@ namespace DiceSoccer
 
             var starLeft = AddResourceImage("StarLeft", starSprite, ballContainer.transform,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            starLeft.rectTransform.anchoredPosition = new Vector2(-55f, -115f);
-            starLeft.rectTransform.sizeDelta = new Vector2(70f, 70f);
+            starLeft.rectTransform.anchoredPosition = new Vector2(-42f, -84f);
+            starLeft.rectTransform.sizeDelta = new Vector2(48f, 48f);
             starLeft.preserveAspect = true;
 
             var starRight = AddResourceImage("StarRight", starSprite, ballContainer.transform,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            starRight.rectTransform.anchoredPosition = new Vector2(55f, -115f);
-            starRight.rectTransform.sizeDelta = new Vector2(70f, 70f);
+            starRight.rectTransform.anchoredPosition = new Vector2(42f, -84f);
+            starRight.rectTransform.sizeDelta = new Vector2(48f, 48f);
             starRight.preserveAspect = true;
 
             var starMid = AddResourceImage("StarMid", starSprite, ballContainer.transform,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            starMid.rectTransform.anchoredPosition = new Vector2(0f, -125f);
-            starMid.rectTransform.sizeDelta = new Vector2(85f, 85f);
+            starMid.rectTransform.anchoredPosition = new Vector2(0f, -92f);
+            starMid.rectTransform.sizeDelta = new Vector2(58f, 58f);
             starMid.preserveAspect = true;
             starMid.transform.SetAsLastSibling();
 
-            // Action Buttons: MANAGE and PLAY!
+            // 4. Match Info Below Ball
+            var matchTitle = AddText($"MATCH {_selectedFixtureIndex + 1}", _safeArea, 22, Ink,
+                new Vector2(0.1f, 0.355f), new Vector2(0.9f, 0.405f));
+            matchTitle.alignment = TextAnchor.MiddleCenter;
+            matchTitle.fontStyle = FontStyle.Bold;
+
+            var vsText = AddText($"vs. {fixture.teamName.ToUpperInvariant()}", _safeArea, 18, Ink,
+                new Vector2(0.1f, 0.305f), new Vector2(0.9f, 0.355f));
+            vsText.alignment = TextAnchor.MiddleCenter;
+            vsText.fontStyle = FontStyle.Bold;
+
+            // 5. Action Buttons: MANAGE and PLAY! side-by-side on grass
             AddSpriteButton("ManageBtn", "Original/sprites/EnemyLineupSS1/ManageButton",
                 "Original/sprites/EnemyLineupSS1/ManageButtonPressed", _safeArea,
-                new Vector2(0.35f, 0.24f), new Vector2(0.28f, 0.085f), ShowManage);
+                new Vector2(0.35f, 0.22f), new Vector2(0.28f, 0.085f), ShowManage);
 
             var playNormal = locked
                 ? "Original/sprites/MatchSelectionSS2/ManagePlayButtonDisabled"
@@ -1301,11 +1284,11 @@ namespace DiceSoccer
                 : "Original/sprites/MatchSelectionSS1/ManagePlayButtonPressed";
             var capturedMatchIdx = _selectedFixtureIndex;
             var playBtn = AddSpriteButton("PlayBtn", playNormal, playPressed, _safeArea,
-                new Vector2(0.65f, 0.24f), new Vector2(0.28f, 0.085f),
+                new Vector2(0.65f, 0.22f), new Vector2(0.28f, 0.085f),
                 locked ? null : () => StartFixture(capturedMatchIdx));
             playBtn.interactable = !locked;
 
-            // Bottom yellow bar & competition tabs
+            // 6. Bottom yellow bar & competition tabs
             var footerBar = AddResourceImage("FixtureFooter", "Original/images/FooterBG", _safeArea,
                 new Vector2(0f, 0f), new Vector2(1f, 0.08f));
             footerBar.preserveAspect = false;
@@ -3007,18 +2990,43 @@ namespace DiceSoccer
         {
             _catalog ??= GameCatalog.Load();
             ClearCanvas();
-            AddMenuBackdrop(true);
-            AddMenuHeader("SHOP", ShowHome);
-            AddMenuFooter();
 
-            const float tabY = 0.88f;
-            const float tabW = 0.28f;
-            const float tabH = 0.055f;
+            // Authentic green shelf background (v1.2.5 native)
+            AddStretchImage("ShopBackground", "Original/sprites/TrophyRoomBGSS/GreenShelfBG", _canvas.transform);
+            _safeArea.SetAsLastSibling();
 
-            // Coins Tab
+            AddMenuHeader(null, ShowHome);
+
+            // Top wood beam trim under header
+            var topBeam = AddResourceImage("TopBeam", "Original/sprites/TrophyRoomBGSS/WoodenShelfBG", _safeArea,
+                new Vector2(0.5f, 0.915f), new Vector2(0.5f, 0.915f));
+            topBeam.rectTransform.sizeDelta = new Vector2(800f, 18f);
+            topBeam.preserveAspect = false;
+            topBeam.raycastTarget = false;
+
+            // 3 horizontal wooden shelves across screen
+            var shelfYs = new[] { 0.67f, 0.46f, 0.25f };
+            for (var s = 0; s < shelfYs.Length; s++)
+            {
+                var shelf = AddResourceImage($"Shelf_{s}", "Original/sprites/TrophyRoomBGSS/WoodenShelfBG", _safeArea,
+                    new Vector2(0.5f, shelfYs[s]), new Vector2(0.5f, shelfYs[s]));
+                shelf.rectTransform.sizeDelta = new Vector2(800f, 26f);
+                shelf.preserveAspect = false;
+                shelf.raycastTarget = false;
+            }
+
+            // Render current tab products on the 3 shelves
+            if (_shopTab == 0)
+                RenderShopCoins();
+            else if (_shopTab == 1)
+                RenderShopShirts();
+            else
+                RenderShopShorts();
+
+            // Bottom authentic Shop category tabs: Coins (Tab 0), Shirts (Tab 1), Shorts (Tab 2)
             var coinsSprite = _shopTab == 0 ? "Original/sprites/ShopSS/CoinsTab" : "Original/sprites/ShopSS/CoinsTabPressed";
-            AddSpriteButton("CoinsTab", coinsSprite, "Original/sprites/ShopSS/CoinsTab", _safeArea,
-                new Vector2(0.2f, tabY), new Vector2(tabW, tabH), () =>
+            AddSpriteButton("CoinsTab", coinsSprite, coinsSprite, _safeArea,
+                new Vector2(0.18f, 0.055f), new Vector2(0.31f, 0.095f), () =>
                 {
                     _shopTab = 0;
                     _shopPage = 0;
@@ -3026,10 +3034,9 @@ namespace DiceSoccer
                     ShowShop();
                 });
 
-            // Shirts Tab
             var shirtsSprite = _shopTab == 1 ? "Original/sprites/ShopSS/ShirtTab" : "Original/sprites/ShopSS/ShirtTabPressed";
-            AddSpriteButton("ShirtTab", shirtsSprite, "Original/sprites/ShopSS/ShirtTab", _safeArea,
-                new Vector2(0.5f, tabY), new Vector2(tabW, tabH), () =>
+            AddSpriteButton("ShirtTab", shirtsSprite, shirtsSprite, _safeArea,
+                new Vector2(0.50f, 0.055f), new Vector2(0.31f, 0.095f), () =>
                 {
                     _shopTab = 1;
                     _shopPage = 0;
@@ -3037,70 +3044,122 @@ namespace DiceSoccer
                     ShowShop();
                 });
 
-            // Shorts Tab
             var shortsSprite = _shopTab == 2 ? "Original/sprites/ShopSS/ShortsTab" : "Original/sprites/ShopSS/ShortsTabPressed";
-            AddSpriteButton("ShortsTab", shortsSprite, "Original/sprites/ShopSS/ShortsTab", _safeArea,
-                new Vector2(0.8f, tabY), new Vector2(tabW, tabH), () =>
+            AddSpriteButton("ShortsTab", shortsSprite, shortsSprite, _safeArea,
+                new Vector2(0.82f, 0.055f), new Vector2(0.31f, 0.095f), () =>
                 {
                     _shopTab = 2;
                     _shopPage = 0;
                     AudioManager.Instance.PlayTap();
                     ShowShop();
                 });
-
-            if (_shopTab == 0)
-                RenderShopCoins();
-            else if (_shopTab == 1)
-                RenderShopShirts();
-            else
-                RenderShopShorts();
         }
 
         private void RenderShopCoins()
         {
-            var cashList = _catalog.Data.shopCash ?? Array.Empty<ShopCashData>();
-            const int perPage = 3;
-            var maxPages = Mathf.Max(1, Mathf.CeilToInt(cashList.Length / (float)perPage));
-            _shopPage = Mathf.Clamp(_shopPage, 0, maxPages - 1);
-
-            var startIdx = _shopPage * perPage;
-            var count = Mathf.Min(perPage, cashList.Length - startIdx);
-            var boxYs = new[] { 0.73f, 0.54f, 0.35f };
-
-            for (var i = 0; i < count; i++)
+            var coinPackages = new[]
             {
-                var option = cashList[startIdx + i];
-                var boxY = boxYs[i];
+                new { coins = 25000, price = "$0.99", pouches = 1 },
+                new { coins = 250000, price = "$1.99", pouches = 2 },
+                new { coins = 1200000, price = "$2.99", pouches = 3 }
+            };
+
+            var cardYs = new[] { 0.765f, 0.555f, 0.345f };
+
+            for (var i = 0; i < 3; i++)
+            {
+                var pkg = coinPackages[i];
+                var cardY = cardYs[i];
 
                 var box = AddResourceImage($"ShopBox_{i}", "Original/sprites/ShopSS/ShopBox", _safeArea,
-                    new Vector2(0.06f, boxY - 0.082f), new Vector2(0.94f, boxY + 0.082f));
+                    new Vector2(0.5f, cardY), new Vector2(0.5f, cardY));
+                box.rectTransform.sizeDelta = new Vector2(148f, 96f);
                 box.preserveAspect = false;
 
-                var iconPath = option.price >= 9.99f
-                    ? "Original/sprites/ShopSS/ShopMoneyBar"
-                    : "Original/sprites/ShopSS/ShopMoneyPouch";
-                var icon = AddResourceImage("CoinIcon", iconPath, box.transform,
-                    new Vector2(0.04f, 0.15f), new Vector2(0.32f, 0.85f));
-                icon.preserveAspect = true;
+                // Pouches
+                if (pkg.pouches == 1)
+                {
+                    var pouch = AddResourceImage("Pouch", "Original/sprites/ShopSS/ShopMoneyPouch", box.transform,
+                        new Vector2(0.5f, 0.67f), new Vector2(0.5f, 0.67f));
+                    pouch.rectTransform.sizeDelta = new Vector2(90f, 65f);
+                    pouch.preserveAspect = true;
+                    pouch.raycastTarget = false;
+                }
+                else if (pkg.pouches == 2)
+                {
+                    var p1 = AddResourceImage("Pouch1", "Original/sprites/ShopSS/ShopMoneyPouch", box.transform,
+                        new Vector2(0.36f, 0.67f), new Vector2(0.36f, 0.67f));
+                    p1.rectTransform.sizeDelta = new Vector2(74f, 54f);
+                    p1.preserveAspect = true;
+                    p1.raycastTarget = false;
 
-                AddText($"{option.coins:N0}\nCOINS", box.transform, 18, Ink,
-                    new Vector2(0.32f, 0.15f), new Vector2(0.70f, 0.85f));
+                    var p2 = AddResourceImage("Pouch2", "Original/sprites/ShopSS/ShopMoneyPouch", box.transform,
+                        new Vector2(0.64f, 0.67f), new Vector2(0.64f, 0.67f));
+                    p2.rectTransform.sizeDelta = new Vector2(74f, 54f);
+                    p2.preserveAspect = true;
+                    p2.raycastTarget = false;
+                }
+                else
+                {
+                    var p1 = AddResourceImage("Pouch1", "Original/sprites/ShopSS/ShopMoneyPouch", box.transform,
+                        new Vector2(0.28f, 0.64f), new Vector2(0.28f, 0.64f));
+                    p1.rectTransform.sizeDelta = new Vector2(62f, 45f);
+                    p1.preserveAspect = true;
+                    p1.raycastTarget = false;
 
-                var capturedOption = option;
-                AddButton("FREE", box.transform, Grass,
-                    new Vector2(0.83f, 0.5f), new Vector2(0.24f, 0.48f), () =>
-                    {
-                        _careerCash += capturedOption.coins;
-                        SaveCareerState();
-                        AudioManager.Instance.PlayCash();
-                        ShowShop();
-                    });
+                    var p2 = AddResourceImage("Pouch2", "Original/sprites/ShopSS/ShopMoneyPouch", box.transform,
+                        new Vector2(0.50f, 0.70f), new Vector2(0.50f, 0.70f));
+                    p2.rectTransform.sizeDelta = new Vector2(68f, 50f);
+                    p2.preserveAspect = true;
+                    p2.raycastTarget = false;
+
+                    var p3 = AddResourceImage("Pouch3", "Original/sprites/ShopSS/ShopMoneyPouch", box.transform,
+                        new Vector2(0.72f, 0.64f), new Vector2(0.72f, 0.64f));
+                    p3.rectTransform.sizeDelta = new Vector2(62f, 45f);
+                    p3.preserveAspect = true;
+                    p3.raycastTarget = false;
+                }
+
+                // Money bar with coin count
+                var bar = AddResourceImage("MoneyBar", "Original/sprites/ShopSS/ShopMoneyBar", box.transform,
+                    new Vector2(0.5f, 0.33f), new Vector2(0.5f, 0.33f));
+                bar.rectTransform.sizeDelta = new Vector2(105f, 20f);
+                bar.preserveAspect = false;
+                bar.raycastTarget = false;
+
+                var coinsTxt = AddText(pkg.coins.ToString("N0"), bar.transform, 12, Ink,
+                    new Vector2(0.05f, 0.05f), new Vector2(0.95f, 0.95f));
+                coinsTxt.alignment = TextAnchor.MiddleCenter;
+                coinsTxt.fontStyle = FontStyle.Bold;
+
+                // Price label below bar
+                var priceTxt = AddText(pkg.price, box.transform, 13, Ink,
+                    new Vector2(0.1f, 0.04f), new Vector2(0.9f, 0.22f));
+                priceTxt.alignment = TextAnchor.MiddleCenter;
+                priceTxt.fontStyle = FontStyle.Bold;
+
+                // Tapping card rewards coins (no microtransactions)
+                var boxBtn = box.gameObject.AddComponent<Button>();
+                var capturedCoins = pkg.coins;
+                boxBtn.onClick.AddListener(() =>
+                {
+                    _careerCash += capturedCoins;
+                    SaveCareerState();
+                    AudioManager.Instance.PlayCash();
+                    ShowShop();
+                });
             }
 
-            RenderShopPagination(maxPages, () => ShowShop(), 0.22f);
+            // Left / Right arrows on middle shelf
+            var leftArrow = AddSpriteButton("LeftArrow", "Original/images/LeftArrowDisabled",
+                "Original/images/LeftArrowDisabled", _safeArea,
+                new Vector2(0.14f, 0.555f), new Vector2(0.12f, 0.08f), null);
+            leftArrow.interactable = false;
 
-            AddButton("☕ BUY A COFFEE (PAYPAL)", _safeArea, new Color32(0, 112, 186, 255),
-                new Vector2(0.5f, 0.135f), new Vector2(0.75f, 0.055f), ShowDonationModal);
+            var rightArrow = AddSpriteButton("RightArrow", "Original/images/RightArrowSelected",
+                "Original/images/RightArrowSelected", _safeArea,
+                new Vector2(0.86f, 0.555f), new Vector2(0.12f, 0.08f), null);
+            rightArrow.interactable = false;
         }
 
         private void RenderShopShirts()
@@ -3112,34 +3171,37 @@ namespace DiceSoccer
 
             var startIdx = _shopPage * perPage;
             var count = Mathf.Min(perPage, shirts.Length - startIdx);
-            var boxYs = new[] { 0.71f, 0.51f, 0.31f };
+            var cardYs = new[] { 0.765f, 0.555f, 0.345f };
 
             for (var i = 0; i < count; i++)
             {
                 var shirt = shirts[startIdx + i];
-                var boxY = boxYs[i];
+                var cardY = cardYs[i];
 
                 var box = AddResourceImage($"ShopBox_Shirt_{i}", "Original/sprites/ShopSS/ShopBox", _safeArea,
-                    new Vector2(0.06f, boxY - 0.085f), new Vector2(0.94f, boxY + 0.085f));
+                    new Vector2(0.5f, cardY), new Vector2(0.5f, cardY));
+                box.rectTransform.sizeDelta = new Vector2(148f, 96f);
                 box.preserveAspect = false;
 
                 var previewBox = new GameObject("KitPreview", typeof(RectTransform));
                 previewBox.transform.SetParent(box.transform, false);
                 var prevRect = previewBox.GetComponent<RectTransform>();
-                prevRect.anchorMin = new Vector2(0.05f, 0.15f);
-                prevRect.anchorMax = new Vector2(0.30f, 0.85f);
-                prevRect.offsetMin = Vector2.zero;
-                prevRect.offsetMax = Vector2.zero;
+                prevRect.anchorMin = new Vector2(0.5f, 0.58f);
+                prevRect.anchorMax = new Vector2(0.5f, 0.58f);
+                prevRect.sizeDelta = new Vector2(74f, 56f);
+                prevRect.pivot = new Vector2(0.5f, 0.5f);
 
                 var shirtBase = AddResourceImage("ShirtBase", "Original/sprites/KitSelectionSS/KitSelectionShirt", previewBox.transform,
                     Vector2.zero, Vector2.one);
                 shirtBase.preserveAspect = true;
                 shirtBase.color = _catalog.GetColourRgb(shirt.shirtColour);
+                shirtBase.raycastTarget = false;
 
                 var sleeves = AddResourceImage("Sleeves", "Original/sprites/KitSelectionSS/KitSelectionSleeves", previewBox.transform,
                     Vector2.zero, Vector2.one);
                 sleeves.preserveAspect = true;
                 sleeves.color = _catalog.GetColourRgb(shirt.sleeveColour);
+                sleeves.raycastTarget = false;
 
                 if (shirt.shirtStyle > 0 && shirt.shirtStyle <= 7)
                 {
@@ -3147,39 +3209,53 @@ namespace DiceSoccer
                         Vector2.zero, Vector2.one);
                     pattern.preserveAspect = true;
                     pattern.color = _catalog.GetColourRgb(shirt.styleColour);
+                    pattern.raycastTarget = false;
                 }
 
-                AddText($"KIT #{shirt.id}\nStyle {shirt.shirtStyle}", box.transform, 17, Ink,
-                    new Vector2(0.32f, 0.15f), new Vector2(0.68f, 0.85f));
-
-                var capturedShirt = shirt;
                 var owned = _unlockedShirtIds.Contains(shirt.id);
                 if (owned)
                 {
                     var soldOut = AddResourceImage("SoldOut", "Original/sprites/ShopSS/ShopSoldOut", box.transform,
-                        new Vector2(0.72f, 0.25f), new Vector2(0.95f, 0.75f));
+                        new Vector2(0.5f, 0.20f), new Vector2(0.5f, 0.20f));
+                    soldOut.rectTransform.sizeDelta = new Vector2(80f, 26f);
                     soldOut.preserveAspect = true;
+                    soldOut.raycastTarget = false;
                 }
                 else
                 {
-                    var cost = Mathf.RoundToInt(shirt.price * 50000f);
-                    var canAfford = _careerCash >= cost;
-                    AddButton(canAfford ? $"{cost:N0}" : $"${shirt.price:F2}", box.transform, canAfford ? Grass : new Color32(60, 60, 60, 255),
-                        new Vector2(0.83f, 0.5f), new Vector2(0.24f, 0.48f), () =>
-                        {
-                            if (_careerCash >= cost)
-                            {
-                                _careerCash -= cost;
-                                _unlockedShirtIds.Add(capturedShirt.id);
-                                SaveCareerState();
-                                AudioManager.Instance.PlayBuy();
-                                ShowShop();
-                            }
-                        });
+                    var priceTxt = AddText("$0.99", box.transform, 13, Ink,
+                        new Vector2(0.1f, 0.05f), new Vector2(0.9f, 0.24f));
+                    priceTxt.alignment = TextAnchor.MiddleCenter;
+                    priceTxt.fontStyle = FontStyle.Bold;
+
+                    var capturedShirt = shirt;
+                    var boxBtn = box.gameObject.AddComponent<Button>();
+                    boxBtn.onClick.AddListener(() =>
+                    {
+                        _unlockedShirtIds.Add(capturedShirt.id);
+                        SaveCareerState();
+                        AudioManager.Instance.PlayBuy();
+                        ShowShop();
+                    });
                 }
             }
 
-            RenderShopPagination(maxPages, () => ShowShop());
+            // Left & Right navigation arrows on middle shelf
+            var canPrev = _shopPage > 0;
+            var leftArrow = AddSpriteButton("LeftArrow",
+                canPrev ? "Original/images/LeftArrow" : "Original/images/LeftArrowDisabled",
+                canPrev ? "Original/images/LeftArrowSelected" : "Original/images/LeftArrowDisabled",
+                _safeArea, new Vector2(0.14f, 0.555f), new Vector2(0.12f, 0.08f),
+                canPrev ? () => { _shopPage--; ShowShop(); } : null);
+            leftArrow.interactable = canPrev;
+
+            var canNext = _shopPage < maxPages - 1;
+            var rightArrow = AddSpriteButton("RightArrow",
+                canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
+                canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
+                _safeArea, new Vector2(0.86f, 0.555f), new Vector2(0.12f, 0.08f),
+                canNext ? () => { _shopPage++; ShowShop(); } : null);
+            rightArrow.interactable = canNext;
         }
 
         private void RenderShopShorts()
@@ -3191,83 +3267,69 @@ namespace DiceSoccer
 
             var startIdx = _shopPage * perPage;
             var count = Mathf.Min(perPage, colours.Length - startIdx);
-            var boxYs = new[] { 0.71f, 0.51f, 0.31f };
+            var cardYs = new[] { 0.765f, 0.555f, 0.345f };
 
             for (var i = 0; i < count; i++)
             {
                 var col = colours[startIdx + i];
-                var boxY = boxYs[i];
+                var cardY = cardYs[i];
 
                 var box = AddResourceImage($"ShopBox_Shorts_{i}", "Original/sprites/ShopSS/ShopBox", _safeArea,
-                    new Vector2(0.06f, boxY - 0.085f), new Vector2(0.94f, boxY + 0.085f));
+                    new Vector2(0.5f, cardY), new Vector2(0.5f, cardY));
+                box.rectTransform.sizeDelta = new Vector2(148f, 96f);
                 box.preserveAspect = false;
 
                 var shorts = AddResourceImage("ShortsPreview", "Original/sprites/KitSelectionSS/KitSelectionShorts", box.transform,
-                    new Vector2(0.05f, 0.15f), new Vector2(0.30f, 0.85f));
+                    new Vector2(0.5f, 0.58f), new Vector2(0.5f, 0.58f));
+                shorts.rectTransform.sizeDelta = new Vector2(74f, 56f);
                 shorts.preserveAspect = true;
                 shorts.color = _catalog.GetColourRgb(col.id);
+                shorts.raycastTarget = false;
 
-                AddText($"SHORTS #{col.id}", box.transform, 17, Ink,
-                    new Vector2(0.32f, 0.15f), new Vector2(0.68f, 0.85f));
-
-                var capturedCol = col;
                 var owned = _unlockedPantsIds.Contains(col.id);
                 if (owned)
                 {
                     var soldOut = AddResourceImage("SoldOut", "Original/sprites/ShopSS/ShopSoldOut", box.transform,
-                        new Vector2(0.72f, 0.25f), new Vector2(0.95f, 0.75f));
+                        new Vector2(0.5f, 0.20f), new Vector2(0.5f, 0.20f));
+                    soldOut.rectTransform.sizeDelta = new Vector2(80f, 26f);
                     soldOut.preserveAspect = true;
+                    soldOut.raycastTarget = false;
                 }
                 else
                 {
-                    const int cost = 25000;
-                    var canAfford = _careerCash >= cost;
-                    AddButton(canAfford ? $"{cost:N0}" : "$0.99", box.transform, canAfford ? Grass : new Color32(60, 60, 60, 255),
-                        new Vector2(0.83f, 0.5f), new Vector2(0.24f, 0.48f), () =>
-                        {
-                            if (_careerCash >= cost)
-                            {
-                                _careerCash -= cost;
-                                _unlockedPantsIds.Add(capturedCol.id);
-                                SaveCareerState();
-                                AudioManager.Instance.PlayBuy();
-                                ShowShop();
-                            }
-                        });
+                    var priceTxt = AddText("$0.99", box.transform, 13, Ink,
+                        new Vector2(0.1f, 0.05f), new Vector2(0.9f, 0.24f));
+                    priceTxt.alignment = TextAnchor.MiddleCenter;
+                    priceTxt.fontStyle = FontStyle.Bold;
+
+                    var capturedCol = col;
+                    var boxBtn = box.gameObject.AddComponent<Button>();
+                    boxBtn.onClick.AddListener(() =>
+                    {
+                        _unlockedPantsIds.Add(capturedCol.id);
+                        SaveCareerState();
+                        AudioManager.Instance.PlayBuy();
+                        ShowShop();
+                    });
                 }
             }
 
-            RenderShopPagination(maxPages, () => ShowShop());
-        }
+            // Left & Right navigation arrows on middle shelf
+            var canPrev = _shopPage > 0;
+            var leftArrow = AddSpriteButton("LeftArrow",
+                canPrev ? "Original/images/LeftArrow" : "Original/images/LeftArrowDisabled",
+                canPrev ? "Original/images/LeftArrowSelected" : "Original/images/LeftArrowDisabled",
+                _safeArea, new Vector2(0.14f, 0.555f), new Vector2(0.12f, 0.08f),
+                canPrev ? () => { _shopPage--; ShowShop(); } : null);
+            leftArrow.interactable = canPrev;
 
-        private void RenderShopPagination(int maxPages, UnityEngine.Events.UnityAction onRefresh, float y = 0.175f)
-        {
-            if (maxPages <= 1) return;
-
-            if (_shopPage > 0)
-            {
-                AddSpriteButton("LeftArrow", "Original/images/LeftArrow", "Original/images/LeftArrowSelected", _safeArea,
-                    new Vector2(0.12f, y), new Vector2(0.12f, 0.055f), () =>
-                    {
-                        _shopPage--;
-                        AudioManager.Instance.PlayTap();
-                        onRefresh?.Invoke();
-                    });
-            }
-
-            AddText($"PAGE {_shopPage + 1} / {maxPages}", _safeArea, 15, Paper,
-                new Vector2(0.3f, y - 0.025f), new Vector2(0.7f, y + 0.025f));
-
-            if (_shopPage < maxPages - 1)
-            {
-                AddSpriteButton("RightArrow", "Original/images/RightArrow", "Original/images/RightArrowSelected", _safeArea,
-                    new Vector2(0.88f, y), new Vector2(0.12f, 0.055f), () =>
-                    {
-                        _shopPage++;
-                        AudioManager.Instance.PlayTap();
-                        onRefresh?.Invoke();
-                    });
-            }
+            var canNext = _shopPage < maxPages - 1;
+            var rightArrow = AddSpriteButton("RightArrow",
+                canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
+                canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
+                _safeArea, new Vector2(0.86f, 0.555f), new Vector2(0.12f, 0.08f),
+                canNext ? () => { _shopPage++; ShowShop(); } : null);
+            rightArrow.interactable = canNext;
         }
 
         private void ShowKitSelection()
@@ -5680,61 +5742,129 @@ namespace DiceSoccer
         private void ShowOptionsDialog(Transform parent)
         {
             var optionsBackdrop = AddPanel("OptionsBackdrop", parent,
-                new Color(0f, 0f, 0f, 0.85f), new Vector2(0.5f, 0.5f), Vector2.one);
+                new Color(0f, 0f, 0f, 0.60f), new Vector2(0.5f, 0.5f), Vector2.one);
             optionsBackdrop.raycastTarget = true;
 
             var box = AddResourceImage("OptionsBox", "Original/sprites/AchievementsSS4/LongDialogBox", optionsBackdrop.transform,
                 new Vector2(0.5f, 0.52f), new Vector2(0.5f, 0.52f));
-            box.rectTransform.sizeDelta = new Vector2(480f, 760f);
-            box.preserveAspect = true;
+            box.rectTransform.sizeDelta = new Vector2(330f, 470f);
+            box.preserveAspect = false;
 
             var title = AddText("OPTIONS", box.transform, 22, Ink,
-                new Vector2(0.12f, 0.86f), new Vector2(0.88f, 0.94f));
+                new Vector2(0.12f, 0.85f), new Vector2(0.88f, 0.94f));
             title.fontStyle = FontStyle.Bold;
 
-            // Music & Sound Checkbox
-            var tickBox = AddResourceImage("SoundTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
-                new Vector2(0.20f, 0.68f), new Vector2(0.20f, 0.68f));
-            tickBox.rectTransform.sizeDelta = new Vector2(36f, 36f);
-            tickBox.preserveAspect = true;
-
-            var tickImg = AddResourceImage("SoundTick", "Original/sprites/OptionsSS/OptionsTick", tickBox.transform,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            tickImg.rectTransform.sizeDelta = new Vector2(30f, 30f);
-            tickImg.preserveAspect = true;
-            tickImg.gameObject.SetActive(_soundEnabled);
-
-            var soundLabel = AddText("SOUND & MUSIC", box.transform, 17, Ink,
-                new Vector2(0.30f, 0.64f), new Vector2(0.85f, 0.72f));
-            soundLabel.alignment = TextAnchor.MiddleLeft;
-
-            var soundBtn = tickBox.gameObject.AddComponent<Button>();
-            soundBtn.onClick.AddListener(() =>
+            // Tap title to toggle Display Mode (Classic 2:3 vs Fullscreen)
+            var titleBtn = title.gameObject.AddComponent<Button>();
+            titleBtn.onClick.AddListener(() =>
             {
-                ToggleSound();
-                tickImg.gameObject.SetActive(_soundEnabled);
+                int current = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0);
+                PlayerPrefs.SetInt("diceSoccer.fullscreen", current == 1 ? 0 : 1);
+                PlayerPrefs.Save();
+                ApplySafeArea();
+                AudioManager.Instance.PlayTap();
             });
 
-            // Handbook button
-            AddSpriteButton("Handbook", "Original/sprites/OptionsSS/HandbookButton",
-                "Original/sprites/OptionsSS/HandbookButtonPressed", box.transform,
-                new Vector2(0.5f, 0.50f), new Vector2(0.60f, 0.12f), () =>
-                {
-                    ShowHandbookDialog(optionsBackdrop.transform);
-                });
+            // Row 1: MUSIC
+            var musicLabel = AddText("MUSIC", box.transform, 16, Ink,
+                new Vector2(0.16f, 0.70f), new Vector2(0.65f, 0.78f));
+            musicLabel.alignment = TextAnchor.MiddleLeft;
+            musicLabel.fontStyle = FontStyle.Bold;
 
-            // Credits button
+            var musicTickBox = AddResourceImage("MusicTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
+                new Vector2(0.76f, 0.74f), new Vector2(0.76f, 0.74f));
+            musicTickBox.rectTransform.sizeDelta = new Vector2(30f, 30f);
+            musicTickBox.preserveAspect = true;
+
+            var musicTick = AddResourceImage("MusicTick", "Original/sprites/OptionsSS/OptionsTick", musicTickBox.transform,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            musicTick.rectTransform.sizeDelta = new Vector2(24f, 24f);
+            musicTick.preserveAspect = true;
+            musicTick.gameObject.SetActive(AudioManager.Instance.MusicEnabled);
+
+            var musicBtn = musicTickBox.gameObject.AddComponent<Button>();
+            musicBtn.onClick.AddListener(() =>
+            {
+                AudioManager.Instance.MusicEnabled = !AudioManager.Instance.MusicEnabled;
+                musicTick.gameObject.SetActive(AudioManager.Instance.MusicEnabled);
+                AudioManager.Instance.PlayTap();
+            });
+
+            // Row 2: SFX
+            var sfxLabel = AddText("SFX", box.transform, 16, Ink,
+                new Vector2(0.16f, 0.58f), new Vector2(0.65f, 0.66f));
+            sfxLabel.alignment = TextAnchor.MiddleLeft;
+            sfxLabel.fontStyle = FontStyle.Bold;
+
+            var sfxTickBox = AddResourceImage("SfxTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
+                new Vector2(0.76f, 0.62f), new Vector2(0.76f, 0.62f));
+            sfxTickBox.rectTransform.sizeDelta = new Vector2(30f, 30f);
+            sfxTickBox.preserveAspect = true;
+
+            var sfxTick = AddResourceImage("SfxTick", "Original/sprites/OptionsSS/OptionsTick", sfxTickBox.transform,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            sfxTick.rectTransform.sizeDelta = new Vector2(24f, 24f);
+            sfxTick.preserveAspect = true;
+            sfxTick.gameObject.SetActive(AudioManager.Instance.SfxEnabled);
+
+            var sfxBtn = sfxTickBox.gameObject.AddComponent<Button>();
+            sfxBtn.onClick.AddListener(() =>
+            {
+                AudioManager.Instance.SfxEnabled = !AudioManager.Instance.SfxEnabled;
+                sfxTick.gameObject.SetActive(AudioManager.Instance.SfxEnabled);
+                AudioManager.Instance.PlayTap();
+            });
+
+            // Row 3: VIBRATION
+            var vibLabel = AddText("VIBRATION", box.transform, 16, Ink,
+                new Vector2(0.16f, 0.46f), new Vector2(0.65f, 0.54f));
+            vibLabel.alignment = TextAnchor.MiddleLeft;
+            vibLabel.fontStyle = FontStyle.Bold;
+
+            var vibTickBox = AddResourceImage("VibTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
+                new Vector2(0.76f, 0.50f), new Vector2(0.76f, 0.50f));
+            vibTickBox.rectTransform.sizeDelta = new Vector2(30f, 30f);
+            vibTickBox.preserveAspect = true;
+
+            var vibTick = AddResourceImage("VibTick", "Original/sprites/OptionsSS/OptionsTick", vibTickBox.transform,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            vibTick.rectTransform.sizeDelta = new Vector2(24f, 24f);
+            vibTick.preserveAspect = true;
+            var vibEnabled = PlayerPrefs.GetInt("diceSoccer.vibration", 0) != 0;
+            vibTick.gameObject.SetActive(vibEnabled);
+
+            var vibBtn = vibTickBox.gameObject.AddComponent<Button>();
+            vibBtn.onClick.AddListener(() =>
+            {
+                var cur = PlayerPrefs.GetInt("diceSoccer.vibration", 0) != 0;
+                var next = !cur;
+                PlayerPrefs.SetInt("diceSoccer.vibration", next ? 1 : 0);
+                PlayerPrefs.Save();
+                vibTick.gameObject.SetActive(next);
+                if (next) Handheld.Vibrate();
+                AudioManager.Instance.PlayTap();
+            });
+
+            // Button 1: CREDITS
             AddSpriteButton("Credits", "Original/sprites/OptionsSS/CreditsButton",
                 "Original/sprites/OptionsSS/CreditsButtonPressed", box.transform,
-                new Vector2(0.5f, 0.35f), new Vector2(0.60f, 0.12f), () =>
+                new Vector2(0.5f, 0.35f), new Vector2(0.68f, 0.10f), () =>
                 {
                     ShowCreditsDialog(optionsBackdrop.transform);
                 });
 
-            // Done button
+            // Button 2: HANDBOOK
+            AddSpriteButton("Handbook", "Original/sprites/OptionsSS/HandbookButton",
+                "Original/sprites/OptionsSS/HandbookButtonPressed", box.transform,
+                new Vector2(0.5f, 0.22f), new Vector2(0.68f, 0.10f), () =>
+                {
+                    ShowHandbookDialog(optionsBackdrop.transform);
+                });
+
+            // Button 3: DONE
             AddSpriteButton("Done", "Original/images/DoneButton",
                 "Original/images/DoneButtonPressed", box.transform,
-                new Vector2(0.5f, 0.14f), new Vector2(0.55f, 0.10f), () =>
+                new Vector2(0.5f, 0.08f), new Vector2(0.44f, 0.085f), () =>
                 {
                     Destroy(optionsBackdrop.gameObject);
                 });
