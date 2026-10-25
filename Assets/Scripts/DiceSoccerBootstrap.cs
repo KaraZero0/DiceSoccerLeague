@@ -401,9 +401,9 @@ namespace DiceSoccer
                 "• All 5 official leagues & tournaments\n" +
                 "• 1v1 Pass & Play local multiplayer\n" +
                 "• High-resolution full screen & classic modes\n" +
-                "• Authentic 20 FPS Cocos2d animations & probabilities\n\n" +
+                "• Special thanks to jairsldn & Karazero for preserving the game!\n\n" +
                 "Enjoy the match!",
-                box.transform, 14, Ink,
+                box.transform, 13, Ink,
                 new Vector2(0.08f, 0.22f), new Vector2(0.92f, 0.82f));
             body.alignment = TextAnchor.MiddleCenter;
 
@@ -555,11 +555,28 @@ namespace DiceSoccer
             ClearCanvas();
             AddMenuBackdrop(true);
 
-            // Title Hero Logo at top
+            // Title Hero Logo at top (Easter Egg: Tap 5 times to reveal archival dedication!)
             var logo = AddResourceImage("StartScreenLogo", "Original/images/StartScreenLogo",
                 _safeArea, new Vector2(0.18f, 0.72f), new Vector2(0.82f, 0.96f));
             logo.preserveAspect = true;
-            logo.raycastTarget = false;
+            logo.raycastTarget = true;
+
+            int logoTaps = 0;
+            float lastTapTime = 0f;
+            var logoBtn = logo.gameObject.AddComponent<Button>();
+            logoBtn.transition = Selectable.Transition.None;
+            logoBtn.onClick.AddListener(() =>
+            {
+                if (Time.time - lastTapTime > 2.5f) logoTaps = 0;
+                lastTapTime = Time.time;
+                logoTaps++;
+                AudioManager.Instance.PlayTap();
+                if (logoTaps >= 5)
+                {
+                    logoTaps = 0;
+                    ShowLegendsEasterEggModal();
+                }
+            });
 
             float[] slotYs = { 0.58f, 0.44f, 0.30f };
             bool anyExists = false;
@@ -821,6 +838,13 @@ namespace DiceSoccer
             _seasonIndex = 0;
             _fixtureIndex = 0;
 
+            var lower = name.Trim().ToLowerInvariant();
+            bool isLegend = lower == "karazero" || lower == "jairsldn";
+            if (isLegend)
+            {
+                _careerCash = 50000; // Special Founder & Archivist Coin Bonus!
+            }
+
             PlayerPrefs.SetInt($"diceSoccer.profile.{slot}.exists", 1);
             PlayerPrefs.SetString($"diceSoccer.profile.{slot}.name", _teamName);
             PlayerPrefs.SetInt($"diceSoccer.profile.{slot}.crest", _currentCrestId);
@@ -831,6 +855,11 @@ namespace DiceSoccer
             PlayerPrefs.Save();
 
             SaveCareerState();
+
+            if (isLegend)
+            {
+                ShowLegendsEasterEggModal();
+            }
         }
 
         private void ShowDeleteConfirmation(int slot, string pName)
@@ -982,6 +1011,57 @@ namespace DiceSoccer
                 new Vector2(0.5f, 0.08f), new Vector2(0.50f, 0.06f), () =>
                 {
                     Destroy(backdrop.gameObject);
+                });
+        }
+
+        private void ShowLegendsEasterEggModal()
+        {
+            var overlay = AddPanel("LegendsOverlay", _safeArea, new Color(0f, 0f, 0f, 0.92f),
+                new Vector2(0.5f, 0.5f), Vector2.one);
+            overlay.raycastTarget = true;
+
+            var box = AddResourceImage("LegendsBox", "Original/sprites/AchievementsSS4/LongDialogBox", overlay.transform,
+                new Vector2(0.5f, 0.52f), new Vector2(0.5f, 0.52f));
+            box.rectTransform.sizeDelta = new Vector2(500f, 680f);
+            box.preserveAspect = false;
+
+            var title = AddText("★ THE ARCHIVE LEGENDS ★", box.transform, 22, Ink,
+                new Vector2(0.05f, 0.86f), new Vector2(0.95f, 0.94f));
+            title.fontStyle = FontStyle.Bold;
+
+            var body = AddText(
+                "A SPECIAL DEDICATION\n\n" +
+                "👑 KARAZERO\n" +
+                "Project Creator, Engineering & 1:1 Preservation\n\n" +
+                "🏆 JAIRSLDN\n" +
+                "The Legendary Archive Guardian\n\n" +
+                "Across the entire internet, jairsldn was the only person who preserved and held the original 2012 iOS binaries and files of Dice Soccer.\n\n" +
+                "Without his archival passion and Karazero's dedication, this game would have been lost to history.\n\n" +
+                "Dice Soccer lives on for all fans!",
+                box.transform, 14, Ink,
+                new Vector2(0.08f, 0.22f), new Vector2(0.92f, 0.84f));
+            body.alignment = TextAnchor.MiddleCenter;
+
+            // Confetti burst
+            for (var i = 0; i < 20; i++)
+            {
+                var cId = UnityEngine.Random.Range(1, 4);
+                var x = UnityEngine.Random.Range(0.05f, 0.95f);
+                var y = UnityEngine.Random.Range(0.20f, 0.95f);
+                var cImg = AddResourceImage($"EasterConfetti{i}",
+                    $"Original/sprites/ConfettiSS/Confetti{cId}", overlay.transform,
+                    new Vector2(x, y), new Vector2(x, y));
+                cImg.rectTransform.sizeDelta = new Vector2(24f, 24f);
+                cImg.rectTransform.localEulerAngles = new Vector3(0f, 0f, UnityEngine.Random.Range(0f, 360f));
+                cImg.raycastTarget = false;
+            }
+
+            AudioManager.Instance.PlayMedalCeremonyLong();
+
+            AddButton("LONG LIVE DICE SOCCER! ⚽", box.transform, Grass,
+                new Vector2(0.5f, 0.11f), new Vector2(0.78f, 0.08f), () =>
+                {
+                    Destroy(overlay.gameObject);
                 });
         }
 
@@ -5972,11 +6052,14 @@ namespace DiceSoccer
                 "Red Robot Labs & Foursaken Media\n\n" +
                 "Sound & Music:\n" +
                 "Original 2012 Audio Archive\n\n" +
-                "100% Faithful Unity Remake\n" +
-                "Preserving all ARMv7 rules,\n" +
-                "assets, animations & typography.",
-                box.transform, 14, Ink,
-                new Vector2(0.12f, 0.28f), new Vector2(0.88f, 0.84f));
+                "2026 Preservation & Remake:\n" +
+                "Karazero\n\n" +
+                "Archive Guardian:\n" +
+                "jairsldn\n" +
+                "(The sole keeper of the 2012 files,\nwithout whom this project could not exist)\n\n" +
+                "100% Faithful Unity Remake.",
+                box.transform, 13, Ink,
+                new Vector2(0.08f, 0.27f), new Vector2(0.92f, 0.85f));
             body.alignment = TextAnchor.MiddleCenter;
 
             // PayPal Support Button
