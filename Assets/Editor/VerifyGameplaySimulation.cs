@@ -86,6 +86,19 @@ namespace DiceSoccer.Editor
                 Debug.Log($"[TEST] Encounter {round}: Clock={match.ClockText()}, Score={match.HomeScore}-{match.AwayScore}, Loc={match.Location}, Report={report}");
             }
 
+            // 6b. Verify AnimateZoneTransition coroutine directly
+            var animateZoneTransition = typeof(DiceSoccerBootstrap).GetMethod("AnimateZoneTransition", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (animateZoneTransition == null) throw new Exception("AnimateZoneTransition method not found!");
+            var coroutine = animateZoneTransition.Invoke(bootstrap, new object[] { 0, 1, 0, 0 }) as IEnumerator;
+            int animSteps = 0;
+            while (coroutine.MoveNext() && animSteps < 150) animSteps++;
+            Debug.Log($"[TEST] AnimateZoneTransition 0 -> 1 stepped {animSteps} times successfully.");
+
+            var coroutine1v1 = animateZoneTransition.Invoke(bootstrap, new object[] { 1, 2, 0, 0 }) as IEnumerator;
+            animSteps = 0;
+            while (coroutine1v1.MoveNext() && animSteps < 150) animSteps++;
+            Debug.Log($"[TEST] AnimateZoneTransition 1 -> 2 (1v1) stepped {animSteps} times successfully.");
+
             if (!match.IsFinished)
             {
                 throw new Exception($"Match did not finish within 30 encounters! Clock={match.ClockText()}");

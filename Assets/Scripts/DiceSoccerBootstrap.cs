@@ -4090,8 +4090,7 @@ namespace DiceSoccer
                         int newLoc = _match.Location;
                         if (oldLoc != newLoc)
                         {
-                            yield return StartCoroutine(SmoothShiftFieldAndBall(oldLoc, newLoc, 0));
-                            SetBallPosition(_match.Location, _match.Possession, false);
+                            yield return StartCoroutine(AnimateZoneTransition(oldLoc, newLoc, 0, 0));
                         }
                         yield return new WaitForSeconds(0.60f);
                     }
@@ -4488,8 +4487,7 @@ namespace DiceSoccer
                         int newLoc = _match.Location;
                         if (oldLoc != newLoc)
                         {
-                            yield return StartCoroutine(SmoothShiftFieldAndBall(oldLoc, newLoc, 1));
-                            SetBallPosition(_match.Location, _match.Possession, false);
+                            yield return StartCoroutine(AnimateZoneTransition(oldLoc, newLoc, 1, 1));
                         }
                         yield return new WaitForSeconds(0.60f);
                     }
@@ -4826,9 +4824,20 @@ namespace DiceSoccer
             if (_awayTotalText != null) _awayTotalText.enabled = false;
             if (_buffBeltGo != null) _buffBeltGo.SetActive(false);
 
-            // Restore duel players on the pitch before shot/resolution
+            // Restore duel players on the pitch before shot/resolution with authentic poofs
             AudioManager.Instance.PlayTransform();
             UpdatePlayerPositions(oldLocation);
+            for (var i = 0; i < activeHome.Length; i++)
+            {
+                var p = _homePlayers[activeHome[i]];
+                if (p != null) StartCoroutine(PlayPoofAtPosition(new Vector2(p.rectTransform.anchorMin.x, p.rectTransform.anchorMin.y + 0.12f)));
+            }
+            for (var i = 0; i < activeAway.Length; i++)
+            {
+                var p = _awayPlayers[activeAway[i]];
+                if (p != null) StartCoroutine(PlayPoofAtPosition(new Vector2(p.rectTransform.anchorMin.x, p.rectTransform.anchorMin.y + 0.12f)));
+            }
+            yield return new WaitForSeconds(0.12f);
 
             var scored = _match.HomeScore > oldHomeScore || _match.AwayScore > oldAwayScore || report.Contains("GOAL");
             if (scored)
@@ -4917,9 +4926,11 @@ namespace DiceSoccer
                     goalie.rectTransform.localEulerAngles = Vector3.zero;
                 }
 
-                // Pitch shifts smoothly to cleared half
-                yield return StartCoroutine(SmoothShiftFieldAndBall(oldLocation, _match.Location, _match.Possession));
-                UpdatePlayerPositions();
+                // Pitch shifts and players walk smoothly to cleared half
+                if (oldLocation != _match.Location)
+                {
+                    yield return StartCoroutine(AnimateZoneTransition(oldLocation, _match.Location, oldPossession, _match.Possession));
+                }
             }
             else
             {
@@ -4941,16 +4952,10 @@ namespace DiceSoccer
                     AudioManager.Instance.PlayTap();
                 }
 
-                // Smoothly shift field and ball to new location
+                // Smoothly shift field and walk players to new location
                 if (oldLocation != _match.Location)
                 {
-                    // If transitioning to 1v1, activate the duelists so they run smoothly onto the pitch
-                    if (Mathf.Abs(_match.Location) == 2)
-                    {
-                        UpdatePlayerPositions(_match.Location);
-                    }
-                    yield return StartCoroutine(SmoothShiftFieldAndBall(oldLocation, _match.Location, _match.Possession));
-                    UpdatePlayerPositions();
+                    yield return StartCoroutine(AnimateZoneTransition(oldLocation, _match.Location, oldPossession, _match.Possession));
                 }
                 else
                 {
@@ -6709,6 +6714,237 @@ namespace DiceSoccer
             onSelected?.Invoke(chosen);
         }
 
+        private IEnumerator AnimateZoneTransition(int fromLoc, int toLoc, int oldPossession, int newPossession)
+        {
+            if (_homePlayers == null || _awayPlayers == null || _match == null) yield break;
+
+            _inEncounterAnimation = true;
+            if (_shakePrompt != null) _shakePrompt.gameObject.SetActive(false);
+
+            float pitchScale = (_fieldPitchRoot != null && _fieldPitchRoot.sizeDelta.y > 960f)
+                ? _fieldPitchRoot.sizeDelta.y / 960f : 1f;
+            var startPitchX = GetPitchOffsetForLocation(fromLoc) * pitchScale;
+            var targetPitchX = GetPitchOffsetForLocation(toLoc) * pitchScale;
+
+            bool isHomeAdvancing = (toLoc > fromLoc) || (toLoc == fromLoc && newPossession == 0);
+            var (fromHomeSlots, fromAwaySlots) = GetActiveDuelSlots(fromLoc);
+            var (toHomeSlots, toAwaySlots) = GetActiveDuelSlots(toLoc);
+
+            float[] ys = { 0.13f, 0.38f, 0.63f };
+
+            var fromHomeSet = new HashSet<int>(fromHomeSlots);
+            var toHomeSet = new HashSet<int>(toHomeSlots);
+            var fromAwaySet = new HashSet<int>(fromAwaySlots);
+            var toAwaySet = new HashSet<int>(toAwaySlots);
+
+            var fadingPlayers = new List<Image>();
+            var activeMovingPlayers = new List<(Image player, float startX, float targetX, float startY, float targetY, bool isHome)>();
+
+            // Home leaving players (in previous zone, not in new zone)
+            foreach (var slot in fromHomeSlots)
+            {
+                if (!toHomeSet.Contains(slot))
+                {
+                    var p = _homePlayers[slot];
+                    if (p != null && p.gameObject.activeSelf) fadingPlayers.Add(p);
+                }
+            }
+
+            // Away leaving players (in previous zone, not in new zone)
+            foreach (var slot in fromAwaySlots)
+            {
+                if (!toAwaySet.Contains(slot))
+                {
+                    var p = _awayPlayers[slot];
+                    if (p != null && p.gameObject.activeSelf) fadingPlayers.Add(p);
+                }
+            }
+
+            // Home advancing players (in from AND in to)
+            for (int i = 0; i < toHomeSlots.Length; i++)
+            {
+                int slot = toHomeSlots[i];
+                if (fromHomeSet.Contains(slot))
+                {
+                    var p = _homePlayers[slot];
+                    if (p != null)
+                    {
+                        p.gameObject.SetActive(true);
+                        var cg = p.GetComponent<CanvasGroup>();
+                        if (cg != null) cg.alpha = 1f;
+                        float startX = p.rectTransform.anchorMin.x;
+                        float startY = p.rectTransform.anchorMin.y;
+                        float targetX = toHomeSlots.Length == 1 ? (toLoc == 2 ? 0.28f : 0.33f) : 0.27f;
+                        float targetY = toHomeSlots.Length == 1 ? 0.38f : ys[i];
+                        activeMovingPlayers.Add((p, startX, targetX, startY, targetY, true));
+                    }
+                }
+            }
+
+            // Home entering players (not in from, but in to)
+            for (int i = 0; i < toHomeSlots.Length; i++)
+            {
+                int slot = toHomeSlots[i];
+                if (!fromHomeSet.Contains(slot))
+                {
+                    var p = _homePlayers[slot];
+                    if (p != null)
+                    {
+                        p.gameObject.SetActive(true);
+                        var cg = p.GetComponent<CanvasGroup>();
+                        if (cg != null) cg.alpha = 0f;
+                        float startX = -0.08f;
+                        float targetX = toHomeSlots.Length == 1 ? (toLoc == 2 ? 0.28f : 0.33f) : 0.27f;
+                        float targetY = toHomeSlots.Length == 1 ? 0.38f : ys[i];
+                        p.rectTransform.anchorMin = p.rectTransform.anchorMax = new Vector2(startX, targetY);
+                        p.rectTransform.anchoredPosition = Vector2.zero;
+                        float currentScale = (_homePlayerScales != null && slot < _homePlayerScales.Length) ? _homePlayerScales[slot] : 1f;
+                        p.rectTransform.localScale = new Vector3(-currentScale, currentScale, 1f);
+                        activeMovingPlayers.Add((p, startX, targetX, targetY, targetY, true));
+                    }
+                }
+            }
+
+            // Away advancing players (in from AND in to)
+            for (int i = 0; i < toAwaySlots.Length; i++)
+            {
+                int slot = toAwaySlots[i];
+                if (fromAwaySet.Contains(slot))
+                {
+                    var p = _awayPlayers[slot];
+                    if (p != null)
+                    {
+                        p.gameObject.SetActive(true);
+                        var cg = p.GetComponent<CanvasGroup>();
+                        if (cg != null) cg.alpha = 1f;
+                        float startX = p.rectTransform.anchorMin.x;
+                        float startY = p.rectTransform.anchorMin.y;
+                        float targetX = toAwaySlots.Length == 1 ? (toLoc == 2 ? 0.67f : 0.72f) : 0.73f;
+                        float targetY = toAwaySlots.Length == 1 ? 0.38f : ys[i];
+                        activeMovingPlayers.Add((p, startX, targetX, startY, targetY, false));
+                    }
+                }
+            }
+
+            // Away entering players (not in from, but in to)
+            for (int i = 0; i < toAwaySlots.Length; i++)
+            {
+                int slot = toAwaySlots[i];
+                if (!fromAwaySet.Contains(slot))
+                {
+                    var p = _awayPlayers[slot];
+                    if (p != null)
+                    {
+                        p.gameObject.SetActive(true);
+                        var cg = p.GetComponent<CanvasGroup>();
+                        if (cg != null) cg.alpha = 0f;
+                        float startX = 1.08f;
+                        float targetX = toAwaySlots.Length == 1 ? (toLoc == 2 ? 0.67f : 0.72f) : 0.73f;
+                        float targetY = toAwaySlots.Length == 1 ? 0.38f : ys[i];
+                        p.rectTransform.anchorMin = p.rectTransform.anchorMax = new Vector2(startX, targetY);
+                        p.rectTransform.anchoredPosition = Vector2.zero;
+                        float currentScale = (_awayPlayerScales != null && slot < _awayPlayerScales.Length) ? _awayPlayerScales[slot] : 1f;
+                        p.rectTransform.localScale = new Vector3(currentScale, currentScale, 1f);
+                        activeMovingPlayers.Add((p, startX, targetX, targetY, targetY, false));
+                    }
+                }
+            }
+
+            var startBallPos = _ballMarker != null ? _ballMarker.rectTransform.anchorMin : GetBallPosition(fromLoc, oldPossession);
+            var targetBallPos = GetBallPosition(toLoc, newPossession, _match != null ? _match.BallHolderSlotIndex : 1);
+            float rollSpin = (targetPitchX < startPitchX) ? -1f : 1f;
+
+            if (_ballShadow != null) _ballShadow.transform.SetAsLastSibling();
+            if (_ballMarker != null) _ballMarker.transform.SetAsLastSibling();
+
+            const float duration = 0.95f;
+            float elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float progress = Mathf.Clamp01(elapsed / duration);
+                float smoothT = Mathf.SmoothStep(0f, 1f, progress);
+
+                // 1. Shift pitch background
+                if (_fieldPitchRoot != null)
+                {
+                    _fieldPitchRoot.anchoredPosition = new Vector2(Mathf.Lerp(startPitchX, targetPitchX, smoothT), 0f);
+                }
+
+                // 2. Fade out leaving players (over first 0.38s)
+                float fadeOutAlpha = Mathf.Clamp01(1f - (elapsed / 0.38f));
+                for (int i = 0; i < fadingPlayers.Count; i++)
+                {
+                    var p = fadingPlayers[i];
+                    if (p != null)
+                    {
+                        var cg = p.GetComponent<CanvasGroup>();
+                        if (cg != null) cg.alpha = fadeOutAlpha;
+                        if (fadeOutAlpha <= 0f && p.gameObject.activeSelf) p.gameObject.SetActive(false);
+                    }
+                }
+
+                // 3. Step bounce and forward lean oscillation (authentic walking choreography)
+                float stepFreq = 16f;
+                float stepBounce = Mathf.Abs(Mathf.Sin(elapsed * stepFreq)) * 7f;
+                float stepTilt = Mathf.Sin(elapsed * stepFreq) * 3.5f;
+
+                // 4. Update all advancing & entering players
+                float fadeInAlpha = Mathf.Clamp01(elapsed / 0.32f);
+                for (int i = 0; i < activeMovingPlayers.Count; i++)
+                {
+                    var item = activeMovingPlayers[i];
+                    var p = item.player;
+                    if (p != null)
+                    {
+                        var cg = p.GetComponent<CanvasGroup>();
+                        if (cg != null && cg.alpha < 1f) cg.alpha = fadeInAlpha;
+
+                        float curX = Mathf.Lerp(item.startX, item.targetX, smoothT);
+                        float curY = Mathf.Lerp(item.startY, item.targetY, smoothT);
+                        p.rectTransform.anchorMin = p.rectTransform.anchorMax = new Vector2(curX, curY);
+                        p.rectTransform.anchoredPosition = new Vector2(0f, stepBounce);
+
+                        float lean = (item.isHome ? -1f : 1f) * (isHomeAdvancing ? stepTilt : -stepTilt);
+                        p.rectTransform.localEulerAngles = new Vector3(0f, 0f, lean);
+                    }
+                }
+
+                // 5. Ball tracks smoothly in front of advancing ball carrier
+                var ballPos = Vector2.Lerp(startBallPos, targetBallPos, smoothT);
+                if (_ballMarker != null)
+                {
+                    _ballMarker.rectTransform.anchorMin = _ballMarker.rectTransform.anchorMax = ballPos;
+                    _ballMarker.rectTransform.Rotate(0f, 0f, rollSpin * 520f * Time.deltaTime);
+                }
+                if (_ballShadow != null)
+                {
+                    _ballShadow.rectTransform.anchorMin = _ballShadow.rectTransform.anchorMax =
+                        new Vector2(ballPos.x, ballPos.y - 0.015f);
+                }
+
+                yield return null;
+            }
+
+            // Cleanup & lock into final exact alignment
+            if (_fieldPitchRoot != null)
+                _fieldPitchRoot.anchoredPosition = new Vector2(targetPitchX, 0f);
+
+            for (int i = 0; i < fadingPlayers.Count; i++)
+            {
+                if (fadingPlayers[i] != null)
+                {
+                    var cg = fadingPlayers[i].GetComponent<CanvasGroup>();
+                    if (cg != null) cg.alpha = 1f;
+                    fadingPlayers[i].gameObject.SetActive(false);
+                }
+            }
+
+            UpdatePlayerPositions(toLoc);
+            SetBallPosition(toLoc, newPossession, false);
+        }
+
         private IEnumerator SmoothShiftFieldAndBall(int fromLoc, int toLoc, int possession)
         {
             float pitchScale = (_fieldPitchRoot != null && _fieldPitchRoot.sizeDelta.y > 960f)
@@ -7019,7 +7255,7 @@ namespace DiceSoccer
                 var resourcePath = GetPlayerFigurePath(pData);
                 var pId = pData != null ? pData.id : (slot + 1);
 
-                var playerGo = new GameObject($"{(home ? "Home" : "Away")}Player{slot + 1}", typeof(RectTransform), typeof(Image));
+                var playerGo = new GameObject($"{(home ? "Home" : "Away")}Player{slot + 1}", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
                 playerGo.transform.SetParent(parent, false);
                 var player = playerGo.GetComponent<Image>();
                 player.sprite = GetUiSprite(resourcePath);
@@ -7081,10 +7317,13 @@ namespace DiceSoccer
                 var slot = activeHome[i];
                 var p = _homePlayers[slot];
                 p.gameObject.SetActive(true);
+                var cg = p.GetComponent<CanvasGroup>();
+                if (cg != null) cg.alpha = 1f;
                 float y = activeHome.Length == 1 ? 0.38f : ys[i];
                 float x = activeHome.Length == 1 ? (loc == 2 ? 0.28f : 0.33f) : 0.27f;
                 p.rectTransform.anchorMin = p.rectTransform.anchorMax = new Vector2(x, y);
                 p.rectTransform.anchoredPosition = Vector2.zero;
+                p.rectTransform.localEulerAngles = Vector3.zero;
                 float currentScale = (_homePlayerScales != null && slot < _homePlayerScales.Length) ? _homePlayerScales[slot] : 1f;
                 p.rectTransform.localScale = new Vector3(-currentScale, currentScale, 1f);
             }
@@ -7095,10 +7334,13 @@ namespace DiceSoccer
                 var slot = activeAway[i];
                 var p = _awayPlayers[slot];
                 p.gameObject.SetActive(true);
+                var cg = p.GetComponent<CanvasGroup>();
+                if (cg != null) cg.alpha = 1f;
                 float y = activeAway.Length == 1 ? 0.38f : ys[i];
                 float x = activeAway.Length == 1 ? (loc == 2 ? 0.67f : 0.72f) : 0.73f;
                 p.rectTransform.anchorMin = p.rectTransform.anchorMax = new Vector2(x, y);
                 p.rectTransform.anchoredPosition = Vector2.zero;
+                p.rectTransform.localEulerAngles = Vector3.zero;
                 float currentScale = (_awayPlayerScales != null && slot < _awayPlayerScales.Length) ? _awayPlayerScales[slot] : 1f;
                 p.rectTransform.localScale = new Vector3(currentScale, currentScale, 1f);
             }
