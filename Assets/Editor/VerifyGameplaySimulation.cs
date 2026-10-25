@@ -71,6 +71,13 @@ namespace DiceSoccer.Editor
             }
             Debug.Log("[TEST] All 14 players have valid sprites and are placed on field.");
 
+            // 5b. Verify authentic in-match clock on field grass
+            var matchClockField = typeof(DiceSoccerBootstrap).GetField("_matchClock", BindingFlags.Instance | BindingFlags.NonPublic);
+            var matchClock = matchClockField?.GetValue(bootstrap) as Text;
+            if (matchClock == null)
+                throw new Exception("In-match clock (_matchClock) is null! Pitch grass must have digital clock overlay.");
+            Debug.Log($"[TEST] In-match digital clock verified: Text='{matchClock.text}', Color={matchClock.color}");
+
             // 6. Simulate multiple encounters (play full match)
             var completeEncounterMethod = typeof(MatchSimulation).GetMethod("CompleteEncounter", BindingFlags.Instance | BindingFlags.Public);
             var beginEncounterMethod = typeof(MatchSimulation).GetMethod("BeginEncounter", BindingFlags.Instance | BindingFlags.Public);
