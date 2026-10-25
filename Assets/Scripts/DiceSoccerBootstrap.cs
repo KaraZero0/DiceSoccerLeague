@@ -3088,9 +3088,9 @@ namespace DiceSoccer
         {
             var coinPackages = new[]
             {
-                new { coins = 25000, price = "$0.99", pouches = 1 },
-                new { coins = 250000, price = "$1.99", pouches = 2 },
-                new { coins = 1200000, price = "$2.99", pouches = 3 }
+                new { coins = 25000, price = "FREE", pouches = 1 },
+                new { coins = 250000, price = "FREE", pouches = 2 },
+                new { coins = 1200000, price = "FREE", pouches = 3 }
             };
 
             var cardYs = new[] { 0.765f, 0.555f, 0.345f };
@@ -3252,7 +3252,7 @@ namespace DiceSoccer
                 }
                 else
                 {
-                    var priceTxt = AddText("$0.99", box.transform, 13, Ink,
+                    var priceTxt = AddText("FREE", box.transform, 13, Ink,
                         new Vector2(0.1f, 0.05f), new Vector2(0.9f, 0.24f));
                     priceTxt.alignment = TextAnchor.MiddleCenter;
                     priceTxt.fontStyle = FontStyle.Bold;
@@ -3326,7 +3326,7 @@ namespace DiceSoccer
                 }
                 else
                 {
-                    var priceTxt = AddText("$0.99", box.transform, 13, Ink,
+                    var priceTxt = AddText("FREE", box.transform, 13, Ink,
                         new Vector2(0.1f, 0.05f), new Vector2(0.9f, 0.24f));
                     priceTxt.alignment = TextAnchor.MiddleCenter;
                     priceTxt.fontStyle = FontStyle.Bold;
