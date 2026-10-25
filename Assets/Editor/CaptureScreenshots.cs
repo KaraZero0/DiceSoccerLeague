@@ -293,8 +293,21 @@ namespace DiceSoccer.Editor
             try { Call("ShowMultiplayer"); SaveScreen("Multiplayer"); } catch (Exception e) { Debug.LogWarning(e); }
 
             // 10. Options & Donation Modal
-            try { Call("ShowOptions"); SaveScreen("Options"); } catch (Exception e) { Debug.LogWarning(e); }
-            try { Call("ShowDonationModal"); SaveScreen("DonationModal"); } catch (Exception e) { Debug.LogWarning(e); }
+            try 
+            { 
+                Call("ShowHome"); 
+                Call("ShowOptions"); 
+                SaveScreen("Options"); 
+                Call("ShowHome"); 
+            } 
+            catch (Exception e) { Debug.LogWarning(e); }
+            try 
+            { 
+                Call("ShowDonationModal"); 
+                SaveScreen("DonationModal"); 
+                Call("ShowHome"); 
+            } 
+            catch (Exception e) { Debug.LogWarning(e); }
 
             // 11. Match FullScreen on 20:9 Aspect Ratio (Google Pixel 10)
             try

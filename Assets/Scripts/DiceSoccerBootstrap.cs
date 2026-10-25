@@ -1719,8 +1719,28 @@ namespace DiceSoccer
             pauseSpriteState.pressedSprite = GetUiSprite("Original/images/PauseButtonPressed");
             pauseBtn.spriteState = pauseSpriteState;
 
-            // (Authentic layout: pitch grass has no clock overlay; match progression is tracked in the pause menu)
-            _matchClock = null;
+            // Authentic in-match digital clock centered in bottom grass field area (matching 2012 iOS original)
+            var clockGo = new GameObject("MatchClock", typeof(RectTransform), typeof(Text), typeof(Shadow));
+            clockGo.transform.SetParent(_field, false);
+            var clockRect = clockGo.GetComponent<RectTransform>();
+            clockRect.anchorMin = new Vector2(0.5f, 0.038f);
+            clockRect.anchorMax = new Vector2(0.5f, 0.038f);
+            clockRect.pivot = new Vector2(0.5f, 0.5f);
+            clockRect.anchoredPosition = Vector2.zero;
+            clockRect.sizeDelta = new Vector2(240f, 44f);
+
+            _matchClock = clockGo.GetComponent<Text>();
+            _matchClock.font = GetBuiltinFont();
+            _matchClock.fontSize = 28;
+            _matchClock.fontStyle = FontStyle.Bold;
+            _matchClock.alignment = TextAnchor.MiddleCenter;
+            _matchClock.color = new Color32(230, 245, 255, 240);
+            _matchClock.raycastTarget = false;
+            _matchClock.text = _match != null ? _match.ClockText() : "15:00";
+
+            var clockShadow = clockGo.GetComponent<Shadow>();
+            clockShadow.effectColor = new Color32(40, 110, 140, 180);
+            clockShadow.effectDistance = new Vector2(1.5f, -1.5f);
 
             // Substitution button state tracker (interactive via pause menu):
             var subBtnGo = new GameObject("SubButtonTracker", typeof(RectTransform), typeof(Button));
@@ -2487,16 +2507,16 @@ namespace DiceSoccer
 
             var lineup = _catalog.ResolveLineup(_lineupIds);
 
-            // 1-3-3 Formation Positions (matching media_1792421110223_f7c56db8.png):
+            // 1-3-3 Formation Positions:
             // Top row: 3 Forwards (Left #8 Jerry, Center #6 David inside StrikerStar, Right #7 Justin)
             // Middle row: 3 Defenders (Left #4 Sherman, Center #3 Jo, Right #2 Ernest)
-            // Bottom row: 1 Goalkeeper (Center #1 Willy)
+            // Bottom row: 1 Goalkeeper (Center #1 Willy) - perfectly spaced above authentic bottom bar
             var slotPositions = new Vector2[]
             {
-                new Vector2(0.500f, 0.205f), // Slot 0: GK (#1 Willy The Kid)
-                new Vector2(0.755f, 0.475f), // Slot 1: Right DEF (#2 Ernest Milligan)
-                new Vector2(0.500f, 0.475f), // Slot 2: Center DEF (#3 Jo Lee-Roger)
-                new Vector2(0.245f, 0.475f), // Slot 3: Left DEF (#4 Sherman Tank)
+                new Vector2(0.500f, 0.225f), // Slot 0: GK (#1 Willy The Kid)
+                new Vector2(0.755f, 0.485f), // Slot 1: Right DEF (#2 Ernest Milligan)
+                new Vector2(0.500f, 0.485f), // Slot 2: Center DEF (#3 Jo Lee-Roger)
+                new Vector2(0.245f, 0.485f), // Slot 3: Left DEF (#4 Sherman Tank)
                 new Vector2(0.755f, 0.745f), // Slot 4: Right FWD (#7 Justin Huff)
                 new Vector2(0.500f, 0.745f), // Slot 5: Center Striker (#6 David Little, Striker Star)
                 new Vector2(0.245f, 0.745f), // Slot 6: Left FWD (#8 Jerry Hat-trick)
@@ -2538,19 +2558,28 @@ namespace DiceSoccer
                     false, true, () => ShowPlayerPicker(capturedSlot));
             }
 
-            // Left Side: FormationShopButton stacked directly above KitButton (matching media_1792421110223_f7c56db8.png)
+            // Authentic Bottom Bar on Grass: BenchButton on left, FormationShop + Kit in center, FormationPlayButton on right
+            // Perfectly spaced across 640px width (16px margin, 20px gaps):
+            // Bench (190px) -> Center 111px (0.173f)
+            // Shop  (84px)  -> Center 268px (0.419f)
+            // Kit   (84px)  -> Center 372px (0.581f)
+            // Play  (190px) -> Center 529px (0.827f)
+
+            AddSpriteButton("BenchBtn", "Original/sprites/EnemyLineupSS1/BenchButton",
+                "Original/sprites/EnemyLineupSS1/BenchButtonPressed", _safeArea,
+                new Vector2(0.173f, 0.057f), new Vector2(0.297f, 0.097f), () => ShowPlayerPicker(-1));
+
             AddSpriteButton("ShopBtn", "Original/sprites/EnemyLineupSS1/FormationShopButton",
                 "Original/sprites/EnemyLineupSS1/FormationShopButtonPressed", _safeArea,
-                new Vector2(0.14f, 0.17f), new Vector2(0.13f, 0.085f), ShowShop);
+                new Vector2(0.419f, 0.057f), new Vector2(0.131f, 0.083f), ShowShop);
 
             AddSpriteButton("KitBtn", "Original/sprites/EnemyLineupSS1/KitButton",
                 "Original/sprites/EnemyLineupSS1/KitButtonPressed", _safeArea,
-                new Vector2(0.14f, 0.08f), new Vector2(0.13f, 0.085f), ShowKitSelection);
+                new Vector2(0.581f, 0.057f), new Vector2(0.131f, 0.083f), ShowKitSelection);
 
-            // Right Side: ONLY FormationPlayButton ("PLAY!")
             AddSpriteButton("PlayBtn", "Original/sprites/EnemyLineupSS1/FormationPlayButton",
                 "Original/sprites/EnemyLineupSS1/FormationPlayButtonPressed", _safeArea,
-                new Vector2(0.76f, 0.09f), new Vector2(0.28f, 0.085f), StartCareerMatch);
+                new Vector2(0.827f, 0.057f), new Vector2(0.297f, 0.097f), StartCareerMatch);
         }
 
         private void ShowPlayerPicker(int slot)
