@@ -407,8 +407,10 @@ namespace DiceSoccer
                 new Vector2(0.08f, 0.22f), new Vector2(0.92f, 0.82f));
             body.alignment = TextAnchor.MiddleCenter;
 
+            AddButton("☕ PAYPAL", box.transform, new Color32(0, 112, 186, 255),
+                new Vector2(0.30f, 0.12f), new Vector2(0.38f, 0.11f), ShowDonationModal);
             AddButton("OK", box.transform, Grass,
-                new Vector2(0.5f, 0.12f), new Vector2(0.50f, 0.11f), () => Destroy(overlay.gameObject));
+                new Vector2(0.70f, 0.12f), new Vector2(0.38f, 0.11f), () => Destroy(overlay.gameObject));
         }
 
         private void ShowLeagueSelect()
@@ -5788,16 +5790,27 @@ namespace DiceSoccer
                 new Vector2(0.12f, 0.85f), new Vector2(0.88f, 0.94f));
             title.fontStyle = FontStyle.Bold;
 
-            // Tap title to toggle Display Mode (Classic 2:3 vs Fullscreen)
-            var titleBtn = title.gameObject.AddComponent<Button>();
-            titleBtn.onClick.AddListener(() =>
+            bool isFs = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0) == 1;
+            var modeText = AddText(isFs ? "DISPLAY: FULLSCREEN (TAP)" : "DISPLAY: CLASSIC 2:3 (TAP)", box.transform, 10, new Color32(90, 80, 70, 255),
+                new Vector2(0.08f, 0.79f), new Vector2(0.92f, 0.84f));
+            modeText.alignment = TextAnchor.MiddleCenter;
+
+            void ToggleDisplay()
             {
                 int current = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0);
-                PlayerPrefs.SetInt("diceSoccer.fullscreen", current == 1 ? 0 : 1);
+                int next = current == 1 ? 0 : 1;
+                PlayerPrefs.SetInt("diceSoccer.fullscreen", next);
                 PlayerPrefs.Save();
                 ApplySafeArea();
                 AudioManager.Instance.PlayTap();
-            });
+                if (modeText != null)
+                    modeText.text = next == 1 ? "DISPLAY: FULLSCREEN (TAP)" : "DISPLAY: CLASSIC 2:3 (TAP)";
+            }
+
+            var titleBtn = title.gameObject.AddComponent<Button>();
+            titleBtn.onClick.AddListener(ToggleDisplay);
+            var modeBtn = modeText.gameObject.AddComponent<Button>();
+            modeBtn.onClick.AddListener(ToggleDisplay);
 
             // Row 1: MUSIC
             var musicLabel = AddText("MUSIC", box.transform, 16, Ink,
@@ -5963,8 +5976,12 @@ namespace DiceSoccer
                 "Preserving all ARMv7 rules,\n" +
                 "assets, animations & typography.",
                 box.transform, 14, Ink,
-                new Vector2(0.12f, 0.22f), new Vector2(0.88f, 0.82f));
+                new Vector2(0.12f, 0.28f), new Vector2(0.88f, 0.84f));
             body.alignment = TextAnchor.MiddleCenter;
+
+            // PayPal Support Button
+            AddButton("☕ BUY A COFFEE (PAYPAL)", box.transform, new Color32(0, 112, 186, 255),
+                new Vector2(0.5f, 0.20f), new Vector2(0.68f, 0.07f), ShowDonationModal);
 
             AddSpriteButton("CloseCredits", "Original/images/DoneButton",
                 "Original/images/DoneButtonPressed", box.transform,
