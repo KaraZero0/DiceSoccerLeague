@@ -5863,43 +5863,21 @@ namespace DiceSoccer
 
             var box = AddResourceImage("OptionsBox", "Original/sprites/AchievementsSS4/LongDialogBox", optionsBackdrop.transform,
                 new Vector2(0.5f, 0.52f), new Vector2(0.5f, 0.52f));
-            box.rectTransform.sizeDelta = new Vector2(330f, 470f);
+            box.rectTransform.sizeDelta = new Vector2(330f, 510f);
             box.preserveAspect = false;
 
             var title = AddText("OPTIONS", box.transform, 22, Ink,
-                new Vector2(0.12f, 0.85f), new Vector2(0.88f, 0.94f));
+                new Vector2(0.12f, 0.88f), new Vector2(0.88f, 0.95f));
             title.fontStyle = FontStyle.Bold;
-
-            bool isFs = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0) == 1;
-            var modeText = AddText(isFs ? "DISPLAY: FULLSCREEN (TAP)" : "DISPLAY: CLASSIC 2:3 (TAP)", box.transform, 10, new Color32(90, 80, 70, 255),
-                new Vector2(0.08f, 0.79f), new Vector2(0.92f, 0.84f));
-            modeText.alignment = TextAnchor.MiddleCenter;
-
-            void ToggleDisplay()
-            {
-                int current = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0);
-                int next = current == 1 ? 0 : 1;
-                PlayerPrefs.SetInt("diceSoccer.fullscreen", next);
-                PlayerPrefs.Save();
-                ApplySafeArea();
-                AudioManager.Instance.PlayTap();
-                if (modeText != null)
-                    modeText.text = next == 1 ? "DISPLAY: FULLSCREEN (TAP)" : "DISPLAY: CLASSIC 2:3 (TAP)";
-            }
-
-            var titleBtn = title.gameObject.AddComponent<Button>();
-            titleBtn.onClick.AddListener(ToggleDisplay);
-            var modeBtn = modeText.gameObject.AddComponent<Button>();
-            modeBtn.onClick.AddListener(ToggleDisplay);
 
             // Row 1: MUSIC
             var musicLabel = AddText("MUSIC", box.transform, 16, Ink,
-                new Vector2(0.16f, 0.70f), new Vector2(0.65f, 0.78f));
+                new Vector2(0.16f, 0.75f), new Vector2(0.65f, 0.83f));
             musicLabel.alignment = TextAnchor.MiddleLeft;
             musicLabel.fontStyle = FontStyle.Bold;
 
             var musicTickBox = AddResourceImage("MusicTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
-                new Vector2(0.76f, 0.74f), new Vector2(0.76f, 0.74f));
+                new Vector2(0.76f, 0.79f), new Vector2(0.76f, 0.79f));
             musicTickBox.rectTransform.sizeDelta = new Vector2(30f, 30f);
             musicTickBox.preserveAspect = true;
 
@@ -5909,22 +5887,27 @@ namespace DiceSoccer
             musicTick.preserveAspect = true;
             musicTick.gameObject.SetActive(AudioManager.Instance.MusicEnabled);
 
-            var musicBtn = musicTickBox.gameObject.AddComponent<Button>();
-            musicBtn.onClick.AddListener(() =>
+            void ToggleMusic()
             {
                 AudioManager.Instance.MusicEnabled = !AudioManager.Instance.MusicEnabled;
                 musicTick.gameObject.SetActive(AudioManager.Instance.MusicEnabled);
                 AudioManager.Instance.PlayTap();
-            });
+            }
+
+            var musicBtn = musicTickBox.gameObject.AddComponent<Button>();
+            musicBtn.onClick.AddListener(ToggleMusic);
+            var musicLabelBtn = musicLabel.gameObject.AddComponent<Button>();
+            musicLabelBtn.transition = Selectable.Transition.None;
+            musicLabelBtn.onClick.AddListener(ToggleMusic);
 
             // Row 2: SFX
             var sfxLabel = AddText("SFX", box.transform, 16, Ink,
-                new Vector2(0.16f, 0.58f), new Vector2(0.65f, 0.66f));
+                new Vector2(0.16f, 0.65f), new Vector2(0.65f, 0.73f));
             sfxLabel.alignment = TextAnchor.MiddleLeft;
             sfxLabel.fontStyle = FontStyle.Bold;
 
             var sfxTickBox = AddResourceImage("SfxTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
-                new Vector2(0.76f, 0.62f), new Vector2(0.76f, 0.62f));
+                new Vector2(0.76f, 0.69f), new Vector2(0.76f, 0.69f));
             sfxTickBox.rectTransform.sizeDelta = new Vector2(30f, 30f);
             sfxTickBox.preserveAspect = true;
 
@@ -5934,22 +5917,27 @@ namespace DiceSoccer
             sfxTick.preserveAspect = true;
             sfxTick.gameObject.SetActive(AudioManager.Instance.SfxEnabled);
 
-            var sfxBtn = sfxTickBox.gameObject.AddComponent<Button>();
-            sfxBtn.onClick.AddListener(() =>
+            void ToggleSfx()
             {
                 AudioManager.Instance.SfxEnabled = !AudioManager.Instance.SfxEnabled;
                 sfxTick.gameObject.SetActive(AudioManager.Instance.SfxEnabled);
                 AudioManager.Instance.PlayTap();
-            });
+            }
+
+            var sfxBtn = sfxTickBox.gameObject.AddComponent<Button>();
+            sfxBtn.onClick.AddListener(ToggleSfx);
+            var sfxLabelBtn = sfxLabel.gameObject.AddComponent<Button>();
+            sfxLabelBtn.transition = Selectable.Transition.None;
+            sfxLabelBtn.onClick.AddListener(ToggleSfx);
 
             // Row 3: VIBRATION
             var vibLabel = AddText("VIBRATION", box.transform, 16, Ink,
-                new Vector2(0.16f, 0.46f), new Vector2(0.65f, 0.54f));
+                new Vector2(0.16f, 0.55f), new Vector2(0.65f, 0.63f));
             vibLabel.alignment = TextAnchor.MiddleLeft;
             vibLabel.fontStyle = FontStyle.Bold;
 
             var vibTickBox = AddResourceImage("VibTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
-                new Vector2(0.76f, 0.50f), new Vector2(0.76f, 0.50f));
+                new Vector2(0.76f, 0.59f), new Vector2(0.76f, 0.59f));
             vibTickBox.rectTransform.sizeDelta = new Vector2(30f, 30f);
             vibTickBox.preserveAspect = true;
 
@@ -5960,8 +5948,7 @@ namespace DiceSoccer
             var vibEnabled = PlayerPrefs.GetInt("diceSoccer.vibration", 0) != 0;
             vibTick.gameObject.SetActive(vibEnabled);
 
-            var vibBtn = vibTickBox.gameObject.AddComponent<Button>();
-            vibBtn.onClick.AddListener(() =>
+            void ToggleVibration()
             {
                 var cur = PlayerPrefs.GetInt("diceSoccer.vibration", 0) != 0;
                 var next = !cur;
@@ -5970,12 +5957,53 @@ namespace DiceSoccer
                 vibTick.gameObject.SetActive(next);
                 if (next) Handheld.Vibrate();
                 AudioManager.Instance.PlayTap();
-            });
+            }
+
+            var vibBtn = vibTickBox.gameObject.AddComponent<Button>();
+            vibBtn.onClick.AddListener(ToggleVibration);
+            var vibLabelBtn = vibLabel.gameObject.AddComponent<Button>();
+            vibLabelBtn.transition = Selectable.Transition.None;
+            vibLabelBtn.onClick.AddListener(ToggleVibration);
+
+            // Row 4: FULL SCREEN (Toggle between authentic 2:3 aspect ratio and Fullscreen)
+            var fsLabel = AddText("FULL SCREEN", box.transform, 16, Ink,
+                new Vector2(0.16f, 0.45f), new Vector2(0.65f, 0.53f));
+            fsLabel.alignment = TextAnchor.MiddleLeft;
+            fsLabel.fontStyle = FontStyle.Bold;
+
+            var fsTickBox = AddResourceImage("FsTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
+                new Vector2(0.76f, 0.49f), new Vector2(0.76f, 0.49f));
+            fsTickBox.rectTransform.sizeDelta = new Vector2(30f, 30f);
+            fsTickBox.preserveAspect = true;
+
+            var fsTick = AddResourceImage("FsTick", "Original/sprites/OptionsSS/OptionsTick", fsTickBox.transform,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            fsTick.rectTransform.sizeDelta = new Vector2(24f, 24f);
+            fsTick.preserveAspect = true;
+            bool isFs = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0) == 1;
+            fsTick.gameObject.SetActive(isFs);
+
+            void ToggleFullScreen()
+            {
+                int cur = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0);
+                int next = cur == 1 ? 0 : 1;
+                PlayerPrefs.SetInt("diceSoccer.fullscreen", next);
+                PlayerPrefs.Save();
+                fsTick.gameObject.SetActive(next == 1);
+                ApplySafeArea();
+                AudioManager.Instance.PlayTap();
+            }
+
+            var fsBtn = fsTickBox.gameObject.AddComponent<Button>();
+            fsBtn.onClick.AddListener(ToggleFullScreen);
+            var fsLabelBtn = fsLabel.gameObject.AddComponent<Button>();
+            fsLabelBtn.transition = Selectable.Transition.None;
+            fsLabelBtn.onClick.AddListener(ToggleFullScreen);
 
             // Button 1: CREDITS
             AddSpriteButton("Credits", "Original/sprites/OptionsSS/CreditsButton",
                 "Original/sprites/OptionsSS/CreditsButtonPressed", box.transform,
-                new Vector2(0.5f, 0.35f), new Vector2(0.68f, 0.10f), () =>
+                new Vector2(0.5f, 0.35f), new Vector2(0.68f, 0.09f), () =>
                 {
                     ShowCreditsDialog(optionsBackdrop.transform);
                 });
@@ -5983,7 +6011,7 @@ namespace DiceSoccer
             // Button 2: HANDBOOK
             AddSpriteButton("Handbook", "Original/sprites/OptionsSS/HandbookButton",
                 "Original/sprites/OptionsSS/HandbookButtonPressed", box.transform,
-                new Vector2(0.5f, 0.22f), new Vector2(0.68f, 0.10f), () =>
+                new Vector2(0.5f, 0.23f), new Vector2(0.68f, 0.09f), () =>
                 {
                     ShowHandbookDialog(optionsBackdrop.transform);
                 });
@@ -5991,7 +6019,7 @@ namespace DiceSoccer
             // Button 3: DONE
             AddSpriteButton("Done", "Original/images/DoneButton",
                 "Original/images/DoneButtonPressed", box.transform,
-                new Vector2(0.5f, 0.08f), new Vector2(0.44f, 0.085f), () =>
+                new Vector2(0.5f, 0.09f), new Vector2(0.44f, 0.08f), () =>
                 {
                     Destroy(optionsBackdrop.gameObject);
                 });
