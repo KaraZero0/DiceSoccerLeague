@@ -45,6 +45,7 @@ namespace DiceSoccer
         private Image[] _awayDieGlows;
         private int _selectedBuffDieIndex = -1;
         private int _selectedBuffDieSide = -1;
+        private int _awaitingBuffSide = -1;
         private bool _isAwaitingBuffSelection;
         private Image[] _homePlayers;
         private Image[] _awayPlayers;
@@ -303,6 +304,7 @@ namespace DiceSoccer
             scaler.referenceResolution = new Vector2(ReferenceWidth, ReferenceHeight);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0f;
+            scaler.dynamicPixelsPerUnit = 2.5f;
 
             var safeAreaObject = new GameObject("Safe Area", typeof(RectTransform));
             safeAreaObject.transform.SetParent(canvasObject.transform, false);
@@ -3951,7 +3953,7 @@ namespace DiceSoccer
                 case 17:
                 case 18:
                     int val9 = trigger - 8;
-                    return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == val9 : Array.IndexOf(faces, val9) >= 0;
+                    return Array.IndexOf(faces, val9) >= 0;
 
                 case 19:
                 case 20:
@@ -3964,7 +3966,7 @@ namespace DiceSoccer
                 case 27:
                 case 28:
                     int val19 = trigger - 18;
-                    return (playerSlot >= 0 && playerSlot < faces.Length) ? faces[playerSlot] == val19 : Array.IndexOf(faces, val19) >= 0;
+                    return Array.IndexOf(faces, val19) >= 0;
 
                 default:
                     return false;
@@ -4075,9 +4077,11 @@ namespace DiceSoccer
                     if (_awayDieRoots[i] != null) _awayDieRoots[i].transform.localScale = Vector3.one;
             }
 
-            // Snapshot base rolled faces before any superpowers modify them
+            // Snapshot base rolled faces and totals before any superpowers modify them
             int[] originalHomeFaces = (int[])homeFaces.Clone();
             int[] originalAwayFaces = (int[])awayFaces.Clone();
+            int originalHomeTotal = _match.LastHomeTotal;
+            int originalAwayTotal = _match.LastAwayTotal;
             bool[] homeBoosted = new bool[homeFaces.Length];
             bool[] awayBoosted = new bool[awayFaces.Length];
             bool[] homeReduced = new bool[homeFaces.Length];
@@ -4143,7 +4147,7 @@ namespace DiceSoccer
                     if (spId > 0)
                     {
                         var ab = _catalog?.TryGetAbility(spId);
-                        if (ab != null && IsAbilityTriggered(ab.trigger, i, homeFaces, _match.LastHomeTotal))
+                        if (ab != null && IsAbilityTriggered(ab.trigger, i, originalHomeFaces, originalHomeTotal))
                         {
                             homeAbilities.Add((ab, i, currentLineup[s]));
                         }
@@ -4162,7 +4166,7 @@ namespace DiceSoccer
                     if (spId > 0)
                     {
                         var ab = _catalog?.TryGetAbility(spId);
-                        if (ab != null && IsAbilityTriggered(ab.trigger, i, awayFaces, _match.LastAwayTotal))
+                        if (ab != null && IsAbilityTriggered(ab.trigger, i, originalAwayFaces, originalAwayTotal))
                         {
                             awayAbilities.Add((ab, i, awayLineup[s]));
                         }
@@ -4273,8 +4277,8 @@ namespace DiceSoccer
                     if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
                     yield return new WaitForSeconds(0.70f);
                 }
-                // E. Multiplier (BuffType 2, e.g. Critical Striker x2, Bicycle Kick x3, Critical Striker x4)
-                else if (activeAbility.type == 2)
+                // E. Multiplier (Critical Striker x2, Bicycle Kick x3, Critical Striker x4)
+                else if (activeAbility.id == 21 || activeAbility.id == 39 || activeAbility.id == 40 || activeAbility.id == 54 || activeAbility.id == 66 || activeAbility.id == 74 || activeAbility.id == 75)
                 {
                     int multiplier = (activeAbility.id == 21) ? 4 : ((activeAbility.id == 40) ? 3 : 2);
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
@@ -4489,8 +4493,8 @@ namespace DiceSoccer
                     if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
                     yield return new WaitForSeconds(0.70f);
                 }
-                // I. Clear Reductions (BuffType 1: Step-Over ID 28, 29, 30; Shielding ID 48)
-                else if (activeAbility.type == 1 && (activeAbility.id == 28 || activeAbility.id == 29 || activeAbility.id == 30 || activeAbility.id == 48))
+                // I. Clear Reductions (Step-Over ID 28, 29, 30; Shielding ID 48)
+                else if (activeAbility.id == 28 || activeAbility.id == 29 || activeAbility.id == 30 || activeAbility.id == 48 || (activeAbility.type == 1 && activeAbility.id != 21))
                 {
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
@@ -4652,8 +4656,8 @@ namespace DiceSoccer
                     if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
                     yield return new WaitForSeconds(0.70f);
                 }
-                // E. Multiplier (BuffType 2: CPU targets highest die)
-                else if (awayAbility.type == 2)
+                // E. Multiplier (Critical Striker x2, Bicycle Kick x3, Critical Striker x4)
+                else if (awayAbility.id == 21 || awayAbility.id == 39 || awayAbility.id == 40 || awayAbility.id == 54 || awayAbility.id == 66 || awayAbility.id == 74 || awayAbility.id == 75)
                 {
                     int multiplier = (awayAbility.id == 21) ? 4 : ((awayAbility.id == 40) ? 3 : 2);
                     int bestDie = 0;
@@ -4814,8 +4818,8 @@ namespace DiceSoccer
                     if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} FEINT SWAP!";
                     yield return new WaitForSeconds(0.70f);
                 }
-                // I. Clear Reductions (BuffType 1: Step-Over ID 28, 29, 30; Shielding ID 48)
-                else if (awayAbility.type == 1 && (awayAbility.id == 28 || awayAbility.id == 29 || awayAbility.id == 30 || awayAbility.id == 48))
+                // I. Clear Reductions (Step-Over ID 28, 29, 30; Shielding ID 48)
+                else if (awayAbility.id == 28 || awayAbility.id == 29 || awayAbility.id == 30 || awayAbility.id == 48 || (awayAbility.type == 1 && awayAbility.id != 21))
                 {
                     AudioManager.Instance.PlayBuff();
                     int totalRestored = 0;
@@ -5112,27 +5116,27 @@ namespace DiceSoccer
             AudioManager.Instance.PlayWhistle();
 
             var elapsed = 0f;
-            while (elapsed < 0.3f)
+            while (elapsed < 0.18f)
             {
                 elapsed += Time.deltaTime;
-                banner.rectTransform.localScale = Vector3.Lerp(Vector3.zero, Vector3.one * 1.08f, elapsed / 0.3f);
+                banner.rectTransform.localScale = Vector3.Lerp(Vector3.zero, Vector3.one * 1.08f, elapsed / 0.18f);
                 yield return null;
             }
             elapsed = 0f;
-            while (elapsed < 0.15f)
+            while (elapsed < 0.08f)
             {
                 elapsed += Time.deltaTime;
-                banner.rectTransform.localScale = Vector3.Lerp(Vector3.one * 1.08f, Vector3.one, elapsed / 0.15f);
+                banner.rectTransform.localScale = Vector3.Lerp(Vector3.one * 1.08f, Vector3.one, elapsed / 0.08f);
                 yield return null;
             }
-            yield return new WaitForSeconds(0.6f);
+            yield return new WaitForSeconds(0.25f);
 
             elapsed = 0f;
             var col = banner.color;
-            while (elapsed < 0.4f)
+            while (elapsed < 0.24f)
             {
                 elapsed += Time.deltaTime;
-                banner.color = new Color(col.r, col.g, col.b, 1f - elapsed / 0.4f);
+                banner.color = new Color(col.r, col.g, col.b, 1f - elapsed / 0.24f);
                 yield return null;
             }
             if (banner != null) Destroy(banner.gameObject);
@@ -5291,7 +5295,7 @@ namespace DiceSoccer
             streakerImg.preserveAspect = true;
 
             var elapsed = 0f;
-            const float totalDuration = 2.5f;
+            const float totalDuration = 1.6f;
             while (elapsed < totalDuration)
             {
                 elapsed += Time.deltaTime;
@@ -6812,13 +6816,16 @@ namespace DiceSoccer
         private void OnFieldDieTapped(int side, int index)
         {
             if (!_isAwaitingBuffSelection) return;
+            if (_awaitingBuffSide >= 0 && side != _awaitingBuffSide) return;
             _selectedBuffDieSide = side;
             _selectedBuffDieIndex = index;
+            AudioManager.Instance.PlayTap();
         }
 
         private IEnumerator SelectBuffTarget(int targetSide, int[] eligibleIndices, int defaultFallbackIndex, Action<int> onSelected)
         {
             _isAwaitingBuffSelection = true;
+            _awaitingBuffSide = targetSide;
             _selectedBuffDieIndex = -1;
             _selectedBuffDieSide = -1;
 
@@ -6834,7 +6841,7 @@ namespace DiceSoccer
             }
 
             float elapsed = 0f;
-            const float maxWait = 2.2f;
+            const float maxWait = 5.0f;
             while (elapsed < maxWait && _selectedBuffDieIndex < 0)
             {
                 elapsed += Time.deltaTime;
@@ -6858,6 +6865,7 @@ namespace DiceSoccer
             }
 
             _isAwaitingBuffSelection = false;
+            _awaitingBuffSide = -1;
 
             int chosen = _selectedBuffDieIndex;
             if (chosen < 0 || Array.IndexOf(eligibleIndices, chosen) < 0)

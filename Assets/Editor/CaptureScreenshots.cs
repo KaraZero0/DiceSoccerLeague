@@ -292,7 +292,7 @@ namespace DiceSoccer.Editor
             // 9. Multiplayer
             try { Call("ShowMultiplayer"); SaveScreen("Multiplayer"); } catch (Exception e) { Debug.LogWarning(e); }
 
-            // 10. Options & Donation Modal
+            // 10. Options & Donation Modal & Easter Eggs
             try 
             { 
                 Call("ShowHome"); 
@@ -307,6 +307,32 @@ namespace DiceSoccer.Editor
                 SaveScreen("DonationModal"); 
                 Call("ShowHome"); 
             } 
+            catch (Exception e) { Debug.LogWarning(e); }
+            try
+            {
+                Call("ShowHome");
+                var safeAreaVal = safeAreaField?.GetValue(bootstrap) as RectTransform;
+                Call("ShowHandbookDialog", safeAreaVal);
+                SaveScreen("Handbook");
+                Call("ShowHome");
+            }
+            catch (Exception e) { Debug.LogWarning(e); }
+            try
+            {
+                Call("ShowHome");
+                var safeAreaVal = safeAreaField?.GetValue(bootstrap) as RectTransform;
+                Call("ShowCreditsDialog", safeAreaVal);
+                SaveScreen("Credits");
+                Call("ShowHome");
+            }
+            catch (Exception e) { Debug.LogWarning(e); }
+            try
+            {
+                Call("ShowHome");
+                Call("ShowLegendsEasterEggModal");
+                SaveScreen("LegendsDedication");
+                Call("ShowHome");
+            }
             catch (Exception e) { Debug.LogWarning(e); }
 
             // 11. Match FullScreen on 20:9 Aspect Ratio (Google Pixel 10)
