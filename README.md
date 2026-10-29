@@ -1,13 +1,13 @@
-# Dice Soccer — Android Fan Remaster (2012 iOS Classic)
+# Dice Soccer — Fan Remaster (2012 iOS Classic)
 
 <p align="center">
   <img src="Screenshots/AppIcon.png" alt="Dice Soccer App Icon" width="160" height="160" style="border-radius: 28px;" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/KaraZero0/DiceSoccerLeagueOriginal/releases/latest"><img src="https://img.shields.io/badge/Download%20APK-v1.0.0%20Latest-success?style=for-the-badge&logo=android" alt="Download APK" /></a>
+  <a href="https://github.com/KaraZero0/DiceSoccerLeagueOriginal/releases/latest"><img src="https://img.shields.io/badge/Download%20APK%20%26%20IPA-v1.0.0%20Latest-success?style=for-the-badge&logo=android" alt="Download APK and IPA" /></a>
   <img src="https://img.shields.io/badge/Unity-6000.0%20LTS-black?style=for-the-badge&logo=unity" alt="Unity 6" />
-  <img src="https://img.shields.io/badge/Android-8.0%20--%2015%2B%20(API%2026--36)-green?style=for-the-badge&logo=android" alt="Android" />
+  <img src="https://img.shields.io/badge/Platforms-Android%20%7C%20iOS%20(IPA)-green?style=for-the-badge" alt="Platforms" />
   <img src="https://img.shields.io/badge/Architecture-ARM64%20IL2CPP-blue?style=for-the-badge" alt="ARM64" />
   <img src="https://img.shields.io/badge/License-100%25%20Free%20Fan%20Remaster-brightgreen?style=for-the-badge" alt="Free" />
   <img src="https://img.shields.io/badge/Monetization-Zero%20Ads%20%2F%20100%25%20Free-yellow?style=for-the-badge" alt="No Ads" />
@@ -137,19 +137,38 @@ Following a thorough side-by-side analysis of the original 2012 iOS title and co
 
 ---
 
-## 📥 How to Install and Play (Android)
+## 📥 How to Install and Play
 
-### Direct APK Download
+### 🤖 Android (APK)
 1. Head to the **[Latest Release](https://github.com/KaraZero0/DiceSoccerLeagueOriginal/releases/latest)** section.
 2. Download **`DiceSoccer.apk`** (~60 MB).
 3. Open the downloaded file on your Android device and tap **Install** (allow installation from unknown sources if prompted).
 4. Launch **Dice Soccer** and enjoy!
 
-### Via ADB (Command Line)
-If your phone is connected to your PC with USB Debugging enabled:
+*Via ADB (Command Line):*
 ```bash
 adb install -r Builds/Android/DiceSoccer.apk
 ```
+
+---
+
+### 🍏 iOS (iPhone & iPad via Sideloading)
+You do **NOT** need an Apple Developer Account, a Mac, or the App Store. Any personal, free Apple ID can sideload the game in minutes!
+
+#### Method 1: Sideloadly (Recommended — Windows / Mac)
+1. Download **`DiceSoccer.ipa`** from the **[Latest Release](https://github.com/KaraZero0/DiceSoccerLeagueOriginal/releases/latest)** or GitHub Actions artifacts.
+2. Download and install [Sideloadly](https://sideloadly.io/) (Free for Windows & macOS).
+3. Connect your iPhone to your PC via USB cable (tap *"Trust this computer"* if prompted).
+4. Drag and drop **`DiceSoccer.ipa`** into Sideloadly.
+5. Enter your normal free Apple ID email and click **Start**.
+6. On your iPhone, go to **Settings ➔ General ➔ VPN & Device Management**, tap your Apple ID, and select **Trust**.
+7. Launch **Dice Soccer** and score some goals!
+
+#### Method 2: SideStore / AltStore (Wireless Sideloading)
+* Use [SideStore](https://sidestore.io/) or [AltStore](https://altstore.io/) to install the `.ipa` and refresh it automatically over Wi-Fi without needing a PC cable after setup.
+
+#### Method 3: TrollStore (Permanent / No Expiration)
+* If your device runs iOS 14.0–17.0 (supported by TrollStore), simply open `DiceSoccer.ipa` in TrollStore for permanent, signature-free installation.
 
 ---
 

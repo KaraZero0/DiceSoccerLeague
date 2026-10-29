@@ -22,6 +22,12 @@ namespace DiceSoccer.Editor
                 "com.karazero.dicesoccer");
             PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.iOS,
                 "com.karazero.dicesoccer");
+            PlayerSettings.iOS.targetOSVersionString = "12.0";
+            PlayerSettings.iOS.sdkVersion = iOSSdkVersion.DeviceSDK;
+            PlayerSettings.iOS.appleEnableAutomaticSigning = false;
+            PlayerSettings.SetScriptingBackend(NamedBuildTarget.iOS, ScriptingImplementation.IL2CPP);
+            PlayerSettings.SetArchitecture(NamedBuildTarget.iOS, 1);
+            PlayerSettings.iOS.cameraUsageDescription = "Not used";
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
             PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel34;
             PlayerSettings.Android.preferredInstallLocation = AndroidPreferredInstallLocation.Auto;
@@ -147,6 +153,42 @@ namespace DiceSoccer.Editor
 
             SignApk(outputPath);
             Debug.Log($"Android APK created and signed at {outputPath}.");
+        }
+
+        public static void BuildIOS()
+        {
+            Configure();
+            var args = Environment.GetCommandLineArgs();
+            string outputFolder = "Builds/iOS";
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i] == "-customBuildPath")
+                {
+                    outputFolder = args[i + 1];
+                    break;
+                }
+            }
+            outputFolder = Path.GetFullPath(outputFolder);
+            if (Directory.Exists(outputFolder))
+                Directory.Delete(outputFolder, true);
+            Directory.CreateDirectory(outputFolder);
+
+            var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            {
+                scenes = EditorBuildSettings.scenes
+                    .Where(scene => scene.enabled)
+                    .Select(scene => scene.path)
+                    .ToArray(),
+                locationPathName = outputFolder,
+                target = BuildTarget.iOS,
+                options = BuildOptions.None
+            });
+
+            if (report.summary.result != BuildResult.Succeeded)
+                throw new InvalidOperationException(
+                    $"iOS build failed with result {report.summary.result}.");
+
+            Debug.Log($"iOS Xcode project successfully generated at {outputFolder}.");
         }
 
         private static void SignApk(string apkPath)
