@@ -25,6 +25,7 @@ namespace DiceSoccer.Editor
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
             PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel34;
             PlayerSettings.Android.preferredInstallLocation = AndroidPreferredInstallLocation.Auto;
+            PlayerSettings.Android.renderOutsideSafeArea = true;
 
             string keystorePath = System.Environment.GetEnvironmentVariable("DICE_SOCCER_KEYSTORE") ?? string.Empty;
             if (File.Exists(keystorePath))

@@ -306,6 +306,16 @@ namespace DiceSoccer
             scaler.matchWidthOrHeight = 0f;
             scaler.dynamicPixelsPerUnit = 2.5f;
 
+            var canvasBg = new GameObject("CanvasBackground", typeof(RectTransform), typeof(Image));
+            canvasBg.transform.SetParent(canvasObject.transform, false);
+            var bgRect = canvasBg.GetComponent<RectTransform>();
+            bgRect.anchorMin = Vector2.zero;
+            bgRect.anchorMax = Vector2.one;
+            bgRect.offsetMin = bgRect.offsetMax = Vector2.zero;
+            var bgImg = canvasBg.GetComponent<Image>();
+            bgImg.color = Color.black;
+            bgImg.raycastTarget = false;
+
             var safeAreaObject = new GameObject("Safe Area", typeof(RectTransform));
             safeAreaObject.transform.SetParent(canvasObject.transform, false);
             _safeArea = safeAreaObject.GetComponent<RectTransform>();
@@ -1551,9 +1561,34 @@ namespace DiceSoccer
             _fieldPitchRoot = pitchRootGo.GetComponent<RectTransform>();
             _fieldPitchRoot.anchorMin = new Vector2(0.5f, 0.5f);
             _fieldPitchRoot.anchorMax = new Vector2(0.5f, 0.5f);
+            bool isFsMatch = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0) == 1;
             float fieldPitchHeight = 960f;
-            if (_safeArea != null && _safeArea.rect.height > 960f)
+            if (isFsMatch)
+            {
+                float screenCanvasH = 960f;
+                var activeCam = (_canvas != null && _canvas.worldCamera != null) ? _canvas.worldCamera : Camera.main;
+                if (activeCam != null && activeCam.targetTexture != null)
+                {
+                    screenCanvasH = ReferenceWidth * ((float)activeCam.targetTexture.height / Mathf.Max(1, activeCam.targetTexture.width));
+                }
+                else if (Screen.width > 0 && Screen.height > 0)
+                {
+                    screenCanvasH = ReferenceWidth * ((float)Screen.height / Screen.width);
+                }
+                if (_safeArea != null && _safeArea.rect.height > screenCanvasH)
+                    screenCanvasH = _safeArea.rect.height;
+                if (_canvas != null)
+                {
+                    var cRect = _canvas.GetComponent<RectTransform>();
+                    if (cRect != null && cRect.rect.height > screenCanvasH)
+                        screenCanvasH = cRect.rect.height;
+                }
+                fieldPitchHeight = Mathf.Max(960f, screenCanvasH);
+            }
+            else if (_safeArea != null && _safeArea.rect.height > 960f)
+            {
                 fieldPitchHeight = _safeArea.rect.height;
+            }
             float pitchScale = fieldPitchHeight / 960f;
             _fieldPitchRoot.sizeDelta = new Vector2(1920f * pitchScale, fieldPitchHeight);
             _fieldPitchRoot.anchoredPosition = new Vector2(GetPitchOffsetForLocation(_match.Location) * pitchScale, 0f);
@@ -1833,7 +1868,7 @@ namespace DiceSoccer
             _substitutionButton = subBtnGo.GetComponent<Button>();
 
             // Overlay container for animations (Kickoff, Goal, Save, etc.):
-            var overlayGo = new GameObject("OverlayContainer", typeof(RectTransform));
+            var overlayGo = new GameObject("OverlayContainer", typeof(RectTransform), typeof(RectMask2D));
             overlayGo.transform.SetParent(_safeArea, false);
             _overlayContainer = overlayGo.GetComponent<RectTransform>();
             _overlayContainer.anchorMin = Vector2.zero;
@@ -2007,16 +2042,16 @@ namespace DiceSoccer
             {
                 var dPath = GetPlayerNumberSpritePath(player.id % 10);
                 AddResourceImage("Digit", dPath, numBase.transform,
-                    new Vector2(0.25f, 0.2f), new Vector2(0.75f, 0.8f)).preserveAspect = true;
+                    new Vector2(0.12f, 0.12f), new Vector2(0.88f, 0.88f)).preserveAspect = true;
             }
             else
             {
                 var d1Path = GetPlayerNumberSpritePath(player.id / 10);
                 var d2Path = GetPlayerNumberSpritePath(player.id % 10);
                 AddResourceImage("Digit1", d1Path, numBase.transform,
-                    new Vector2(0.12f, 0.2f), new Vector2(0.50f, 0.8f)).preserveAspect = true;
+                    new Vector2(0.06f, 0.12f), new Vector2(0.52f, 0.88f)).preserveAspect = true;
                 AddResourceImage("Digit2", d2Path, numBase.transform,
-                    new Vector2(0.50f, 0.2f), new Vector2(0.88f, 0.8f)).preserveAspect = true;
+                    new Vector2(0.48f, 0.12f), new Vector2(0.94f, 0.88f)).preserveAspect = true;
             }
 
             // Position badge (Top Right)
@@ -2033,20 +2068,20 @@ namespace DiceSoccer
             nameBoxRect.anchorMax = new Vector2(0.77f, 0.94f);
             nameBoxRect.offsetMin = nameBoxRect.offsetMax = Vector2.zero;
             var nameBoxImg = nameBox.GetComponent<Image>();
-            nameBoxImg.color = new Color32(245, 245, 240, 255);
+            nameBoxImg.color = new Color32(245, 246, 248, 255);
             var nameOutline = nameBox.AddComponent<Outline>();
-            nameOutline.effectColor = new Color32(40, 40, 40, 255);
+            nameOutline.effectColor = new Color32(50, 50, 50, 255);
             nameOutline.effectDistance = new Vector2(1, -1);
 
-            var nameText = AddText(player.name.ToUpperInvariant(), nameBox.transform, 10, Ink,
+            var nameText = AddText(player.name.ToUpperInvariant(), nameBox.transform, 14, Ink,
                 new Vector2(0.04f, 0.05f), new Vector2(0.96f, 0.95f));
             nameText.alignment = TextAnchor.MiddleCenter;
             nameText.fontStyle = FontStyle.Bold;
             nameText.horizontalOverflow = HorizontalWrapMode.Wrap;
             nameText.verticalOverflow = VerticalWrapMode.Truncate;
             nameText.resizeTextForBestFit = true;
-            nameText.resizeTextMinSize = 5;
-            nameText.resizeTextMaxSize = 10;
+            nameText.resizeTextMinSize = 8;
+            nameText.resizeTextMaxSize = 18;
 
             // Player figure & shadow standing on the grass
             var figPath = GetPlayerFigurePath(player.id);
@@ -2076,7 +2111,7 @@ namespace DiceSoccer
             if (!string.IsNullOrEmpty(spIconPath))
             {
                 var spBox = AddResourceImage("SPBox", "Original/sprites/Card6/SPBox", field.transform,
-                    new Vector2(0.78f, 0.18f), new Vector2(0.96f, 0.32f));
+                    new Vector2(0.78f, 0.17f), new Vector2(0.96f, 0.31f));
                 spBox.preserveAspect = true;
 
                 var spIcon = AddResourceImage("SPIcon", spIconPath, spBox.transform,
@@ -2084,46 +2119,32 @@ namespace DiceSoccer
                 spIcon.preserveAspect = true;
             }
 
-            // Authentic Dice bar at bottom with 6 white square dice slots (matching media_1792421110223_f7c56db8.png)
+            // Authentic Dice bar at bottom with 6 white square dice slots
             var diceBarRoot = new GameObject("DiceBar", typeof(RectTransform));
             diceBarRoot.transform.SetParent(field.transform, false);
             var barRect = diceBarRoot.GetComponent<RectTransform>();
-            barRect.anchorMin = new Vector2(0.04f, 0.035f);
-            barRect.anchorMax = new Vector2(0.96f, 0.170f);
+            barRect.anchorMin = new Vector2(0.045f, 0.030f);
+            barRect.anchorMax = new Vector2(0.955f, 0.165f);
             barRect.offsetMin = barRect.offsetMax = Vector2.zero;
 
-            // Layer 1: Base border with white cutout slots and dividers
+            // Layer 1: Base border with authentic white cutout slots and dividers
             var diceBarBorder = AddResourceImage("DiceBarBorder", "Original/sprites/Card3/DiceBarBorder", diceBarRoot.transform,
                 Vector2.zero, Vector2.one);
             diceBarBorder.preserveAspect = false;
             diceBarBorder.raycastTarget = false;
 
-            // Cutouts in 400x100 DiceBarBorder are at exact normalized x coordinates:
-            float[] slotMinXs = { 0.0650f, 0.2100f, 0.3600f, 0.5100f, 0.6600f, 0.8075f };
-            float[] slotMaxXs = { 0.1875f, 0.3350f, 0.4825f, 0.6350f, 0.7850f, 0.9325f };
+            // Exact horizontal centers of the 6 slots in the 400px bar
+            float[] slotCenterXs = { 0.125f, 0.2725f, 0.420f, 0.57125f, 0.720f, 0.86875f };
 
-            // Layer 2: White die tiles & pips inside the 6 slots
+            // Layer 2: Dice pips / numbers / abilities centered inside each white square slot
             for (var i = 0; i < 6; i++)
             {
-                var minX = slotMinXs[i];
-                var maxX = slotMaxXs[i];
+                float cx = slotCenterXs[i];
                 var side = (player.diceSides != null && i < player.diceSides.Length) ? player.diceSides[i] : 1;
                 var sidePath = GetDiceSideSpritePath(side);
 
-                // Crisp white square die backing inside cutout
-                var tileGo = new GameObject($"SlotTile{i + 1}", typeof(RectTransform), typeof(Image));
-                tileGo.transform.SetParent(diceBarRoot.transform, false);
-                var tileRect = tileGo.GetComponent<RectTransform>();
-                tileRect.anchorMin = new Vector2(minX, 0.08f);
-                tileRect.anchorMax = new Vector2(maxX, 0.92f);
-                tileRect.offsetMin = tileRect.offsetMax = Vector2.zero;
-                var tileImg = tileGo.GetComponent<Image>();
-                tileImg.color = Color.white;
-                tileImg.raycastTarget = false;
-
-                // Mini die face (dots 1..14 or ability icon >= 16)
-                var sideImg = AddResourceImage($"DiceSide{i + 1}", sidePath, tileGo.transform,
-                    new Vector2(0.04f, 0.04f), new Vector2(0.96f, 0.96f));
+                var sideImg = AddResourceImage($"DiceSide{i + 1}", sidePath, diceBarRoot.transform,
+                    new Vector2(cx - 0.054f, 0.16f), new Vector2(cx + 0.054f, 0.84f));
                 sideImg.preserveAspect = true;
                 sideImg.raycastTarget = false;
             }
@@ -2744,13 +2765,13 @@ namespace DiceSoccer
             _deckPage = Mathf.Clamp(_deckPage, 0, totalPages - 1);
 
             Vector2[] cardCenters = {
-                new Vector2(0.30f, 0.62f), // Column 1 Top (matching #5 in media_1792421110155_320ad894.png)
-                new Vector2(0.30f, 0.33f), // Column 1 Bottom (matching #13 in media_1792421110155_320ad894.png)
-                new Vector2(0.70f, 0.62f), // Column 2 Top (matching #21 in media_1792421110155_320ad894.png)
-                new Vector2(0.70f, 0.33f)  // Column 2 Bottom (matching #29 in media_1792421110155_320ad894.png)
+                new Vector2(0.28f, 0.62f), // Column 1 Top
+                new Vector2(0.28f, 0.28f), // Column 1 Bottom
+                new Vector2(0.72f, 0.62f), // Column 2 Top
+                new Vector2(0.72f, 0.28f)  // Column 2 Bottom
             };
-            float cardHalfW = 0.180f;
-            float cardHalfH = 0.132f;
+            float cardHalfW = 0.164f;
+            float cardHalfH = 0.164f;
 
             int startIdx = _deckPage * cardsPerPage;
             for (int i = 0; i < cardsPerPage && (startIdx + i) < candidates.Count; i++)
@@ -2880,10 +2901,10 @@ namespace DiceSoccer
             var canAfford = _careerCash >= candidate.cost;
             var capturedPlayerId = candidate.id;
 
-            // Centered player card matching post_355.jpg / sec_0433.jpg
-            var cardWidth = 0.64f;
+            // Centered player card matching authentic 2:3 ratio
+            var cardWidth = 0.52f;
             var cardHeight = 0.52f;
-            var cardCenter = new Vector2(0.5f, 0.55f);
+            var cardCenter = new Vector2(0.5f, 0.56f);
             CreatePlayerCardFront(candidate, _safeArea,
                 cardCenter - new Vector2(cardWidth * 0.5f, cardHeight * 0.5f),
                 cardCenter + new Vector2(cardWidth * 0.5f, cardHeight * 0.5f),
@@ -3186,7 +3207,7 @@ namespace DiceSoccer
 
                 var box = AddResourceImage($"ShopBox_{i}", "Original/sprites/ShopSS/ShopBox", _safeArea,
                     new Vector2(0.5f, cardY), new Vector2(0.5f, cardY));
-                box.rectTransform.sizeDelta = new Vector2(148f, 96f);
+                box.rectTransform.sizeDelta = new Vector2(300f, 180f);
                 box.preserveAspect = false;
 
                 // Pouches
@@ -3194,60 +3215,60 @@ namespace DiceSoccer
                 {
                     var pouch = AddResourceImage("Pouch", "Original/sprites/ShopSS/ShopMoneyPouch", box.transform,
                         new Vector2(0.5f, 0.67f), new Vector2(0.5f, 0.67f));
-                    pouch.rectTransform.sizeDelta = new Vector2(90f, 65f);
+                    pouch.rectTransform.sizeDelta = new Vector2(160f, 116f);
                     pouch.preserveAspect = true;
                     pouch.raycastTarget = false;
                 }
                 else if (pkg.pouches == 2)
                 {
                     var p1 = AddResourceImage("Pouch1", "Original/sprites/ShopSS/ShopMoneyPouch", box.transform,
-                        new Vector2(0.36f, 0.67f), new Vector2(0.36f, 0.67f));
-                    p1.rectTransform.sizeDelta = new Vector2(74f, 54f);
+                        new Vector2(0.35f, 0.67f), new Vector2(0.35f, 0.67f));
+                    p1.rectTransform.sizeDelta = new Vector2(120f, 88f);
                     p1.preserveAspect = true;
                     p1.raycastTarget = false;
 
                     var p2 = AddResourceImage("Pouch2", "Original/sprites/ShopSS/ShopMoneyPouch", box.transform,
-                        new Vector2(0.64f, 0.67f), new Vector2(0.64f, 0.67f));
-                    p2.rectTransform.sizeDelta = new Vector2(74f, 54f);
+                        new Vector2(0.65f, 0.67f), new Vector2(0.65f, 0.67f));
+                    p2.rectTransform.sizeDelta = new Vector2(120f, 88f);
                     p2.preserveAspect = true;
                     p2.raycastTarget = false;
                 }
                 else
                 {
                     var p1 = AddResourceImage("Pouch1", "Original/sprites/ShopSS/ShopMoneyPouch", box.transform,
-                        new Vector2(0.28f, 0.64f), new Vector2(0.28f, 0.64f));
-                    p1.rectTransform.sizeDelta = new Vector2(62f, 45f);
+                        new Vector2(0.26f, 0.64f), new Vector2(0.26f, 0.64f));
+                    p1.rectTransform.sizeDelta = new Vector2(100f, 74f);
                     p1.preserveAspect = true;
                     p1.raycastTarget = false;
 
                     var p2 = AddResourceImage("Pouch2", "Original/sprites/ShopSS/ShopMoneyPouch", box.transform,
                         new Vector2(0.50f, 0.70f), new Vector2(0.50f, 0.70f));
-                    p2.rectTransform.sizeDelta = new Vector2(68f, 50f);
+                    p2.rectTransform.sizeDelta = new Vector2(110f, 80f);
                     p2.preserveAspect = true;
                     p2.raycastTarget = false;
 
                     var p3 = AddResourceImage("Pouch3", "Original/sprites/ShopSS/ShopMoneyPouch", box.transform,
-                        new Vector2(0.72f, 0.64f), new Vector2(0.72f, 0.64f));
-                    p3.rectTransform.sizeDelta = new Vector2(62f, 45f);
+                        new Vector2(0.74f, 0.64f), new Vector2(0.74f, 0.64f));
+                    p3.rectTransform.sizeDelta = new Vector2(100f, 74f);
                     p3.preserveAspect = true;
                     p3.raycastTarget = false;
                 }
 
                 // Money bar with coin count
                 var bar = AddResourceImage("MoneyBar", "Original/sprites/ShopSS/ShopMoneyBar", box.transform,
-                    new Vector2(0.5f, 0.33f), new Vector2(0.5f, 0.33f));
-                bar.rectTransform.sizeDelta = new Vector2(105f, 20f);
+                    new Vector2(0.5f, 0.31f), new Vector2(0.5f, 0.31f));
+                bar.rectTransform.sizeDelta = new Vector2(210f, 38f);
                 bar.preserveAspect = false;
                 bar.raycastTarget = false;
 
-                var coinsTxt = AddText(pkg.coins.ToString("N0"), bar.transform, 12, Ink,
+                var coinsTxt = AddText(pkg.coins.ToString("N0"), bar.transform, 18, Ink,
                     new Vector2(0.05f, 0.05f), new Vector2(0.95f, 0.95f));
                 coinsTxt.alignment = TextAnchor.MiddleCenter;
                 coinsTxt.fontStyle = FontStyle.Bold;
 
                 // Price label below bar
-                var priceTxt = AddText(pkg.price, box.transform, 13, Ink,
-                    new Vector2(0.1f, 0.04f), new Vector2(0.9f, 0.22f));
+                var priceTxt = AddText(pkg.price, box.transform, 17, Ink,
+                    new Vector2(0.1f, 0.04f), new Vector2(0.9f, 0.20f));
                 priceTxt.alignment = TextAnchor.MiddleCenter;
                 priceTxt.fontStyle = FontStyle.Bold;
 
@@ -3266,12 +3287,12 @@ namespace DiceSoccer
             // Left / Right arrows on middle shelf
             var leftArrow = AddSpriteButton("LeftArrow", "Original/images/LeftArrowDisabled",
                 "Original/images/LeftArrowDisabled", _safeArea,
-                new Vector2(0.14f, 0.555f), new Vector2(0.12f, 0.08f), null);
+                new Vector2(0.09f, 0.555f), new Vector2(0.10f, 0.10f), null);
             leftArrow.interactable = false;
 
             var rightArrow = AddSpriteButton("RightArrow", "Original/images/RightArrowSelected",
                 "Original/images/RightArrowSelected", _safeArea,
-                new Vector2(0.86f, 0.555f), new Vector2(0.12f, 0.08f), null);
+                new Vector2(0.91f, 0.555f), new Vector2(0.10f, 0.10f), null);
             rightArrow.interactable = false;
         }
 
@@ -3293,15 +3314,15 @@ namespace DiceSoccer
 
                 var box = AddResourceImage($"ShopBox_Shirt_{i}", "Original/sprites/ShopSS/ShopBox", _safeArea,
                     new Vector2(0.5f, cardY), new Vector2(0.5f, cardY));
-                box.rectTransform.sizeDelta = new Vector2(148f, 96f);
+                box.rectTransform.sizeDelta = new Vector2(300f, 180f);
                 box.preserveAspect = false;
 
                 var previewBox = new GameObject("KitPreview", typeof(RectTransform));
                 previewBox.transform.SetParent(box.transform, false);
                 var prevRect = previewBox.GetComponent<RectTransform>();
-                prevRect.anchorMin = new Vector2(0.5f, 0.58f);
-                prevRect.anchorMax = new Vector2(0.5f, 0.58f);
-                prevRect.sizeDelta = new Vector2(74f, 56f);
+                prevRect.anchorMin = new Vector2(0.5f, 0.60f);
+                prevRect.anchorMax = new Vector2(0.5f, 0.60f);
+                prevRect.sizeDelta = new Vector2(145f, 105f);
                 prevRect.pivot = new Vector2(0.5f, 0.5f);
 
                 var shirtBase = AddResourceImage("ShirtBase", "Original/sprites/KitSelectionSS/KitSelectionShirt", previewBox.transform,
@@ -3329,15 +3350,15 @@ namespace DiceSoccer
                 if (owned)
                 {
                     var soldOut = AddResourceImage("SoldOut", "Original/sprites/ShopSS/ShopSoldOut", box.transform,
-                        new Vector2(0.5f, 0.20f), new Vector2(0.5f, 0.20f));
-                    soldOut.rectTransform.sizeDelta = new Vector2(80f, 26f);
+                        new Vector2(0.5f, 0.16f), new Vector2(0.5f, 0.16f));
+                    soldOut.rectTransform.sizeDelta = new Vector2(150f, 48f);
                     soldOut.preserveAspect = true;
                     soldOut.raycastTarget = false;
                 }
                 else
                 {
-                    var priceTxt = AddText("FREE", box.transform, 13, Ink,
-                        new Vector2(0.1f, 0.05f), new Vector2(0.9f, 0.24f));
+                    var priceTxt = AddText("FREE", box.transform, 18, Ink,
+                        new Vector2(0.1f, 0.04f), new Vector2(0.9f, 0.22f));
                     priceTxt.alignment = TextAnchor.MiddleCenter;
                     priceTxt.fontStyle = FontStyle.Bold;
 
@@ -3358,7 +3379,7 @@ namespace DiceSoccer
             var leftArrow = AddSpriteButton("LeftArrow",
                 canPrev ? "Original/images/LeftArrow" : "Original/images/LeftArrowDisabled",
                 canPrev ? "Original/images/LeftArrowSelected" : "Original/images/LeftArrowDisabled",
-                _safeArea, new Vector2(0.14f, 0.555f), new Vector2(0.12f, 0.08f),
+                _safeArea, new Vector2(0.09f, 0.555f), new Vector2(0.10f, 0.10f),
                 canPrev ? () => { _shopPage--; ShowShop(); } : null);
             leftArrow.interactable = canPrev;
 
@@ -3366,7 +3387,7 @@ namespace DiceSoccer
             var rightArrow = AddSpriteButton("RightArrow",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
-                _safeArea, new Vector2(0.86f, 0.555f), new Vector2(0.12f, 0.08f),
+                _safeArea, new Vector2(0.91f, 0.555f), new Vector2(0.10f, 0.10f),
                 canNext ? () => { _shopPage++; ShowShop(); } : null);
             rightArrow.interactable = canNext;
         }
@@ -3389,12 +3410,12 @@ namespace DiceSoccer
 
                 var box = AddResourceImage($"ShopBox_Shorts_{i}", "Original/sprites/ShopSS/ShopBox", _safeArea,
                     new Vector2(0.5f, cardY), new Vector2(0.5f, cardY));
-                box.rectTransform.sizeDelta = new Vector2(148f, 96f);
+                box.rectTransform.sizeDelta = new Vector2(300f, 180f);
                 box.preserveAspect = false;
 
                 var shorts = AddResourceImage("ShortsPreview", "Original/sprites/KitSelectionSS/KitSelectionShorts", box.transform,
-                    new Vector2(0.5f, 0.58f), new Vector2(0.5f, 0.58f));
-                shorts.rectTransform.sizeDelta = new Vector2(74f, 56f);
+                    new Vector2(0.5f, 0.60f), new Vector2(0.5f, 0.60f));
+                shorts.rectTransform.sizeDelta = new Vector2(145f, 105f);
                 shorts.preserveAspect = true;
                 shorts.color = _catalog.GetColourRgb(col.id);
                 shorts.raycastTarget = false;
@@ -3403,15 +3424,15 @@ namespace DiceSoccer
                 if (owned)
                 {
                     var soldOut = AddResourceImage("SoldOut", "Original/sprites/ShopSS/ShopSoldOut", box.transform,
-                        new Vector2(0.5f, 0.20f), new Vector2(0.5f, 0.20f));
-                    soldOut.rectTransform.sizeDelta = new Vector2(80f, 26f);
+                        new Vector2(0.5f, 0.16f), new Vector2(0.5f, 0.16f));
+                    soldOut.rectTransform.sizeDelta = new Vector2(150f, 48f);
                     soldOut.preserveAspect = true;
                     soldOut.raycastTarget = false;
                 }
                 else
                 {
-                    var priceTxt = AddText("FREE", box.transform, 13, Ink,
-                        new Vector2(0.1f, 0.05f), new Vector2(0.9f, 0.24f));
+                    var priceTxt = AddText("FREE", box.transform, 18, Ink,
+                        new Vector2(0.1f, 0.04f), new Vector2(0.9f, 0.22f));
                     priceTxt.alignment = TextAnchor.MiddleCenter;
                     priceTxt.fontStyle = FontStyle.Bold;
 
@@ -3432,7 +3453,7 @@ namespace DiceSoccer
             var leftArrow = AddSpriteButton("LeftArrow",
                 canPrev ? "Original/images/LeftArrow" : "Original/images/LeftArrowDisabled",
                 canPrev ? "Original/images/LeftArrowSelected" : "Original/images/LeftArrowDisabled",
-                _safeArea, new Vector2(0.14f, 0.555f), new Vector2(0.12f, 0.08f),
+                _safeArea, new Vector2(0.09f, 0.555f), new Vector2(0.10f, 0.10f),
                 canPrev ? () => { _shopPage--; ShowShop(); } : null);
             leftArrow.interactable = canPrev;
 
@@ -3440,7 +3461,7 @@ namespace DiceSoccer
             var rightArrow = AddSpriteButton("RightArrow",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
-                _safeArea, new Vector2(0.86f, 0.555f), new Vector2(0.12f, 0.08f),
+                _safeArea, new Vector2(0.91f, 0.555f), new Vector2(0.10f, 0.10f),
                 canNext ? () => { _shopPage++; ShowShop(); } : null);
             rightArrow.interactable = canNext;
         }
@@ -7618,9 +7639,9 @@ namespace DiceSoccer
 
             if (fullScreen)
             {
-                // Edge-to-edge safe area: fills the screen while respecting hardware notch and nav bar
-                _safeArea.anchorMin = new Vector2(area.xMin / screenW, area.yMin / screenH);
-                _safeArea.anchorMax = new Vector2(area.xMax / screenW, area.yMax / screenH);
+                // True full screen: fills 100% of the display edge-to-edge
+                _safeArea.anchorMin = Vector2.zero;
+                _safeArea.anchorMax = Vector2.one;
             }
             else
             {
