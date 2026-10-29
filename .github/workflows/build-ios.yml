@@ -1,0 +1,110 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch: {}
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-unity-ios:
+    name: Export Xcode Project (Unity)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-iOS-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-iOS-
+            Library-
+
+      - name: Build Unity Project to Xcode
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: iOS
+          unityVersion: auto
+          buildMethod: DiceSoccer.Editor.ConfigureMobileBuild.BuildIOS
+          customParameters: -customBuildPath build/iOS
+
+      - name: Upload Xcode Project Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-project
+          path: build/iOS
+          retention-days: 7
+
+  build-ipa:
+    name: Compile & Package IPA (macOS Xcode)
+    needs: build-unity-ios
+    runs-on: macos-14
+    steps:
+      - name: Download Xcode Project Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: xcode-project
+          path: xcode-project
+
+      - name: Build Application with Xcode
+        run: |
+          cd xcode-project
+          xcodebuild clean build \
+            -project Unity-iPhone.xcodeproj \
+            -scheme Unity-iPhone \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath derived_data \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package Unsigned IPA
+        run: |
+          cd xcode-project
+          mkdir -p Payload
+          APP_PATH=$(find derived_data/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: .app bundle not found!"
+            exit 1
+          fi
+          echo "Found app bundle at: $APP_PATH"
+          cp -R "$APP_PATH" Payload/
+          zip -r -9 ../DiceSoccer.ipa Payload
+          cd ..
+          ls -lh DiceSoccer.ipa
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DiceSoccer-iOS-IPA
+          path: DiceSoccer.ipa
+          retention-days: 90
+
+      - name: Attach IPA to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: DiceSoccer.ipa
