@@ -344,6 +344,15 @@ namespace DiceSoccer.Editor
                 cam.orthographicSize = fsHeight / 2f;
                 cam.targetTexture = fsRt;
 
+                var safeAreaVal = safeAreaField?.GetValue(bootstrap) as RectTransform;
+                if (safeAreaVal != null)
+                {
+                    safeAreaVal.anchorMin = Vector2.zero;
+                    safeAreaVal.anchorMax = Vector2.one;
+                    safeAreaVal.offsetMin = Vector2.zero;
+                    safeAreaVal.offsetMax = Vector2.zero;
+                }
+
                 var catalog = GameCatalog.Load();
                 var fixtures = catalog.GetFixtures(0, "League");
                 var lineupField = typeof(DiceSoccerBootstrap).GetField("_lineupIds", BindingFlags.Instance | BindingFlags.NonPublic);

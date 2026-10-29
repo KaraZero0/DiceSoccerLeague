@@ -126,6 +126,14 @@ Following a thorough side-by-side analysis of the original 2012 iOS title and co
    - Target selection window expanded to 5.0 seconds with responsive tap audio, die punch scaling, and side verification.
 6. **All Content 100% Free**:
    - All custom jerseys, shorts, boots, and coins are freely accessible with zero microtransactions.
+7. **Pixel & Modern Cutout Edge-to-Edge Fullscreen**:
+   - Enabled `renderOutsideSafeArea = true` and dynamic vertical pitch rendering to expand pitch grass and stadium scenery edge-to-edge on modern tall devices (16:10, 19.5:9, 20:9).
+   - Added canvas-level continuous screen clearing and `RectMask2D` containment to eliminate stuck animation buffers / notch looping.
+8. **Authentic Player Cards & Dice Sets**:
+   - Restored authentic 2:3 card aspect ratio across `Manage`, `PlayerPicker`, and `Hiring`.
+   - Redesigned card bottom dice bar with crisp square die tiles, legible pips, and position-colored framing.
+9. **Enlarged Authentic Shop Display**:
+   - Scaled `ShopBox` from 148×96 up to native 300×180, properly resting on wooden shelves with large money pouches, kit previews, and price badges.
 
 ---
 
