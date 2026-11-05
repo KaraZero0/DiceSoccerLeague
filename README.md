@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/KaraZero0/DiceSoccerLeagueOriginal/releases/latest"><img src="https://img.shields.io/badge/Download%20APK%20%26%20IPA-v1.0.0%20Latest-success?style=for-the-badge&logo=android" alt="Download APK and IPA" /></a>
+  <a href="https://github.com/KaraZero0/DiceSoccerLeague/releases/latest"><img src="https://img.shields.io/badge/Download%20APK%20%26%20IPA-v1.0.0%20Latest-success?style=for-the-badge&logo=android" alt="Download APK and IPA" /></a>
   <img src="https://img.shields.io/badge/Unity-6000.0%20LTS-black?style=for-the-badge&logo=unity" alt="Unity 6" />
   <img src="https://img.shields.io/badge/Platforms-Android%20%7C%20iOS%20(IPA)-green?style=for-the-badge" alt="Platforms" />
   <img src="https://img.shields.io/badge/Architecture-ARM64%20IL2CPP-blue?style=for-the-badge" alt="ARM64" />
@@ -44,8 +44,8 @@ This repository is organized into two primary branches:
 
 | Branch | Description |
 |:---|:---|
-| **[`unity`](https://github.com/KaraZero0/DiceSoccerLeagueOriginal/tree/unity)** | **The Modern Remaster**: The complete, standalone Unity 6 project containing the full C# simulation engine, extracted assets, high-res adaptive icons, automated mobile build pipeline, and verification suites. |
-| **[`original-ipa`](https://github.com/KaraZero0/DiceSoccerLeagueOriginal/tree/original-ipa)** | **Historical Archive**: The raw, decrypted 2012 iOS `.ipa` bundle (`Payload/Dice Soccer.app` and `iTunesArtwork`), preserved strictly for reverse engineering and digital archiving purposes. |
+| **[`unity`](https://github.com/KaraZero0/DiceSoccerLeague/tree/unity)** | **The Modern Remaster**: The complete, standalone Unity 6 project containing the full C# simulation engine, extracted assets, high-res adaptive icons, automated mobile build pipeline, and verification suites. |
+| **[`original-ipa`](https://github.com/KaraZero0/DiceSoccerLeague/tree/original-ipa)** | **Historical Archive**: The raw, decrypted 2012 iOS `.ipa` bundle (`Payload/Dice Soccer.app` and `iTunesArtwork`), preserved strictly for reverse engineering and digital archiving purposes. |
 
 ---
 
@@ -140,7 +140,7 @@ Following a thorough side-by-side analysis of the original 2012 iOS title and co
 ## 📥 How to Install and Play
 
 ### 🤖 Android (APK)
-1. Head to the **[Latest Release](https://github.com/KaraZero0/DiceSoccerLeagueOriginal/releases/latest)** section.
+1. Head to the **[Latest Release](https://github.com/KaraZero0/DiceSoccerLeague/releases/latest)** section.
 2. Download **`DiceSoccer.apk`** (~60 MB).
 3. Open the downloaded file on your Android device and tap **Install** (allow installation from unknown sources if prompted).
 4. Launch **Dice Soccer** and enjoy!
@@ -156,7 +156,7 @@ adb install -r Builds/Android/DiceSoccer.apk
 You do **NOT** need an Apple Developer Account, a Mac, or the App Store. Any personal, free Apple ID can sideload the game in minutes!
 
 #### Method 1: Sideloadly (Recommended — Windows / Mac)
-1. Download **`DiceSoccer.ipa`** from the **[Latest Release](https://github.com/KaraZero0/DiceSoccerLeagueOriginal/releases/latest)** or GitHub Actions artifacts.
+1. Download **`DiceSoccer.ipa`** from the **[Latest Release](https://github.com/KaraZero0/DiceSoccerLeague/releases/latest)** or GitHub Actions artifacts.
 2. Download and install [Sideloadly](https://sideloadly.io/) (Free for Windows & macOS).
 3. Connect your iPhone to your PC via USB cable (tap *"Trust this computer"* if prompted).
 4. Drag and drop **`DiceSoccer.ipa`** into Sideloadly.
@@ -181,8 +181,8 @@ You do **NOT** need an Apple Developer Account, a Mac, or the App Store. Any per
 ### Build Steps
 1. Clone the repository and switch to the `unity` branch:
    ```bash
-   git clone https://github.com/KaraZero0/DiceSoccerLeagueOriginal.git -b unity
-   cd DiceSoccerLeagueOriginal
+   git clone https://github.com/KaraZero0/DiceSoccerLeague.git -b unity
+   cd DiceSoccerLeague
    ```
 2. Open the project folder in **Unity Hub**.
 3. Open the main startup scene: `Assets/Scenes/Main.unity`

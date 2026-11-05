@@ -22,6 +22,7 @@ namespace DiceSoccer.Editor
                 "com.karazero.dicesoccer");
             PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.iOS,
                 "com.karazero.dicesoccer");
+            PlayerSettings.iOS.buildNumber = "1";
             PlayerSettings.iOS.targetOSVersionString = "12.0";
             PlayerSettings.iOS.sdkVersion = iOSSdkVersion.DeviceSDK;
             PlayerSettings.iOS.appleEnableAutomaticSigning = false;
@@ -95,6 +96,20 @@ namespace DiceSoccer.Editor
             {
                 PlayerSettings.SetIcons(NamedBuildTarget.Android, new[] { legacyIcon }, IconKind.Application);
                 PlayerSettings.SetIcons(NamedBuildTarget.iOS, new[] { legacyIcon }, IconKind.Application);
+
+                var iosKinds = PlayerSettings.GetSupportedIconKinds(NamedBuildTarget.iOS);
+                foreach (var kind in iosKinds)
+                {
+                    var iosIcons = PlayerSettings.GetPlatformIcons(NamedBuildTarget.iOS, kind);
+                    if (iosIcons != null && iosIcons.Length > 0)
+                    {
+                        foreach (var icon in iosIcons)
+                        {
+                            icon.SetTextures(new[] { legacyIcon });
+                        }
+                        PlayerSettings.SetPlatformIcons(NamedBuildTarget.iOS, kind, iosIcons);
+                    }
+                }
             }
 
             // Configure modern Android Adaptive Icons (Pixel 10 / Android 8.0-15+)
