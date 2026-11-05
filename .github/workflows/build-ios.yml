@@ -3,72 +3,41 @@ name: Build iOS IPA
 on:
   workflow_dispatch: {}
   push:
+    branches:
+      - unity
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
-  build-unity-ios:
-    name: Export Xcode Project (Unity)
-    runs-on: ubuntu-latest
+  build-ipa:
+    name: Compile & Package IPA (macOS Xcode)
+    runs-on: macos-14
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           lfs: true
 
-      - name: Free Disk Space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
+      - name: Extract Pre-Exported Unity Xcode Project
+        run: |
+          mkdir -p xcode-project
+          cat .github/ios-xcode-export/ios-xcode.tar.zst.part-* | zstd -d -c | tar -xf - -C xcode-project
+          chmod -R +x xcode-project/Il2CppOutputProject/IL2CPP/build
+          chmod +x xcode-project/process_symbols*.sh 2>/dev/null || true
 
-      - name: Cache Unity Library
-        uses: actions/cache@v4
-        with:
-          path: Library
-          key: Library-iOS-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: |
-            Library-iOS-
-            Library-
-
-      - name: Build Unity Project to Xcode
-        uses: game-ci/unity-builder@v4
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          targetPlatform: iOS
-          unityVersion: auto
-          buildMethod: DiceSoccer.Editor.ConfigureMobileBuild.BuildIOS
-          customParameters: -customBuildPath build/iOS
-
-      - name: Upload Xcode Project Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: xcode-project
-          path: build/iOS
-          retention-days: 7
-
-  build-ipa:
-    name: Compile & Package IPA (macOS Xcode)
-    needs: build-unity-ios
-    runs-on: macos-14
-    steps:
-      - name: Download Xcode Project Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: xcode-project
-          path: xcode-project
+      - name: Prepare Unsigned Xcode Build Settings
+        run: |
+          cd xcode-project
+          sed -i '' 's/CodeSignOnCopy, //g' Unity-iPhone.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' Unity-iPhone.xcodeproj/project.pbxproj
 
       - name: Build Application with Xcode
         run: |
           cd xcode-project
-          xcodebuild clean build \
+          xcodebuild build \
             -project Unity-iPhone.xcodeproj \
             -scheme Unity-iPhone \
             -configuration Release \
@@ -77,13 +46,16 @@ jobs:
             -derivedDataPath derived_data \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="" \
+            EXPANDED_CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE="" \
             DEVELOPMENT_TEAM=""
 
-      - name: Package Unsigned IPA
+      - name: Package & Ad-Hoc Sign IPA
         run: |
           cd xcode-project
+          rm -rf Payload
           mkdir -p Payload
           APP_PATH=$(find derived_data/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
           if [ -z "$APP_PATH" ]; then
@@ -91,7 +63,8 @@ jobs:
             exit 1
           fi
           echo "Found app bundle at: $APP_PATH"
-          cp -R "$APP_PATH" Payload/
+          cp -R "$APP_PATH" Payload/DiceSoccer.app
+          codesign --force --deep --sign - Payload/DiceSoccer.app
           zip -r -9 ../DiceSoccer.ipa Payload
           cd ..
           ls -lh DiceSoccer.ipa
@@ -104,7 +77,11 @@ jobs:
           retention-days: 90
 
       - name: Attach IPA to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: DiceSoccer.ipa
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME}"
+          if [[ "$TAG_NAME" != v* ]]; then
+            TAG_NAME="v1.0.0"
+          fi
+          gh release upload "$TAG_NAME" DiceSoccer.ipa --clobber || true
