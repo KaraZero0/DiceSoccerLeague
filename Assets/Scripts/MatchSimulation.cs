@@ -312,9 +312,8 @@ namespace DiceSoccer
         public int CalculateStars()
         {
             // Verified in StatsManager.updateStatsAtEndOfMatch: (0x07d160)
-            if (HomeScore < AwayScore) return 1; // Loss: 1 star
-            if (HomeScore == AwayScore) return 2; // Draw: 2 stars
-            return 3; // Win: 3 stars UI
+            // InternalStars: Loss = 1 (0 Gold Stars), Draw = 2 (1 Gold Star), Win by 1 = 3 (2 Gold Stars), Win by >=2 = 4 (3 Gold Stars)
+            return InternalStars() - 1;
         }
 
         public int InternalStars()
