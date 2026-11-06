@@ -76,7 +76,7 @@ jobs:
           path: DiceSoccer.ipa
           retention-days: 90
 
-      - name: Attach IPA to GitHub Release
+      - name: Attach IPA and APK to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -84,4 +84,9 @@ jobs:
           if [[ "$TAG_NAME" != v* ]]; then
             TAG_NAME="v1.0.0"
           fi
-          gh release upload "$TAG_NAME" DiceSoccer.ipa --clobber || true
+          if [ -f .github/ios-xcode-export/DiceSoccer.apk.zst ]; then
+            zstd -d -f .github/ios-xcode-export/DiceSoccer.apk.zst -o DiceSoccer.apk
+            gh release upload "$TAG_NAME" DiceSoccer.ipa DiceSoccer.apk --clobber || true
+          else
+            gh release upload "$TAG_NAME" DiceSoccer.ipa --clobber || true
+          fi
