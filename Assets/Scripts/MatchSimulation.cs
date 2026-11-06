@@ -70,6 +70,8 @@ namespace DiceSoccer
         public string AwayName { get; }
         public int[] LastHomeFaces { get; private set; } = Array.Empty<int>();
         public int[] LastAwayFaces { get; private set; } = Array.Empty<int>();
+        public int[][] LastHomeRollSequences { get; private set; } = Array.Empty<int[]>();
+        public int[][] LastAwayRollSequences { get; private set; } = Array.Empty<int[]>();
         public int LastHomeTotal { get; private set; }
         public int LastAwayTotal { get; private set; }
         public bool CanBeginEncounter => !IsFinished && _pendingEncounter == null;
@@ -442,22 +444,26 @@ namespace DiceSoccer
             if (firstSide == 0)
             {
                 LastHomeFaces = FinalFaces(first.Rolls);
+                LastHomeRollSequences = RollSequences(first.Rolls);
                 LastHomeTotal = first.Total;
             }
             else
             {
                 LastAwayFaces = FinalFaces(first.Rolls);
+                LastAwayRollSequences = RollSequences(first.Rolls);
                 LastAwayTotal = first.Total;
             }
 
             if (secondSide == 0)
             {
                 LastHomeFaces = FinalFaces(second.Rolls);
+                LastHomeRollSequences = RollSequences(second.Rolls);
                 LastHomeTotal = second.Total;
             }
             else
             {
                 LastAwayFaces = FinalFaces(second.Rolls);
+                LastAwayRollSequences = RollSequences(second.Rolls);
                 LastAwayTotal = second.Total;
             }
         }
@@ -470,16 +476,41 @@ namespace DiceSoccer
             return faces;
         }
 
+        private static int[][] RollSequences(DieRoll[] rolls)
+        {
+            var seqs = new int[rolls.Length][];
+            for (var i = 0; i < rolls.Length; i++)
+                seqs[i] = rolls[i].Sequence ?? new[] { rolls[i].Face };
+            return seqs;
+        }
+
         private static void ApplyEntourageRollBonuses(int[] entourages, PlayerData[] team, int[] faces, ref int total)
         {
             if (entourages == null || entourages.Length == 0 || faces == null || faces.Length == 0) return;
 
-            bool hasPair = false;
-            for (int a = 0; a < faces.Length; a++)
-                for (int b = a + 1; b < faces.Length; b++)
-                    if (faces[a] == faces[b] && faces[a] > 0) hasPair = true;
+            int wildCount = 0;
+            for (int i = 0; i < faces.Length; i++)
+                if (faces[i] == 31) wildCount++;
 
-            bool hasTriple = faces.Length >= 3 && faces[0] == faces[1] && faces[1] == faces[2] && faces[0] > 0;
+            bool hasPair = (wildCount >= 1 && faces.Length >= 2);
+            for (int a = 0; a < faces.Length && !hasPair; a++)
+                for (int b = a + 1; b < faces.Length; b++)
+                    if (faces[a] == faces[b] && faces[a] > 0) { hasPair = true; break; }
+
+            bool hasTriple = false;
+            if (faces.Length >= 3)
+            {
+                int firstNonWild = -1;
+                bool allMatch = true;
+                for (int i = 0; i < 3; i++)
+                {
+                    if (faces[i] == 31) continue;
+                    if (faces[i] <= 0) { allMatch = false; break; }
+                    if (firstNonWild < 0) firstNonWild = faces[i];
+                    else if (faces[i] != firstNonWild) { allMatch = false; break; }
+                }
+                hasTriple = allMatch;
+            }
 
             if (hasPair)
             {
@@ -536,11 +567,12 @@ namespace DiceSoccer
         {
             if (isRedCarded)
             {
-                return new DieRoll(0, 0, "RED CARD (0)");
+                return new DieRoll(0, 0, "RED CARD (0)", new[] { 0 });
             }
 
             var total = 0;
             var faces = new List<string>();
+            var sequence = new List<int>();
             var finalFace = 0;
             var extraRolls = 0;
 
@@ -548,12 +580,14 @@ namespace DiceSoccer
             {
                 var face = player.diceSides[UnityEngine.Random.Range(0, player.diceSides.Length)];
                 finalFace = face;
+                sequence.Add(face);
                 faces.Add(FaceLabel(face));
 
                 // Faces >= 101: referee flag + subtract 100
                 if (face >= 101)
                 {
                     face -= 100;
+                    finalFace = face;
                 }
 
                 // Standard faces 1..10
@@ -563,28 +597,44 @@ namespace DiceSoccer
                     break;
                 }
 
-                // Dribble faces 16..18: adds face - 15 and triggers an extra roll
+                // Dribble faces 16..18: adds face - 15 and triggers a local re-roll
                 if (face >= 16 && face <= 18)
                 {
                     total += face - 15;
                     if (extraRolls++ < MaximumExtraRollsPerDie)
                         continue;
+                    finalFace = face - 15;
                     break;
                 }
 
-                // Cross / Assist face 24: awards extra roll
+                // Cross face 24: re-rolls this die and 1 chosen die
                 if (face == 24)
                 {
-                    total += 3;
                     if (extraRolls++ < MaximumExtraRollsPerDie)
                         continue;
+                    finalFace = 2;
+                    total += 2;
                     break;
                 }
 
-                // Wild face 31: acts as 6 and combo wildcard
+                // Assist face 23: re-rolls 1 chosen die
+                if (face == 23)
+                {
+                    total += 0;
+                    break;
+                }
+
+                // Dive! face 26: rolls the Referee die after play
+                if (face == 26)
+                {
+                    total += 0;
+                    break;
+                }
+
+                // Wild face 31 (Total Footballer): adds 0 value to total, acts as combo wildcard
                 if (face == 31)
                 {
-                    total += 6;
+                    total += 0;
                     break;
                 }
 
@@ -600,7 +650,7 @@ namespace DiceSoccer
                 break;
             }
 
-            return new DieRoll(total, finalFace, string.Join(" → ", faces));
+            return new DieRoll(total, finalFace, string.Join(" → ", faces), sequence.ToArray());
         }
 
         private static string FaceLabel(int face)
@@ -609,8 +659,12 @@ namespace DiceSoccer
                 return $"REF-{face - 100}";
             if (face >= 16 && face <= 18)
                 return $"+{face - 15} Dribble";
+            if (face == 23)
+                return "ASSIST";
             if (face == 24)
                 return "CROSS";
+            if (face == 26)
+                return "DIVE!";
             if (face == 31)
                 return "WILD";
             if (face == 32)
@@ -690,12 +744,14 @@ namespace DiceSoccer
             public readonly int Total;
             public readonly int Face;
             public readonly string Faces;
+            public readonly int[] Sequence;
 
-            public DieRoll(int total, int face, string faces)
+            public DieRoll(int total, int face, string faces, int[] sequence = null)
             {
                 Total = total;
                 Face = face;
                 Faces = faces;
+                Sequence = sequence ?? new[] { face };
             }
         }
     }

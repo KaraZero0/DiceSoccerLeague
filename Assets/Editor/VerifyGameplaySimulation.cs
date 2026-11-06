@@ -213,6 +213,28 @@ namespace DiceSoccer.Editor
             bool roll3False = (bool)isTriggered.Invoke(null, new object[] { 21, 0, new int[] { 2, 1, 2 }, 5 });
             if (!roll3True || roll3False) throw new Exception("Roll 3 trigger failed!");
 
+            // Test Wild (31 — Total Footballer) activating Pair, Odd Flush, Even Flush, Straight, and Triple
+            bool wildPair = (bool)isTriggered.Invoke(null, new object[] { 2, 0, new int[] { 31, 4, 1 }, 5 });
+            bool wildOdd = (bool)isTriggered.Invoke(null, new object[] { 3, 0, new int[] { 31, 3, 5 }, 8 });
+            bool wildEven = (bool)isTriggered.Invoke(null, new object[] { 4, 0, new int[] { 2, 31, 6 }, 8 });
+            bool wildStraight = (bool)isTriggered.Invoke(null, new object[] { 5, 0, new int[] { 2, 31, 4 }, 6 });
+            bool wildTriple = (bool)isTriggered.Invoke(null, new object[] { 6, 0, new int[] { 5, 31, 5 }, 10 });
+            if (!wildPair || !wildOdd || !wildEven || !wildStraight || !wildTriple)
+                throw new Exception("Wild (31) combo wildcard trigger failed!");
+
+            // Test GetAbilityExecutionPhase ordering
+            var getPhase = typeof(DiceSoccerBootstrap).GetMethod("GetAbilityExecutionPhase", BindingFlags.Static | BindingFlags.NonPublic);
+            if (getPhase == null) throw new Exception("GetAbilityExecutionPhase method not found!");
+            var cat = GameCatalog.Load();
+            int phaseIntercept = (int)getPhase.Invoke(null, new object[] { cat.TryGetAbility(43) }); // Intercept = 0
+            int phaseReroll = (int)getPhase.Invoke(null, new object[] { cat.TryGetAbility(61) });    // Assist = 1
+            int phaseAnchor = (int)getPhase.Invoke(null, new object[] { cat.TryGetAbility(42) });    // Anchor = 2
+            int phaseTackle = (int)getPhase.Invoke(null, new object[] { cat.TryGetAbility(33) });    // Tackle = 3
+            int phaseStepOver = (int)getPhase.Invoke(null, new object[] { cat.TryGetAbility(28) });  // Step-Over = 4
+            int phaseThrough = (int)getPhase.Invoke(null, new object[] { cat.TryGetAbility(47) });   // Through Pass = 5
+            if (!(phaseIntercept < phaseReroll && phaseReroll < phaseAnchor && phaseAnchor < phaseTackle && phaseTackle < phaseStepOver && phaseStepOver < phaseThrough))
+                throw new Exception($"Ability phase ordering invalid: {phaseIntercept}, {phaseReroll}, {phaseAnchor}, {phaseTackle}, {phaseStepOver}, {phaseThrough}");
+
             // Test Captain (Superpower 82) on MatchSimulation
             var catalog = GameCatalog.Load();
             var origHome = catalog.ResolveLineup(new int[] { 1, 2, 3, 4, 7, 6, 8 });

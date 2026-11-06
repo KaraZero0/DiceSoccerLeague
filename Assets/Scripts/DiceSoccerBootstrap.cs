@@ -4050,39 +4050,75 @@ namespace DiceSoccer
         {
             if (faces == null || faces.Length == 0) return false;
 
+            int wildCount = 0;
+            for (int i = 0; i < faces.Length; i++)
+                if (faces[i] == 31) wildCount++;
+
             switch (trigger)
             {
                 case 0: // Local reroll (processed during player's roll phase)
                 case 1: // Captain tie breaker
                     return false;
 
-                case 2: // PAIR: at least two dice show identical positive values
+                case 2: // PAIR: at least two dice show identical positive values (or Wild 31)
                     if (faces.Length < 2) return false;
+                    if (wildCount >= 2) return true;
+                    if (wildCount == 1)
+                    {
+                        for (int i = 0; i < faces.Length; i++)
+                            if (faces[i] != 31 && faces[i] > 0) return true;
+                    }
                     for (int a = 0; a < faces.Length; a++)
                         for (int b = a + 1; b < faces.Length; b++)
                             if (faces[a] == faces[b] && faces[a] > 0)
                                 return true;
                     return false;
 
-                case 3: // ALL dice are ODD
+                case 3: // ALL dice are ODD (Wild 31 acts as wildcard)
                     for (int i = 0; i < faces.Length; i++)
-                        if (faces[i] % 2 == 0) return false;
+                    {
+                        if (faces[i] == 31) continue;
+                        if (faces[i] <= 0 || faces[i] % 2 == 0) return false;
+                    }
                     return true;
 
-                case 4: // ALL dice are EVEN
+                case 4: // ALL dice are EVEN (Wild 31 acts as wildcard)
                     for (int i = 0; i < faces.Length; i++)
-                        if (faces[i] % 2 != 0) return false;
+                    {
+                        if (faces[i] == 31) continue;
+                        if (faces[i] <= 0 || faces[i] % 2 != 0) return false;
+                    }
                     return true;
 
-                case 5: // 3 consecutive numbers
+                case 5: // 3 consecutive numbers (Wild 31 acts as wildcard)
                     if (faces.Length < 3) return false;
-                    int[] sorted = (int[])faces.Clone();
-                    Array.Sort(sorted);
-                    return (sorted[1] == sorted[0] + 1) && (sorted[2] == sorted[1] + 1);
+                    var nonWild = new List<int>(3);
+                    for (int i = 0; i < 3; i++)
+                    {
+                        if (faces[i] == 31) continue;
+                        if (faces[i] <= 0) return false;
+                        nonWild.Add(faces[i]);
+                    }
+                    if (nonWild.Count <= 1) return true;
+                    nonWild.Sort();
+                    if (nonWild.Count == 2)
+                    {
+                        int gap = nonWild[1] - nonWild[0];
+                        return gap == 1 || gap == 2;
+                    }
+                    return (nonWild[1] == nonWild[0] + 1) && (nonWild[2] == nonWild[1] + 1);
 
-                case 6: // TRIPLE: all 3 dice identical
+                case 6: // TRIPLE: all 3 dice identical (Wild 31 acts as wildcard)
                     if (faces.Length < 3) return false;
-                    return faces[0] == faces[1] && faces[1] == faces[2] && faces[0] > 0;
+                    int firstVal = -1;
+                    for (int i = 0; i < 3; i++)
+                    {
+                        if (faces[i] == 31) continue;
+                        if (faces[i] <= 0) return false;
+                        if (firstVal < 0) firstVal = faces[i];
+                        else if (faces[i] != firstVal) return false;
+                    }
+                    return true;
 
                 case 7: // Total is ODD
                     return (total % 2 != 0);
@@ -4101,7 +4137,7 @@ namespace DiceSoccer
                 case 17:
                 case 18:
                     int val9 = trigger - 8;
-                    return Array.IndexOf(faces, val9) >= 0;
+                    return Array.IndexOf(faces, val9) >= 0 || wildCount > 0;
 
                 case 19:
                 case 20:
@@ -4114,11 +4150,53 @@ namespace DiceSoccer
                 case 27:
                 case 28:
                     int val19 = trigger - 18;
-                    return Array.IndexOf(faces, val19) >= 0;
+                    return Array.IndexOf(faces, val19) >= 0 || wildCount > 0;
 
                 default:
                     return false;
             }
+        }
+
+        private static int GetAbilityExecutionPhase(AbilityData ab)
+        {
+            if (ab == null) return 6;
+            // Phase 0: Intercept (removes/cancels opponent re-rolls)
+            if (ab.id == 43 || (ab.id >= 76 && ab.id <= 79) || ab.id == 81) return 0;
+            // Phase 1: Re-rolls (Assist, Parry, Cross, Perfect Cross)
+            if (ab.type == 5 && ab.id != 64 && ab.id != 31 && ab.id != 32) return 1;
+            // Phase 2: Anchor (Immunity to all abilities)
+            if (ab.id == 42 || ab.id == 52 || ab.id == 60) return 2;
+            // Phase 3: Offensive Buffs & Defensive Debuffs (Multipliers, +1/+5, Tackles, Charge, Offside Trap)
+            if (ab.id == 27 || ab.id == 59 || ab.id == 64 ||
+                ab.id == 21 || ab.id == 39 || ab.id == 40 || ab.id == 54 || ab.id == 66 || ab.id == 74 || ab.id == 75 ||
+                (ab.type == 0 && ab.id != 41)) return 3;
+            // Phase 4: Cleanse, Strip, Saving Tackle, Feint
+            if (ab.id == 28 || ab.id == 29 || ab.id == 30 || ab.id == 48 ||
+                ab.id == 44 || ab.id == 22 || ab.id == 41 || ab.id == 56 || ab.id == 57 || ab.id == 58 ||
+                ab.type == 3 || ab.type == 4) return 4;
+            // Phase 5: End-of-Play (Through Pass, Dive!)
+            return 5;
+        }
+
+        private static int RollSinglePlayerDieValue(PlayerData player)
+        {
+            if (player == null || player.diceSides == null || player.diceSides.Length == 0)
+                return UnityEngine.Random.Range(2, 7);
+
+            int total = 0;
+            int safety = 0;
+            while (safety++ < 5)
+            {
+                int f = player.diceSides[UnityEngine.Random.Range(0, player.diceSides.Length)];
+                if (f >= 101) f -= 100;
+                if (f >= 1 && f <= 10) { total += f; break; }
+                if (f >= 16 && f <= 18) { total += (f - 15); continue; }
+                if (f == 24) continue;
+                if (f == 31 || f == 32 || f == 23 || f == 26) break;
+                total += Mathf.Clamp(f, 1, 6);
+                break;
+            }
+            return Mathf.Max(1, total);
         }
 
         private IEnumerator AnimateEncounter(int[] homeFaces, int[] awayFaces, int attackingSide)
@@ -4135,6 +4213,9 @@ namespace DiceSoccer
             var oldLocation = loc;
             var (activeHome, activeAway) = GetActiveDuelSlots(loc);
             float[] ys = { 0.25f, 0.50f, 0.75f };
+
+            var homeSeqs = _match.LastHomeRollSequences;
+            var awaySeqs = _match.LastAwayRollSequences;
 
             // 1. Poof smoke on active players before rolling
             for (var i = 0; i < activeHome.Length; i++)
@@ -4194,18 +4275,22 @@ namespace DiceSoccer
                     yield return new WaitForSeconds(rollFrameDelay);
                 }
 
-                // 4. Settle dice on final faces with impact punch
+                // 4. Settle dice on INITIAL faces (so Dribble 16..18 and Cross 24 are visibly shown first!)
                 AudioManager.Instance.PlayTap();
                 var diceBaseSprite = GetUiSprite("Original/sprites/Buff6/DiceBackground");
                 for (var i = 0; i < homeFaces.Length; i++)
                 {
+                    int initFace = (homeSeqs != null && i < homeSeqs.Length && homeSeqs[i] != null && homeSeqs[i].Length > 0)
+                        ? homeSeqs[i][0] : homeFaces[i];
                     if (_homeDieRoots[i] != null) _homeDieRoots[i].GetComponent<Image>().sprite = diceBaseSprite;
-                    if (_homeDice[i] != null) SetDieFace(_homeDice[i], homeFaces[i]);
+                    if (_homeDice[i] != null) SetDieFace(_homeDice[i], initFace);
                 }
                 for (var i = 0; i < awayFaces.Length; i++)
                 {
+                    int initFace = (awaySeqs != null && i < awaySeqs.Length && awaySeqs[i] != null && awaySeqs[i].Length > 0)
+                        ? awaySeqs[i][0] : awayFaces[i];
                     if (_awayDieRoots[i] != null) _awayDieRoots[i].GetComponent<Image>().sprite = diceBaseSprite;
-                    if (_awayDice[i] != null) SetDieFace(_awayDice[i], awayFaces[i]);
+                    if (_awayDice[i] != null) SetDieFace(_awayDice[i], initFace);
                 }
 
                 // Elastic settle bounce on landing
@@ -4225,15 +4310,117 @@ namespace DiceSoccer
                     if (_awayDieRoots[i] != null) _awayDieRoots[i].transform.localScale = Vector3.one;
             }
 
-            // Snapshot base rolled faces and totals before any superpowers modify them
-            int[] originalHomeFaces = (int[])homeFaces.Clone();
-            int[] originalAwayFaces = (int[])awayFaces.Clone();
-            int originalHomeTotal = _match.LastHomeTotal;
-            int originalAwayTotal = _match.LastAwayTotal;
+            // Prepare combo faces (preserving 31 Wildcard) and numeric values (where 31 Wildcard = 0, and Dribble bonuses are tracked)
+            int[] comboHomeFaces = (int[])homeFaces.Clone();
+            int[] comboAwayFaces = (int[])awayFaces.Clone();
+            int[] originalHomeFaces = new int[homeFaces.Length];
+            int[] originalAwayFaces = new int[awayFaces.Length];
+            int[] homeDribbleBonus = new int[homeFaces.Length];
+            int[] awayDribbleBonus = new int[awayFaces.Length];
             bool[] homeBoosted = new bool[homeFaces.Length];
             bool[] awayBoosted = new bool[awayFaces.Length];
             bool[] homeReduced = new bool[homeFaces.Length];
             bool[] awayReduced = new bool[awayFaces.Length];
+            bool[] homeImmune = new bool[homeFaces.Length];
+            bool[] awayImmune = new bool[awayFaces.Length];
+            bool[] homeIntercepted = new bool[homeFaces.Length];
+            bool[] awayIntercepted = new bool[awayFaces.Length];
+
+            var localTriggeredAbilities = new List<(int side, AbilityData ability, int slot)>();
+
+            // 4b. Visually animate LocalReroll faces (Dribble +1/+2/+3 IDs 16..18 and Cross ID 24) on the pitch!
+            for (int side = 0; side <= 1; side++)
+            {
+                bool isHome = (side == 0);
+                var seqs = isHome ? homeSeqs : awaySeqs;
+                var facesArr = isHome ? homeFaces : awayFaces;
+                var origArr = isHome ? originalHomeFaces : originalAwayFaces;
+                var dribArr = isHome ? homeDribbleBonus : awayDribbleBonus;
+                var boostArr = isHome ? homeBoosted : awayBoosted;
+                var dieRoots = isHome ? _homeDieRoots : _awayDieRoots;
+                var diceImgs = isHome ? _homeDice : _awayDice;
+                var dieBadges = isHome ? _homeDieBuffBadges : _awayDieBuffBadges;
+
+                for (int i = 0; i < facesArr.Length; i++)
+                {
+                    int finalRaw = facesArr[i];
+                    int baseNum = (finalRaw == 31 || finalRaw == 32 || finalRaw == 23 || finalRaw == 26) ? 0 : finalRaw;
+                    origArr[i] = baseNum;
+
+                    if (seqs != null && i < seqs.Length && seqs[i] != null && seqs[i].Length > 0)
+                    {
+                        for (int s = 0; s < seqs[i].Length - 1; s++)
+                        {
+                            int stepFace = seqs[i][s];
+                            int nextFace = seqs[i][s + 1];
+                            var localAb = _catalog?.TryGetAbility(stepFace);
+
+                            if (stepFace >= 16 && stepFace <= 18)
+                            {
+                                int bonus = stepFace - 15;
+                                dribArr[i] += bonus;
+                                boostArr[i] = true;
+                            }
+                            else if (stepFace == 24 && localAb != null)
+                            {
+                                // Cross also grants a targeted re-roll of 1 die of choice in Phase 1
+                                localTriggeredAbilities.Add((side, localAb, i));
+                            }
+
+                            if (dieRoots != null && i < dieRoots.Length && dieRoots[i] != null)
+                            {
+                                Vector2 pos = dieRoots[i].GetComponent<RectTransform>().anchorMin;
+                                string burstName = localAb != null ? localAb.name : (stepFace == 24 ? "Cross" : $"Dribble +{stepFace - 15}");
+                                Sprite medal = GetAbilityMedalSprite(localAb);
+
+                                if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                                {
+                                    _buffBeltGo.SetActive(true);
+                                    _buffBeltMedal.sprite = medal;
+                                    _buffBeltText.text = $"{burstName.ToUpper()}! ROLLING AGAIN...";
+                                }
+                                if (dieBadges != null && i < dieBadges.Length && dieBadges[i] != null)
+                                {
+                                    dieBadges[i].sprite = medal;
+                                    dieBadges[i].enabled = true;
+                                }
+
+                                AudioManager.Instance.PlayPowerup(2);
+                                yield return new WaitForSeconds(0.28f);
+
+                                // Re-roll this die visually on the pitch
+                                AudioManager.Instance.PlayDiceRoll();
+                                for (int f = 1; f <= 7; f++)
+                                {
+                                    dieRoots[i].GetComponent<Image>().sprite = GetUiSprite($"Original/sprites/PlayerBody3/DiceRoll{f:00}");
+                                    yield return new WaitForSeconds(0.040f);
+                                }
+                                dieRoots[i].GetComponent<Image>().sprite = GetUiSprite("Original/sprites/Buff6/DiceBackground");
+                                if (diceImgs != null && i < diceImgs.Length && diceImgs[i] != null)
+                                    SetDieFace(diceImgs[i], nextFace);
+                                yield return new WaitForSeconds(0.20f);
+                            }
+                        }
+
+                        // Check if final face is Assist (23) or Dive! (26)
+                        int lastFace = seqs[i][seqs[i].Length - 1];
+                        if (lastFace == 23 || lastFace == 26)
+                        {
+                            var lastAb = _catalog?.TryGetAbility(lastFace);
+                            if (lastAb != null) localTriggeredAbilities.Add((side, lastAb, i));
+                        }
+                    }
+
+                    facesArr[i] = origArr[i] + dribArr[i];
+                    if (dribArr[i] > 0 && diceImgs != null && i < diceImgs.Length && diceImgs[i] != null)
+                    {
+                        SetDieFace(diceImgs[i], facesArr[i]);
+                    }
+                }
+            }
+
+            int originalHomeTotal = _match.LastHomeTotal;
+            int originalAwayTotal = _match.LastAwayTotal;
 
             // 5. Reveal base duel totals with counting animation
             _matchReport.text = "Counting the dice...";
@@ -4263,8 +4450,8 @@ namespace DiceSoccer
                 for (int step = 1; step <= countSteps; step++)
                 {
                     float t = (float)step / countSteps;
-                    int curH = Mathf.RoundToInt(Mathf.Lerp(1, targetH, t));
-                    int curA = Mathf.RoundToInt(Mathf.Lerp(1, targetA, t));
+                    int curH = Mathf.RoundToInt(Mathf.Lerp(0, targetH, t));
+                    int curA = Mathf.RoundToInt(Mathf.Lerp(0, targetA, t));
                     _homeTotalText.text = curH.ToString();
                     _awayTotalText.text = curA.ToString();
 
@@ -4283,9 +4470,21 @@ namespace DiceSoccer
 
             yield return new WaitForSeconds(0.50f);
 
-            // 6. Interactive Superpower & Ability activation (matching Cocos2d leftBuffArray and rightBuffArray)
+            // 6. Interactive Superpower & Ability activation (interleaved by Execution Phase 0..5 across Home & Away!)
             PlayerData[] currentLineup = _match.HomeTeam ?? ((_catalog != null && _lineupIds != null) ? _catalog.ResolveLineup(_lineupIds) : null);
-            var homeAbilities = new List<(AbilityData ability, int slot, PlayerData player)>();
+            PlayerData[] awayLineup = _match.AwayTeam ?? ((_catalog != null && _currentFixture != null && _currentFixture.lineup != null) ? _catalog.ResolveLineup(_currentFixture.lineup) : null);
+
+            var allAbilities = new List<(int side, AbilityData ability, int slot, PlayerData player)>();
+
+            // Queue any local dice-face abilities (Cross 24, Assist 23, Dive! 26)
+            foreach (var (lSide, lAb, lSlot) in localTriggeredAbilities)
+            {
+                PlayerData lPlayer = (lSide == 0)
+                    ? (currentLineup != null && lSlot < activeHome.Length ? currentLineup[activeHome[lSlot]] : null)
+                    : (awayLineup != null && lSlot < activeAway.Length ? awayLineup[activeAway[lSlot]] : null);
+                allAbilities.Add((lSide, lAb, lSlot, lPlayer));
+            }
+
             for (int i = 0; i < activeHome.Length; i++)
             {
                 int s = activeHome[i];
@@ -4295,16 +4494,14 @@ namespace DiceSoccer
                     if (spId > 0)
                     {
                         var ab = _catalog?.TryGetAbility(spId);
-                        if (ab != null && IsAbilityTriggered(ab.trigger, i, originalHomeFaces, originalHomeTotal))
+                        if (ab != null && IsAbilityTriggered(ab.trigger, i, comboHomeFaces, originalHomeTotal))
                         {
-                            homeAbilities.Add((ab, i, currentLineup[s]));
+                            allAbilities.Add((0, ab, i, currentLineup[s]));
                         }
                     }
                 }
             }
 
-            PlayerData[] awayLineup = _match.AwayTeam ?? ((_catalog != null && _currentFixture != null && _currentFixture.lineup != null) ? _catalog.ResolveLineup(_currentFixture.lineup) : null);
-            var awayAbilities = new List<(AbilityData ability, int slot, PlayerData player)>();
             for (int i = 0; i < activeAway.Length; i++)
             {
                 int s = activeAway[i];
@@ -4314,31 +4511,266 @@ namespace DiceSoccer
                     if (spId > 0)
                     {
                         var ab = _catalog?.TryGetAbility(spId);
-                        if (ab != null && IsAbilityTriggered(ab.trigger, i, originalAwayFaces, originalAwayTotal))
+                        if (ab != null && IsAbilityTriggered(ab.trigger, i, comboAwayFaces, originalAwayTotal))
                         {
-                            awayAbilities.Add((ab, i, awayLineup[s]));
+                            allAbilities.Add((1, ab, i, awayLineup[s]));
                         }
                     }
                 }
             }
 
-            // Execute Home team triggered superpowers
-            foreach (var (activeAbility, triggeringSlot, triggeringPlayer) in homeAbilities)
+            // Sort abilities across both teams by canonical execution phase (0: Intercept, 1: Reroll, 2: Anchor, 3: Buff/Debuff, 4: Cleanse/Strip/Feint, 5: ThroughPass/Dive)
+            allAbilities.Sort((a, b) =>
             {
-                int burstDie = triggeringSlot >= 0 && triggeringSlot < homeFaces.Length ? triggeringSlot : 0;
-                Vector2 burstPos = (_homeDieRoots != null && burstDie < _homeDieRoots.Length && _homeDieRoots[burstDie] != null)
-                    ? _homeDieRoots[burstDie].GetComponent<RectTransform>().anchorMin
-                    : new Vector2(0.27f, 0.50f);
+                int phaseCmp = GetAbilityExecutionPhase(a.ability).CompareTo(GetAbilityExecutionPhase(b.ability));
+                if (phaseCmp != 0) return phaseCmp;
+                int slotCmp = a.ability.slot.CompareTo(b.ability.slot);
+                if (slotCmp != 0) return slotCmp;
+                return a.side.CompareTo(b.side);
+            });
+
+            void UpdateSideDieVisual(int s, int dieIdx, int val)
+            {
+                var dImgs = (s == 0) ? _homeDice : _awayDice;
+                var cFaces = (s == 0) ? comboHomeFaces : comboAwayFaces;
+                if (dImgs != null && dieIdx >= 0 && dieIdx < dImgs.Length && dImgs[dieIdx] != null)
+                {
+                    if (val == 0 && dieIdx < cFaces.Length && cFaces[dieIdx] == 31)
+                        SetDieFace(dImgs[dieIdx], 31);
+                    else
+                        SetDieFace(dImgs[dieIdx], val);
+                }
+            }
+
+            void AdjustSideTotal(int s, int delta)
+            {
+                if (s == 0)
+                {
+                    _match.AdjustHomeTotal(delta);
+                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                }
+                else
+                {
+                    _match.AdjustAwayTotal(delta);
+                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                }
+            }
+
+            foreach (var (side, activeAbility, triggeringSlot, triggeringPlayer) in allAbilities)
+            {
+                bool isHome = (side == 0);
+                int oppSide = isHome ? 1 : 0;
+                bool isHuman = isHome || _isLocalMultiplayer;
+                string pPrefix = (!isHome && _isLocalMultiplayer) ? "P2: " : "";
+
+                int[] myFaces = isHome ? homeFaces : awayFaces;
+                int[] oppFaces = isHome ? awayFaces : homeFaces;
+                int[] myOrigFaces = isHome ? originalHomeFaces : originalAwayFaces;
+                int[] oppOrigFaces = isHome ? originalAwayFaces : originalHomeFaces;
+                int[] oppDribble = isHome ? awayDribbleBonus : homeDribbleBonus;
+                bool[] myBoosted = isHome ? homeBoosted : awayBoosted;
+                bool[] oppBoosted = isHome ? awayBoosted : homeBoosted;
+                bool[] myReduced = isHome ? homeReduced : awayReduced;
+                bool[] oppReduced = isHome ? awayReduced : homeReduced;
+                bool[] myImmune = isHome ? homeImmune : awayImmune;
+                bool[] oppImmune = isHome ? awayImmune : homeImmune;
+                bool[] myIntercepted = isHome ? homeIntercepted : awayIntercepted;
+                bool[] oppIntercepted = isHome ? awayIntercepted : homeIntercepted;
+
+                var myDieRoots = isHome ? _homeDieRoots : _awayDieRoots;
+                var oppDieRoots = isHome ? _awayDieRoots : _homeDieRoots;
+                var myDieBadges = isHome ? _homeDieBuffBadges : _awayDieBuffBadges;
+                var oppDieBadges = isHome ? _awayDieBuffBadges : _homeDieBuffBadges;
+                var myActiveSlots = isHome ? activeHome : activeAway;
+                var myLineup = isHome ? currentLineup : awayLineup;
+
+                int burstDie = triggeringSlot >= 0 && triggeringSlot < myFaces.Length ? triggeringSlot : 0;
+
+                // Skip re-roll abilities if this slot was intercepted by the opponent!
+                if (activeAbility.type == 5 && activeAbility.id != 64 && myIntercepted[burstDie])
+                {
+                    if (_buffBeltGo != null && _buffBeltText != null)
+                    {
+                        _buffBeltGo.SetActive(true);
+                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} INTERCEPTED!";
+                    }
+                    yield return new WaitForSeconds(0.45f);
+                    continue;
+                }
+
+                Vector2 burstPos = (myDieRoots != null && burstDie < myDieRoots.Length && myDieRoots[burstDie] != null)
+                    ? myDieRoots[burstDie].GetComponent<RectTransform>().anchorMin
+                    : new Vector2(isHome ? 0.27f : 0.73f, 0.50f);
 
                 string badgeSpritePath = GetTriggerBadgePath(activeAbility.trigger);
                 Sprite abilityMedalSprite = GetAbilityMedalSprite(activeAbility);
 
                 yield return StartCoroutine(PlayAbilityBurst(burstPos, badgeSpritePath, activeAbility.name));
 
-                // A. Through Pass (ID 47, 80)
-                if (activeAbility.id == 47 || activeAbility.id == 80)
+                // 0. Intercept (ID 43, 76, 77, 78, 79, 81): Remove one/all Re-rolls from opponent die(s)
+                if (activeAbility.id == 43 || (activeAbility.id >= 76 && activeAbility.id <= 79) || activeAbility.id == 81)
                 {
-                    if (_match.Possession == 0)
+                    if (oppFaces.Length > 0)
+                    {
+                        int chosenOpp = 0;
+                        if (activeAbility.target == 1)
+                        {
+                            int bestDef = 0;
+                            for (int d = 0; d < oppFaces.Length; d++)
+                            {
+                                if (oppDribble[d] > 0) { bestDef = d; break; }
+                            }
+                            if (isHuman)
+                            {
+                                if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                                {
+                                    _buffBeltGo.SetActive(true);
+                                    _buffBeltMedal.sprite = abilityMedalSprite;
+                                    _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
+                                }
+                                int[] eligible = new int[oppFaces.Length];
+                                for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
+                                yield return StartCoroutine(SelectBuffTarget(oppSide, eligible, bestDef, c => chosenOpp = c));
+                            }
+                            else chosenOpp = bestDef;
+                        }
+
+                        AudioManager.Instance.PlayDebuff();
+                        for (int d = 0; d < oppFaces.Length; d++)
+                        {
+                            if (activeAbility.target == 1 && d != chosenOpp) continue;
+                            if (oppImmune[d]) continue;
+                            oppIntercepted[d] = true;
+                            if (oppDieBadges != null && d < oppDieBadges.Length && oppDieBadges[d] != null)
+                            {
+                                oppDieBadges[d].sprite = abilityMedalSprite;
+                                oppDieBadges[d].enabled = true;
+                            }
+                            // If opponent die had a Dribble local re-roll bonus, Intercept strips it!
+                            if (oppDribble[d] > 0)
+                            {
+                                int strip = (activeAbility.id == 76) ? oppDribble[d] : Mathf.Min(oppDribble[d], 3);
+                                oppDribble[d] -= strip;
+                                oppFaces[d] = Math.Max(0, oppFaces[d] - strip);
+                                UpdateSideDieVisual(oppSide, d, oppFaces[d]);
+                                AdjustSideTotal(oppSide, -strip);
+                            }
+                        }
+                        if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                        {
+                            _buffBeltGo.SetActive(true);
+                            _buffBeltMedal.sprite = abilityMedalSprite;
+                            _buffBeltText.text = $"{activeAbility.name.ToUpper()} BLOCKED REROLLS!";
+                        }
+                        yield return new WaitForSeconds(0.65f);
+                    }
+                }
+                // 1. Anchor (ID 42, 52 single die; ID 60 whole team): Immunity to ALL abilities
+                else if (activeAbility.id == 42 || activeAbility.id == 52 || activeAbility.id == 60)
+                {
+                    int chosenOwn = 0;
+                    if (activeAbility.target == 1)
+                    {
+                        int bestOwn = 0;
+                        int maxV = -1;
+                        for (int d = 0; d < myFaces.Length; d++)
+                            if (myFaces[d] > maxV) { maxV = myFaces[d]; bestOwn = d; }
+
+                        if (isHuman)
+                        {
+                            if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                            {
+                                _buffBeltGo.SetActive(true);
+                                _buffBeltMedal.sprite = abilityMedalSprite;
+                                _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
+                            }
+                            int[] eligible = new int[myFaces.Length];
+                            for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
+                            yield return StartCoroutine(SelectBuffTarget(side, eligible, bestOwn, c => chosenOwn = c));
+                        }
+                        else chosenOwn = bestOwn;
+                    }
+
+                    AudioManager.Instance.PlayBuff();
+                    for (int d = 0; d < myFaces.Length; d++)
+                    {
+                        if (activeAbility.target == 1 && d != chosenOwn) continue;
+                        myImmune[d] = true;
+                        if (myFaces[d] < myOrigFaces[d])
+                        {
+                            int diff = myOrigFaces[d] - myFaces[d];
+                            myFaces[d] = myOrigFaces[d];
+                            UpdateSideDieVisual(side, d, myFaces[d]);
+                            AdjustSideTotal(side, diff);
+                        }
+                        if (myDieBadges != null && d < myDieBadges.Length && myDieBadges[d] != null)
+                        {
+                            myDieBadges[d].sprite = abilityMedalSprite;
+                            myDieBadges[d].enabled = true;
+                        }
+                    }
+                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                    {
+                        _buffBeltGo.SetActive(true);
+                        _buffBeltMedal.sprite = abilityMedalSprite;
+                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} IMMUNITY!";
+                    }
+                    yield return new WaitForSeconds(0.65f);
+                }
+                // 2. Saving Tackle (ID 44): Choose a die and switch its positive and negative bonuses
+                else if (activeAbility.id == 44)
+                {
+                    int bestOwn = 0;
+                    int maxReduction = 0;
+                    for (int d = 0; d < myFaces.Length; d++)
+                    {
+                        int red = myOrigFaces[d] - myFaces[d];
+                        if (red > maxReduction) { maxReduction = red; bestOwn = d; }
+                    }
+
+                    if (maxReduction > 0 || isHuman)
+                    {
+                        int chosenDie = bestOwn;
+                        if (isHuman)
+                        {
+                            if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                            {
+                                _buffBeltGo.SetActive(true);
+                                _buffBeltMedal.sprite = abilityMedalSprite;
+                                _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
+                            }
+                            int[] eligible = new int[myFaces.Length];
+                            for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
+                            yield return StartCoroutine(SelectBuffTarget(side, eligible, bestOwn, c => chosenDie = c));
+                        }
+
+                        AudioManager.Instance.PlayBuff();
+                        int oldVal = myFaces[chosenDie];
+                        int reduction = Mathf.Max(1, myOrigFaces[chosenDie] - oldVal);
+                        int newVal = myOrigFaces[chosenDie] + reduction;
+                        myFaces[chosenDie] = newVal;
+                        myReduced[chosenDie] = false;
+                        myBoosted[chosenDie] = true;
+                        UpdateSideDieVisual(side, chosenDie, newVal);
+                        if (myDieBadges != null && chosenDie < myDieBadges.Length && myDieBadges[chosenDie] != null)
+                        {
+                            myDieBadges[chosenDie].sprite = abilityMedalSprite;
+                            myDieBadges[chosenDie].enabled = true;
+                        }
+                        AdjustSideTotal(side, newVal - oldVal);
+                    }
+                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                    {
+                        _buffBeltGo.SetActive(true);
+                        _buffBeltMedal.sprite = abilityMedalSprite;
+                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} REVERSED!";
+                    }
+                    yield return new WaitForSeconds(0.65f);
+                }
+                // A. Through Pass (ID 47, 80): Instantly move forward on possession!
+                else if (activeAbility.id == 47 || activeAbility.id == 80)
+                {
+                    if (_match.Possession == side)
                     {
                         if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                         {
@@ -4346,67 +4778,100 @@ namespace DiceSoccer
                             _buffBeltMedal.sprite = abilityMedalSprite;
                             _buffBeltText.text = "THROUGH PASS! ADVANCING!";
                         }
-                        AudioManager.Instance.PlayWhistle();
+                        yield return StartCoroutine(PlayThroughPassAnimation(isHome));
                         int oldLoc = _match.Location;
-                        _match.AdvanceLocation(0);
+                        _match.AdvanceLocation(side);
                         int newLoc = _match.Location;
                         if (oldLoc != newLoc)
                         {
-                            yield return StartCoroutine(AnimateZoneTransition(oldLoc, newLoc, 0, 0));
+                            yield return StartCoroutine(AnimateZoneTransition(oldLoc, newLoc, side, side));
                         }
-                        yield return new WaitForSeconds(0.60f);
+                        yield return new WaitForSeconds(0.50f);
                     }
                 }
-                // B. Defensive Wall (ID 27, 59): +1 to all teammates
-                else if (activeAbility.id == 27 || activeAbility.id == 59)
+                // A2. Dive! (ID 26, 45): Roll the REFEREE die ([10, 32, 32, 32, 32, 32]) at the end of this play
+                else if (activeAbility.id == 26 || activeAbility.id == 45)
                 {
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
                         _buffBeltGo.SetActive(true);
                         _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} +1!";
+                        _buffBeltText.text = "DIVE! ROLLING REFEREE DIE...";
+                    }
+                    AudioManager.Instance.PlayWhistle();
+                    int[] refSides = { 10, 32, 32, 32, 32, 32 };
+                    int refRoll = refSides[UnityEngine.Random.Range(0, refSides.Length)];
+
+                    if (myDieRoots != null && burstDie < myDieRoots.Length && myDieRoots[burstDie] != null)
+                    {
+                        AudioManager.Instance.PlayDiceRoll();
+                        for (int f = 1; f <= 7; f++)
+                        {
+                            myDieRoots[burstDie].GetComponent<Image>().sprite = GetUiSprite($"Original/sprites/PlayerBody3/DiceRoll{f:00}");
+                            yield return new WaitForSeconds(0.045f);
+                        }
+                        myDieRoots[burstDie].GetComponent<Image>().sprite = GetUiSprite("Original/sprites/Buff6/DiceBackground");
+                        var dImgs = isHome ? _homeDice : _awayDice;
+                        if (dImgs != null && burstDie < dImgs.Length && dImgs[burstDie] != null)
+                            SetDieFace(dImgs[burstDie], refRoll);
+                    }
+
+                    if (refRoll == 10)
+                    {
+                        AudioManager.Instance.PlayBuff();
+                        int oldVal = myFaces[burstDie];
+                        myFaces[burstDie] = 10;
+                        myBoosted[burstDie] = true;
+                        AdjustSideTotal(side, 10 - oldVal);
+                        if (_buffBeltText != null) _buffBeltText.text = "REFEREE FOOLED! +10 FREE KICK!";
+                    }
+                    else
+                    {
+                        // Referee Whistle (32): caught diving -> +1 to all opponents (Ability 32)
+                        AudioManager.Instance.PlayDebuff();
+                        for (int d = 0; d < oppFaces.Length; d++)
+                        {
+                            oppFaces[d] += 1;
+                            UpdateSideDieVisual(oppSide, d, oppFaces[d]);
+                            AdjustSideTotal(oppSide, 1);
+                        }
+                        if (_buffBeltText != null) _buffBeltText.text = "CAUGHT DIVING! +1 TO OPPONENTS!";
+                    }
+                    yield return new WaitForSeconds(0.70f);
+                }
+                // B. Defensive Wall (ID 27, 59: +1 to all teammates) or +5 (ID 64)
+                else if (activeAbility.id == 27 || activeAbility.id == 59 || activeAbility.id == 64)
+                {
+                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                    {
+                        _buffBeltGo.SetActive(true);
+                        _buffBeltMedal.sprite = abilityMedalSprite;
+                        _buffBeltText.text = (activeAbility.id == 64) ? "+5 TRIPLE BONUS!" : $"{activeAbility.name.ToUpper()} +1!";
                     }
                     AudioManager.Instance.PlayBuff();
-                    for (int d = 0; d < homeFaces.Length; d++)
+                    if (activeAbility.id == 64)
                     {
-                        homeFaces[d] += 1;
-                        if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null)
-                            SetDieFace(_homeDice[d], homeFaces[d]);
-                        if (_homeDieBuffBadges != null && d < _homeDieBuffBadges.Length && _homeDieBuffBadges[d] != null)
+                        AdjustSideTotal(side, 5);
+                    }
+                    else
+                    {
+                        for (int d = 0; d < myFaces.Length; d++)
                         {
-                            _homeDieBuffBadges[d].sprite = abilityMedalSprite;
-                            _homeDieBuffBadges[d].enabled = true;
+                            myFaces[d] += 1;
+                            myBoosted[d] = true;
+                            UpdateSideDieVisual(side, d, myFaces[d]);
+                            if (myDieBadges != null && d < myDieBadges.Length && myDieBadges[d] != null)
+                            {
+                                myDieBadges[d].sprite = abilityMedalSprite;
+                                myDieBadges[d].enabled = true;
+                            }
+                            AdjustSideTotal(side, 1);
                         }
-                        _match.AdjustHomeTotal(1);
                     }
-                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
                     yield return new WaitForSeconds(0.70f);
                 }
-                // C. Dribble +1, +2, +3 (ID 16, 17, 18)
-                else if (activeAbility.id >= 16 && activeAbility.id <= 18)
-                {
-                    int bonus = activeAbility.id - 15;
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = $"DRIBBLE +{bonus}!";
-                    }
-                    AudioManager.Instance.PlayPowerup(2);
-                    homeFaces[burstDie] += bonus;
-                    if (_homeDice != null && burstDie < _homeDice.Length && _homeDice[burstDie] != null)
-                        SetDieFace(_homeDice[burstDie], homeFaces[burstDie]);
-                    if (_homeDieBuffBadges != null && burstDie < _homeDieBuffBadges.Length && _homeDieBuffBadges[burstDie] != null)
-                    {
-                        _homeDieBuffBadges[burstDie].sprite = abilityMedalSprite;
-                        _homeDieBuffBadges[burstDie].enabled = true;
-                    }
-                    _match.AdjustHomeTotal(bonus);
-                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                    yield return new WaitForSeconds(0.70f);
-                }
-                // D. Team-wide Debuffs against Opponent (Target == 2, e.g. Sliding Tackle ID 20, 36; Clearance ID 35; Offside Trap ID 38)
-                else if (activeAbility.type == 0 && activeAbility.target == 2 && awayFaces.Length > 0)
+                // D. Team-wide Debuffs against Opponent (Target == 2: Sliding Tackle ID 20, 36; Clearance ID 35; Offside Trap ID 38)
+                else if (activeAbility.type == 0 && activeAbility.target == 2 && oppFaces.Length > 0)
                 {
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
@@ -4416,738 +4881,389 @@ namespace DiceSoccer
                     }
                     AudioManager.Instance.PlayDebuff();
                     int teamRed = (activeAbility.id == 20) ? 3 : ((activeAbility.id == 36) ? 2 : 1);
-                    for (int d = 0; d < awayFaces.Length; d++)
+                    for (int d = 0; d < oppFaces.Length; d++)
                     {
-                        int oldVal = awayFaces[d];
+                        if (oppImmune[d]) continue;
+                        int oldVal = oppFaces[d];
                         int newVal = (activeAbility.id == 38) ? Mathf.FloorToInt(oldVal / 2f) : Math.Max(0, oldVal - teamRed);
-                        awayFaces[d] = newVal;
-                        awayReduced[d] = true;
-                        if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null)
-                            SetDieFace(_awayDice[d], newVal);
-                        if (_awayDieBuffBadges != null && d < _awayDieBuffBadges.Length && _awayDieBuffBadges[d] != null)
+                        oppFaces[d] = newVal;
+                        oppReduced[d] = true;
+                        UpdateSideDieVisual(oppSide, d, newVal);
+                        if (oppDieBadges != null && d < oppDieBadges.Length && oppDieBadges[d] != null)
                         {
-                            _awayDieBuffBadges[d].sprite = abilityMedalSprite;
-                            _awayDieBuffBadges[d].enabled = true;
+                            oppDieBadges[d].sprite = abilityMedalSprite;
+                            oppDieBadges[d].enabled = true;
                         }
-                        _match.AdjustAwayTotal(newVal - oldVal);
+                        AdjustSideTotal(oppSide, newVal - oldVal);
                     }
-                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
                     yield return new WaitForSeconds(0.70f);
                 }
                 // E. Multiplier (Critical Striker x2, Bicycle Kick x3, Critical Striker x4)
                 else if (activeAbility.id == 21 || activeAbility.id == 39 || activeAbility.id == 40 || activeAbility.id == 54 || activeAbility.id == 66 || activeAbility.id == 74 || activeAbility.id == 75)
                 {
                     int multiplier = (activeAbility.id == 21) ? 4 : ((activeAbility.id == 40) ? 3 : 2);
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = "PLEASE SELECT TARGET";
-                    }
-
-                    int[] eligible = new int[homeFaces.Length];
-                    for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
-
                     int bestDie = 0;
                     int maxVal = -1;
-                    for (int d = 0; d < homeFaces.Length; d++)
-                        if (homeFaces[d] > maxVal) { maxVal = homeFaces[d]; bestDie = d; }
+                    for (int d = 0; d < myFaces.Length; d++)
+                        if (myFaces[d] > maxVal) { maxVal = myFaces[d]; bestDie = d; }
 
-                    int chosenDie = -1;
-                    yield return StartCoroutine(SelectBuffTarget(0, eligible, bestDie, chosen => chosenDie = chosen));
-
-                    if (chosenDie >= 0 && chosenDie < homeFaces.Length)
-                    {
-                        if (_homeDieBuffBadges != null && chosenDie < _homeDieBuffBadges.Length && _homeDieBuffBadges[chosenDie] != null)
-                        {
-                            _homeDieBuffBadges[chosenDie].sprite = abilityMedalSprite;
-                            _homeDieBuffBadges[chosenDie].enabled = true;
-                        }
-
-                        AudioManager.Instance.PlayPowerup(1);
-                        AudioManager.Instance.PlayBuff();
-
-                        if (_homeDieRoots != null && chosenDie < _homeDieRoots.Length && _homeDieRoots[chosenDie] != null)
-                        {
-                            for (int f = 0; f < 6; f++)
-                            {
-                                float p = f / 5f;
-                                float punch = 1f + Mathf.Sin(p * Mathf.PI) * 0.32f;
-                                _homeDieRoots[chosenDie].transform.localScale = new Vector3(punch, punch, 1f);
-                                yield return new WaitForSeconds(0.025f);
-                            }
-                            _homeDieRoots[chosenDie].transform.localScale = Vector3.one;
-                        }
-
-                        int originalVal = homeFaces[chosenDie];
-                        int boost = originalVal * (multiplier - 1);
-                        homeFaces[chosenDie] *= multiplier;
-                        homeBoosted[chosenDie] = true;
-                        if (_homeDice != null && chosenDie < _homeDice.Length && _homeDice[chosenDie] != null)
-                            SetDieFace(_homeDice[chosenDie], homeFaces[chosenDie]);
-
-                        _match.AdjustHomeTotal(boost);
-                        if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                        if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} x{multiplier}!";
-                        yield return new WaitForSeconds(0.70f);
-                    }
-                }
-                // F. Reroll (BuffType 5, e.g. Assist on 1/2, Parry on 3/4, Perfect Cross on 3)
-                else if (activeAbility.type == 5)
-                {
-                    int rerollCount = (activeAbility.id == 25) ? Mathf.Min(2, homeFaces.Length) : 1;
-                    for (int r = 0; r < rerollCount; r++)
+                    int chosenDie = bestDie;
+                    if (isHuman)
                     {
                         if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                         {
                             _buffBeltGo.SetActive(true);
                             _buffBeltMedal.sprite = abilityMedalSprite;
-                            _buffBeltText.text = (rerollCount > 1) ? $"SELECT DIE {r + 1} OF {rerollCount}" : "PLEASE SELECT TARGET";
+                            _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
+                        }
+                        int[] eligible = new int[myFaces.Length];
+                        for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
+                        yield return StartCoroutine(SelectBuffTarget(side, eligible, bestDie, chosen => chosenDie = chosen));
+                    }
+
+                    if (chosenDie >= 0 && chosenDie < myFaces.Length)
+                    {
+                        if (myDieBadges != null && chosenDie < myDieBadges.Length && myDieBadges[chosenDie] != null)
+                        {
+                            myDieBadges[chosenDie].sprite = abilityMedalSprite;
+                            myDieBadges[chosenDie].enabled = true;
                         }
 
-                        int[] eligible = new int[homeFaces.Length];
-                        for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
+                        AudioManager.Instance.PlayPowerup(1);
+                        AudioManager.Instance.PlayBuff();
 
+                        if (myDieRoots != null && chosenDie < myDieRoots.Length && myDieRoots[chosenDie] != null)
+                        {
+                            for (int f = 0; f < 6; f++)
+                            {
+                                float p = f / 5f;
+                                float punch = 1f + Mathf.Sin(p * Mathf.PI) * 0.32f;
+                                myDieRoots[chosenDie].transform.localScale = new Vector3(punch, punch, 1f);
+                                yield return new WaitForSeconds(0.025f);
+                            }
+                            myDieRoots[chosenDie].transform.localScale = Vector3.one;
+                        }
+
+                        int originalVal = myFaces[chosenDie];
+                        int boost = originalVal * (multiplier - 1);
+                        myFaces[chosenDie] *= multiplier;
+                        myBoosted[chosenDie] = true;
+                        UpdateSideDieVisual(side, chosenDie, myFaces[chosenDie]);
+
+                        AdjustSideTotal(side, boost);
+                        if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} x{multiplier}!";
+                        yield return new WaitForSeconds(0.70f);
+                    }
+                }
+                // F. Reroll (BuffType 5: Assist ID 23/61/63, Cross ID 24, Parry ID 51/62, Perfect Cross ID 25)
+                else if (activeAbility.type == 5 && myFaces.Length > 0)
+                {
+                    int rerollCount = (activeAbility.id == 25) ? Mathf.Min(2, myFaces.Length) : 1;
+                    for (int r = 0; r < rerollCount; r++)
+                    {
                         int bestDie = 0;
                         int minVal = 999;
-                        for (int d = 0; d < homeFaces.Length; d++)
-                            if (homeFaces[d] < minVal) { minVal = homeFaces[d]; bestDie = d; }
+                        for (int d = 0; d < myFaces.Length; d++)
+                            if (myFaces[d] < minVal) { minVal = myFaces[d]; bestDie = d; }
 
-                        int chosenDie = -1;
-                        yield return StartCoroutine(SelectBuffTarget(0, eligible, bestDie, chosen => chosenDie = chosen));
-
-                        if (chosenDie >= 0 && chosenDie < homeFaces.Length)
+                        int chosenDie = bestDie;
+                        if (isHuman)
                         {
-                            if (_homeDieBuffBadges != null && chosenDie < _homeDieBuffBadges.Length && _homeDieBuffBadges[chosenDie] != null)
+                            if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                             {
-                                _homeDieBuffBadges[chosenDie].sprite = abilityMedalSprite;
-                                _homeDieBuffBadges[chosenDie].enabled = true;
+                                _buffBeltGo.SetActive(true);
+                                _buffBeltMedal.sprite = abilityMedalSprite;
+                                _buffBeltText.text = (rerollCount > 1)
+                                    ? $"{pPrefix}SELECT DIE {r + 1} OF {rerollCount}"
+                                    : $"{pPrefix}PLEASE SELECT TARGET";
+                            }
+                            int[] eligible = new int[myFaces.Length];
+                            for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
+                            yield return StartCoroutine(SelectBuffTarget(side, eligible, bestDie, chosen => chosenDie = chosen));
+                        }
+
+                        if (chosenDie >= 0 && chosenDie < myFaces.Length)
+                        {
+                            if (myDieBadges != null && chosenDie < myDieBadges.Length && myDieBadges[chosenDie] != null)
+                            {
+                                myDieBadges[chosenDie].sprite = abilityMedalSprite;
+                                myDieBadges[chosenDie].enabled = true;
                             }
 
                             AudioManager.Instance.PlayDiceRoll();
                             for (int f = 1; f <= 7; f++)
                             {
                                 var rollSprite = GetUiSprite($"Original/sprites/PlayerBody3/DiceRoll{f:00}");
-                                if (_homeDieRoots != null && _homeDieRoots[chosenDie] != null)
-                                    _homeDieRoots[chosenDie].GetComponent<Image>().sprite = rollSprite;
+                                if (myDieRoots != null && myDieRoots[chosenDie] != null)
+                                    myDieRoots[chosenDie].GetComponent<Image>().sprite = rollSprite;
                                 yield return new WaitForSeconds(0.045f);
                             }
-                            if (_homeDieRoots != null && _homeDieRoots[chosenDie] != null)
-                                _homeDieRoots[chosenDie].GetComponent<Image>().sprite = GetUiSprite("Original/sprites/Buff6/DiceBackground");
+                            if (myDieRoots != null && myDieRoots[chosenDie] != null)
+                                myDieRoots[chosenDie].GetComponent<Image>().sprite = GetUiSprite("Original/sprites/Buff6/DiceBackground");
 
-                            int oldVal = homeFaces[chosenDie];
-                            int newVal = UnityEngine.Random.Range(2, 7);
-                            homeFaces[chosenDie] = newVal;
-                            if (_homeDice != null && chosenDie < _homeDice.Length && _homeDice[chosenDie] != null)
-                                SetDieFace(_homeDice[chosenDie], newVal);
+                            PlayerData targetPlayer = (myLineup != null && chosenDie < myActiveSlots.Length && myActiveSlots[chosenDie] < myLineup.Length)
+                                ? myLineup[myActiveSlots[chosenDie]] : triggeringPlayer;
+                            int oldVal = myFaces[chosenDie];
+                            int newVal = RollSinglePlayerDieValue(targetPlayer);
+                            myFaces[chosenDie] = newVal;
+                            myOrigFaces[chosenDie] = newVal;
+                            UpdateSideDieVisual(side, chosenDie, newVal);
 
-                            _match.AdjustHomeTotal(newVal - oldVal);
-                            if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                            AdjustSideTotal(side, newVal - oldVal);
                             if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} REROLLED TO {newVal}!";
                             yield return new WaitForSeconds(0.60f);
                         }
                     }
                 }
-                // G. Single-die Tackle / Debuff (BuffType 0, Target 1)
-                else if (activeAbility.type == 0 && activeAbility.target == 1 && awayFaces.Length > 0)
+                // G. Single-die Tackle / Debuff (BuffType 0, Target 1: Tackle -1, Hard Tackle -2/-3, Charge /2)
+                else if (activeAbility.type == 0 && activeAbility.target == 1 && oppFaces.Length > 0 && activeAbility.id != 41)
                 {
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = "PLEASE SELECT TARGET";
-                    }
-
-                    int[] awayEligible = new int[awayFaces.Length];
-                    for (int e = 0; e < awayEligible.Length; e++) awayEligible[e] = e;
-
                     int bestDie = 0;
                     int maxVal = -1;
-                    for (int d = 0; d < awayFaces.Length; d++)
-                        if (awayFaces[d] > maxVal) { maxVal = awayFaces[d]; bestDie = d; }
+                    for (int d = 0; d < oppFaces.Length; d++)
+                        if (!oppImmune[d] && oppFaces[d] > maxVal) { maxVal = oppFaces[d]; bestDie = d; }
 
-                    int chosenDie = -1;
-                    yield return StartCoroutine(SelectBuffTarget(1, awayEligible, bestDie, chosen => chosenDie = chosen));
-
-                    if (chosenDie >= 0 && chosenDie < awayFaces.Length)
+                    int chosenDie = bestDie;
+                    if (isHuman)
                     {
-                        if (_awayDieBuffBadges != null && chosenDie < _awayDieBuffBadges.Length && _awayDieBuffBadges[chosenDie] != null)
+                        if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                         {
-                            _awayDieBuffBadges[chosenDie].sprite = abilityMedalSprite;
-                            _awayDieBuffBadges[chosenDie].enabled = true;
+                            _buffBeltGo.SetActive(true);
+                            _buffBeltMedal.sprite = abilityMedalSprite;
+                            _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
+                        }
+                        int[] oppEligible = new int[oppFaces.Length];
+                        for (int e = 0; e < oppEligible.Length; e++) oppEligible[e] = e;
+                        yield return StartCoroutine(SelectBuffTarget(oppSide, oppEligible, bestDie, chosen => chosenDie = chosen));
+                    }
+
+                    if (chosenDie >= 0 && chosenDie < oppFaces.Length && !oppImmune[chosenDie])
+                    {
+                        if (oppDieBadges != null && chosenDie < oppDieBadges.Length && oppDieBadges[chosenDie] != null)
+                        {
+                            oppDieBadges[chosenDie].sprite = abilityMedalSprite;
+                            oppDieBadges[chosenDie].enabled = true;
                         }
 
                         AudioManager.Instance.PlayTap();
-                        int oldVal = awayFaces[chosenDie];
+                        int oldVal = oppFaces[chosenDie];
                         int reduction = 1;
-                        if (activeAbility.id == 19 || activeAbility.id == 70) reduction = 3;
-                        else if (activeAbility.id == 34 || activeAbility.id == 69 || activeAbility.id == 71) reduction = 2;
+                        if (activeAbility.id == 19) reduction = 3;
+                        else if (activeAbility.id == 34 || activeAbility.id == 69 || activeAbility.id == 70 || activeAbility.id == 71) reduction = 2;
                         else if (activeAbility.id == 37 || activeAbility.id == 72 || activeAbility.id == 73) reduction = Mathf.CeilToInt(oldVal / 2f);
 
                         int newVal = Math.Max(0, oldVal - reduction);
-                        awayFaces[chosenDie] = newVal;
-                        awayReduced[chosenDie] = true;
-                        if (_awayDice != null && chosenDie < _awayDice.Length && _awayDice[chosenDie] != null)
-                            SetDieFace(_awayDice[chosenDie], newVal);
+                        oppFaces[chosenDie] = newVal;
+                        oppReduced[chosenDie] = true;
+                        UpdateSideDieVisual(oppSide, chosenDie, newVal);
 
-                        _match.AdjustAwayTotal(newVal - oldVal);
-                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                        AdjustSideTotal(oppSide, newVal - oldVal);
                         if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} -{reduction}!";
                         yield return new WaitForSeconds(0.70f);
                     }
                 }
-                // H. Feint / Swaps (BuffType 3: ID 46, 49, 50, 55)
-                else if (activeAbility.type == 3 && awayFaces.Length > 0)
+                // H. Feint (BuffType 3: ID 46, 49, 50, 55): Steal opposite enemy's +ve and give him your -ve
+                else if (activeAbility.type == 3 && oppFaces.Length > 0 && myFaces.Length > 0)
                 {
+                    int chosenMyDie = 0;
+                    if (activeAbility.id != 49) // Single die target
+                    {
+                        int bestMyDie = 0;
+                        int bestGain = -999;
+                        for (int d = 0; d < myFaces.Length; d++)
+                        {
+                            int oppD = Mathf.Min(d, oppFaces.Length - 1);
+                            int myNeg = Mathf.Max(0, myOrigFaces[d] - myFaces[d]);
+                            int oppPos = oppImmune[oppD] ? 0 : Mathf.Max(0, oppFaces[oppD] - oppOrigFaces[oppD]);
+                            int gain = (myNeg + oppPos > 0) ? (myNeg + oppPos) : (oppFaces[oppD] - myFaces[d]);
+                            if (gain > bestGain) { bestGain = gain; bestMyDie = d; }
+                        }
+
+                        chosenMyDie = bestMyDie;
+                        if (isHuman)
+                        {
+                            if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                            {
+                                _buffBeltGo.SetActive(true);
+                                _buffBeltMedal.sprite = abilityMedalSprite;
+                                _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
+                            }
+                            int[] eligible = new int[myFaces.Length];
+                            for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
+                            yield return StartCoroutine(SelectBuffTarget(side, eligible, bestMyDie, chosen => chosenMyDie = chosen));
+                        }
+                    }
+
+                    AudioManager.Instance.PlayTransform();
+                    for (int d = 0; d < myFaces.Length; d++)
+                    {
+                        if (activeAbility.id != 49 && d != chosenMyDie) continue;
+                        int oppD = Mathf.Min(d, oppFaces.Length - 1);
+                        if (oppImmune[oppD]) continue;
+
+                        int myOld = myFaces[d];
+                        int oppOld = oppFaces[oppD];
+                        int myNeg = Mathf.Max(0, myOrigFaces[d] - myOld);
+                        int oppPos = Mathf.Max(0, oppOld - oppOrigFaces[oppD]);
+
+                        int myNew = myOld;
+                        int oppNew = oppOld;
+
+                        if (myNeg > 0 || oppPos > 0)
+                        {
+                            // Authentic Feint formula: steal opposite enemy's +ve bonus and give him your -ve reduction
+                            myNew = myOld + myNeg + oppPos;
+                            oppNew = Math.Max(0, oppOld - oppPos - myNeg);
+                            myReduced[d] = false;
+                            if (oppPos > 0) { myBoosted[d] = true; oppBoosted[oppD] = false; }
+                            if (myNeg > 0) oppReduced[oppD] = true;
+                        }
+                        else if (oppOld > myOld)
+                        {
+                            myNew = oppOld;
+                            oppNew = myOld;
+                        }
+
+                        if (myNew != myOld || oppNew != oppOld)
+                        {
+                            myFaces[d] = myNew;
+                            oppFaces[oppD] = oppNew;
+                            UpdateSideDieVisual(side, d, myNew);
+                            UpdateSideDieVisual(oppSide, oppD, oppNew);
+                            if (myDieBadges != null && d < myDieBadges.Length && myDieBadges[d] != null)
+                            {
+                                myDieBadges[d].sprite = abilityMedalSprite;
+                                myDieBadges[d].enabled = true;
+                            }
+                            AdjustSideTotal(side, myNew - myOld);
+                            AdjustSideTotal(oppSide, oppNew - oppOld);
+                        }
+                    }
+
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
                         _buffBeltGo.SetActive(true);
                         _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = (activeAbility.id == 49) ? $"{activeAbility.name.ToUpper()}!" : "PLEASE SELECT TARGET";
+                        _buffBeltText.text = $"{activeAbility.name.ToUpper()}!";
                     }
-
-                    if (activeAbility.id == 49) // Team swap
-                    {
-                        AudioManager.Instance.PlayTransform();
-                        for (int d = 0; d < Mathf.Min(homeFaces.Length, awayFaces.Length); d++)
-                        {
-                            if (awayFaces[d] > homeFaces[d])
-                            {
-                                int temp = homeFaces[d];
-                                homeFaces[d] = awayFaces[d];
-                                awayFaces[d] = temp;
-                                if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null) SetDieFace(_homeDice[d], homeFaces[d]);
-                                if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null) SetDieFace(_awayDice[d], awayFaces[d]);
-                                _match.AdjustHomeTotal(homeFaces[d] - temp);
-                                _match.AdjustAwayTotal(temp - homeFaces[d]);
-                            }
-                        }
-                    }
-                    else // Single swap: player chooses own die to swap with opposite/highest enemy die
-                    {
-                        int[] eligible = new int[homeFaces.Length];
-                        for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
-                        int minHomeDie = 0;
-                        int minHVal = 999;
-                        for (int d = 0; d < homeFaces.Length; d++)
-                            if (homeFaces[d] < minHVal) { minHVal = homeFaces[d]; minHomeDie = d; }
-
-                        int chosenHomeDie = -1;
-                        yield return StartCoroutine(SelectBuffTarget(0, eligible, minHomeDie, chosen => chosenHomeDie = chosen));
-                        if (chosenHomeDie < 0 || chosenHomeDie >= homeFaces.Length) chosenHomeDie = minHomeDie;
-
-                        int oppAwayDie = Mathf.Min(chosenHomeDie, awayFaces.Length - 1);
-                        int maxAwayDie = oppAwayDie;
-                        int maxAVal = awayFaces[oppAwayDie];
-                        for (int d = 0; d < awayFaces.Length; d++)
-                            if (awayFaces[d] > maxAVal) { maxAVal = awayFaces[d]; maxAwayDie = d; }
-
-                        AudioManager.Instance.PlayTransform();
-                        int hVal = homeFaces[chosenHomeDie];
-                        int aVal = awayFaces[maxAwayDie];
-                        homeFaces[chosenHomeDie] = aVal;
-                        awayFaces[maxAwayDie] = hVal;
-                        if (_homeDice != null && chosenHomeDie < _homeDice.Length && _homeDice[chosenHomeDie] != null) SetDieFace(_homeDice[chosenHomeDie], aVal);
-                        if (_awayDice != null && maxAwayDie < _awayDice.Length && _awayDice[maxAwayDie] != null) SetDieFace(_awayDice[maxAwayDie], hVal);
-                        if (_homeDieBuffBadges != null && chosenHomeDie < _homeDieBuffBadges.Length && _homeDieBuffBadges[chosenHomeDie] != null)
-                        {
-                            _homeDieBuffBadges[chosenHomeDie].sprite = abilityMedalSprite;
-                            _homeDieBuffBadges[chosenHomeDie].enabled = true;
-                        }
-                        _match.AdjustHomeTotal(aVal - hVal);
-                        _match.AdjustAwayTotal(hVal - aVal);
-                        if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()}!";
-                    }
-
-                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
                     yield return new WaitForSeconds(0.70f);
                 }
                 // I. Clear Reductions (Step-Over ID 28, 29, 30; Shielding ID 48)
-                else if (activeAbility.id == 28 || activeAbility.id == 29 || activeAbility.id == 30 || activeAbility.id == 48 || (activeAbility.type == 1 && activeAbility.id != 21))
+                else if (activeAbility.id == 28 || activeAbility.id == 29 || activeAbility.id == 30 || activeAbility.id == 48)
                 {
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = (activeAbility.id == 48) ? "PLEASE SELECT TARGET" : $"{activeAbility.name.ToUpper()} CLEARED REDUCTIONS!";
-                    }
-
-                    int chosenShieldDie = -1;
+                    int chosenShieldDie = 0;
                     if (activeAbility.id == 48)
                     {
-                        int[] eligible = new int[homeFaces.Length];
-                        for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
                         int bestDef = 0;
                         int maxLoss = -1;
-                        for (int d = 0; d < homeFaces.Length; d++)
+                        for (int d = 0; d < myFaces.Length; d++)
                         {
-                            int loss = originalHomeFaces[d] - homeFaces[d];
+                            int loss = myOrigFaces[d] - myFaces[d];
                             if (loss > maxLoss) { maxLoss = loss; bestDef = d; }
                         }
-                        yield return StartCoroutine(SelectBuffTarget(0, eligible, bestDef, chosen => chosenShieldDie = chosen));
+                        chosenShieldDie = bestDef;
+                        if (isHuman)
+                        {
+                            if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                            {
+                                _buffBeltGo.SetActive(true);
+                                _buffBeltMedal.sprite = abilityMedalSprite;
+                                _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
+                            }
+                            int[] eligible = new int[myFaces.Length];
+                            for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
+                            yield return StartCoroutine(SelectBuffTarget(side, eligible, bestDef, chosen => chosenShieldDie = chosen));
+                        }
                     }
 
                     AudioManager.Instance.PlayBuff();
-
                     int totalRestored = 0;
-                    for (int d = 0; d < homeFaces.Length; d++)
+                    for (int d = 0; d < myFaces.Length; d++)
                     {
-                        if (activeAbility.id == 48 && chosenShieldDie >= 0 && d != chosenShieldDie) continue;
-                        if (homeFaces[d] < originalHomeFaces[d])
+                        if (activeAbility.id == 48 && d != chosenShieldDie) continue;
+                        if (myFaces[d] < myOrigFaces[d])
                         {
-                            int diff = originalHomeFaces[d] - homeFaces[d];
-                            homeFaces[d] = originalHomeFaces[d];
+                            int diff = myOrigFaces[d] - myFaces[d];
+                            myFaces[d] = myOrigFaces[d];
+                            myReduced[d] = false;
                             totalRestored += diff;
-                            if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null) SetDieFace(_homeDice[d], homeFaces[d]);
-                            if (_homeDieBuffBadges != null && d < _homeDieBuffBadges.Length && _homeDieBuffBadges[d] != null)
+                            UpdateSideDieVisual(side, d, myFaces[d]);
+                            if (myDieBadges != null && d < myDieBadges.Length && myDieBadges[d] != null)
                             {
-                                _homeDieBuffBadges[d].sprite = abilityMedalSprite;
-                                _homeDieBuffBadges[d].enabled = true;
+                                myDieBadges[d].sprite = abilityMedalSprite;
+                                myDieBadges[d].enabled = true;
                             }
-                            if (activeAbility.id == 48) break;
                         }
                     }
-                    if (totalRestored > 0)
-                    {
-                        _match.AdjustHomeTotal(totalRestored);
-                        if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                    }
-                    if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} CLEARED REDUCTIONS!";
-                    yield return new WaitForSeconds(0.70f);
-                }
-                // J. Strip Bonuses / Marking (BuffType 4: Man Marking ID 41, 56, 58; Zonal Marking ID 22, 57)
-                else if (activeAbility.type == 4 && awayFaces.Length > 0)
-                {
+                    if (totalRestored > 0) AdjustSideTotal(side, totalRestored);
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
                         _buffBeltGo.SetActive(true);
                         _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = (activeAbility.target == 1) ? "PLEASE SELECT TARGET" : $"{activeAbility.name.ToUpper()} STRIPPED BONUSES!";
+                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} CLEARED REDUCTIONS!";
                     }
-
-                    int chosenMarkDie = -1;
+                    yield return new WaitForSeconds(0.70f);
+                }
+                // J. Strip Bonuses / Marking (Man Marking ID 41, 56, 58; Zonal Marking ID 22, 57)
+                else if ((activeAbility.type == 4 || activeAbility.id == 41) && oppFaces.Length > 0)
+                {
+                    int chosenMarkDie = 0;
                     if (activeAbility.target == 1)
                     {
-                        int[] awayEligible = new int[awayFaces.Length];
-                        for (int e = 0; e < awayEligible.Length; e++) awayEligible[e] = e;
                         int bestDef = 0;
                         int maxGain = -1;
-                        for (int d = 0; d < awayFaces.Length; d++)
+                        for (int d = 0; d < oppFaces.Length; d++)
                         {
-                            int gain = awayFaces[d] - originalAwayFaces[d];
-                            if (gain > maxGain) { maxGain = gain; bestDef = d; }
+                            int gain = oppFaces[d] - oppOrigFaces[d];
+                            if (!oppImmune[d] && gain > maxGain) { maxGain = gain; bestDef = d; }
                         }
-                        yield return StartCoroutine(SelectBuffTarget(1, awayEligible, bestDef, chosen => chosenMarkDie = chosen));
+                        chosenMarkDie = bestDef;
+                        if (isHuman)
+                        {
+                            if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                            {
+                                _buffBeltGo.SetActive(true);
+                                _buffBeltMedal.sprite = abilityMedalSprite;
+                                _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
+                            }
+                            int[] oppEligible = new int[oppFaces.Length];
+                            for (int e = 0; e < oppEligible.Length; e++) oppEligible[e] = e;
+                            yield return StartCoroutine(SelectBuffTarget(oppSide, oppEligible, bestDef, chosen => chosenMarkDie = chosen));
+                        }
                     }
 
                     AudioManager.Instance.PlayDebuff();
-
                     int totalStripped = 0;
-                    for (int d = 0; d < awayFaces.Length; d++)
+                    for (int d = 0; d < oppFaces.Length; d++)
                     {
-                        if (activeAbility.target == 1 && chosenMarkDie >= 0 && d != chosenMarkDie) continue;
-                        if (awayFaces[d] > originalAwayFaces[d] || awayBoosted[d])
+                        if (activeAbility.target == 1 && d != chosenMarkDie) continue;
+                        if (oppImmune[d]) continue;
+                        if (oppFaces[d] > oppOrigFaces[d] || oppBoosted[d])
                         {
-                            int diff = awayFaces[d] - originalAwayFaces[d];
-                            awayFaces[d] = originalAwayFaces[d];
-                            awayBoosted[d] = false;
+                            int diff = Mathf.Max(0, oppFaces[d] - oppOrigFaces[d]);
+                            oppFaces[d] = oppOrigFaces[d];
+                            oppBoosted[d] = false;
                             totalStripped += diff;
-                            if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null) SetDieFace(_awayDice[d], awayFaces[d]);
-                            if (_awayDieBuffBadges != null && d < _awayDieBuffBadges.Length && _awayDieBuffBadges[d] != null)
+                            UpdateSideDieVisual(oppSide, d, oppFaces[d]);
+                            if (oppDieBadges != null && d < oppDieBadges.Length && oppDieBadges[d] != null)
                             {
-                                _awayDieBuffBadges[d].sprite = abilityMedalSprite;
-                                _awayDieBuffBadges[d].enabled = true;
+                                oppDieBadges[d].sprite = abilityMedalSprite;
+                                oppDieBadges[d].enabled = true;
                             }
-                            if (activeAbility.target == 1) break;
                         }
                     }
-                    if (totalStripped > 0)
-                    {
-                        _match.AdjustAwayTotal(-totalStripped);
-                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
-                    }
-                    if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} STRIPPED BONUSES!";
-                    yield return new WaitForSeconds(0.70f);
-                }
-                else
-                {
-                    // Generic activation notice
+                    if (totalStripped > 0) AdjustSideTotal(oppSide, -totalStripped);
                     if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
                     {
                         _buffBeltGo.SetActive(true);
                         _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} ACTIVATED!";
+                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} STRIPPED BONUSES!";
                     }
-                    yield return new WaitForSeconds(0.50f);
+                    yield return new WaitForSeconds(0.70f);
                 }
             }
 
-            // Execute Away (CPU AI or P2 in Local Multiplayer) triggered superpowers with 100% symmetrical capabilities
-            foreach (var (awayAbility, awayTriggeringSlot, awayTriggeringPlayer) in awayAbilities)
-            {
-                int burstDie = awayTriggeringSlot >= 0 && awayTriggeringSlot < awayFaces.Length ? awayTriggeringSlot : 0;
-                Vector2 burstPos = (_awayDieRoots != null && burstDie < _awayDieRoots.Length && _awayDieRoots[burstDie] != null)
-                    ? _awayDieRoots[burstDie].GetComponent<RectTransform>().anchorMin
-                    : new Vector2(0.73f, 0.50f);
-
-                string badgeSpritePath = GetTriggerBadgePath(awayAbility.trigger);
-                Sprite awayMedalSprite = GetAbilityMedalSprite(awayAbility);
-
-                yield return StartCoroutine(PlayAbilityBurst(burstPos, badgeSpritePath, awayAbility.name));
-
-                if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                {
-                    _buffBeltGo.SetActive(true);
-                    _buffBeltMedal.sprite = awayMedalSprite;
-                    _buffBeltText.text = $"{awayAbility.name.ToUpper()} ACTIVATED!";
-                }
-
-                // Symmetrical Away executions:
-                // A. Through Pass (ID 47, 80)
-                if (awayAbility.id == 47 || awayAbility.id == 80)
-                {
-                    if (_match.Possession == 1)
-                    {
-                        AudioManager.Instance.PlayWhistle();
-                        int oldLoc = _match.Location;
-                        _match.AdvanceLocation(1);
-                        int newLoc = _match.Location;
-                        if (oldLoc != newLoc)
-                        {
-                            yield return StartCoroutine(AnimateZoneTransition(oldLoc, newLoc, 1, 1));
-                        }
-                        yield return new WaitForSeconds(0.60f);
-                    }
-                }
-                // B. Defensive Wall (ID 27, 59): +1 to all teammates
-                else if (awayAbility.id == 27 || awayAbility.id == 59)
-                {
-                    AudioManager.Instance.PlayBuff();
-                    for (int d = 0; d < awayFaces.Length; d++)
-                    {
-                        awayFaces[d] += 1;
-                        if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null)
-                            SetDieFace(_awayDice[d], awayFaces[d]);
-                        if (_awayDieBuffBadges != null && d < _awayDieBuffBadges.Length && _awayDieBuffBadges[d] != null)
-                        {
-                            _awayDieBuffBadges[d].sprite = awayMedalSprite;
-                            _awayDieBuffBadges[d].enabled = true;
-                        }
-                        _match.AdjustAwayTotal(1);
-                    }
-                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
-                    yield return new WaitForSeconds(0.70f);
-                }
-                // C. Dribble +1, +2, +3 (ID 16, 17, 18)
-                else if (awayAbility.id >= 16 && awayAbility.id <= 18)
-                {
-                    int bonus = awayAbility.id - 15;
-                    AudioManager.Instance.PlayPowerup(2);
-                    awayFaces[burstDie] += bonus;
-                    if (_awayDice != null && burstDie < _awayDice.Length && _awayDice[burstDie] != null)
-                        SetDieFace(_awayDice[burstDie], awayFaces[burstDie]);
-                    if (_awayDieBuffBadges != null && burstDie < _awayDieBuffBadges.Length && _awayDieBuffBadges[burstDie] != null)
-                    {
-                        _awayDieBuffBadges[burstDie].sprite = awayMedalSprite;
-                        _awayDieBuffBadges[burstDie].enabled = true;
-                    }
-                    _match.AdjustAwayTotal(bonus);
-                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
-                    yield return new WaitForSeconds(0.70f);
-                }
-                // D. Team-wide Debuff against Home (Target == 2, e.g. Sliding Tackle ID 20, 36; Clearance ID 35; Offside Trap ID 38)
-                else if (awayAbility.type == 0 && awayAbility.target == 2 && homeFaces.Length > 0)
-                {
-                    AudioManager.Instance.PlayDebuff();
-                    int teamRed = (awayAbility.id == 20) ? 3 : ((awayAbility.id == 36) ? 2 : 1);
-                    for (int d = 0; d < homeFaces.Length; d++)
-                    {
-                        int oldVal = homeFaces[d];
-                        int newVal = (awayAbility.id == 38) ? Mathf.FloorToInt(oldVal / 2f) : Math.Max(0, oldVal - teamRed);
-                        homeFaces[d] = newVal;
-                        homeReduced[d] = true;
-                        if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null)
-                            SetDieFace(_homeDice[d], newVal);
-                        if (_homeDieBuffBadges != null && d < _homeDieBuffBadges.Length && _homeDieBuffBadges[d] != null)
-                        {
-                            _homeDieBuffBadges[d].sprite = awayMedalSprite;
-                            _homeDieBuffBadges[d].enabled = true;
-                        }
-                        _match.AdjustHomeTotal(newVal - oldVal);
-                    }
-                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                    yield return new WaitForSeconds(0.70f);
-                }
-                // E. Multiplier (Critical Striker x2, Bicycle Kick x3, Critical Striker x4)
-                else if (awayAbility.id == 21 || awayAbility.id == 39 || awayAbility.id == 40 || awayAbility.id == 54 || awayAbility.id == 66 || awayAbility.id == 74 || awayAbility.id == 75)
-                {
-                    int multiplier = (awayAbility.id == 21) ? 4 : ((awayAbility.id == 40) ? 3 : 2);
-                    int bestDie = 0;
-                    int maxVal = -1;
-                    for (int d = 0; d < awayFaces.Length; d++)
-                        if (awayFaces[d] > maxVal) { maxVal = awayFaces[d]; bestDie = d; }
-
-                    int chosenDie = bestDie;
-                    if (_isLocalMultiplayer)
-                    {
-                        if (_buffBeltText != null) _buffBeltText.text = "P2: PLEASE SELECT TARGET";
-                        int[] eligible = new int[awayFaces.Length];
-                        for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
-                        yield return StartCoroutine(SelectBuffTarget(1, eligible, bestDie, chosen => chosenDie = chosen));
-                    }
-
-                    if (_awayDieBuffBadges != null && chosenDie < _awayDieBuffBadges.Length && _awayDieBuffBadges[chosenDie] != null)
-                    {
-                        _awayDieBuffBadges[chosenDie].sprite = awayMedalSprite;
-                        _awayDieBuffBadges[chosenDie].enabled = true;
-                    }
-
-                    AudioManager.Instance.PlayPowerup(1);
-                    AudioManager.Instance.PlayBuff();
-
-                    if (_awayDieRoots != null && chosenDie < _awayDieRoots.Length && _awayDieRoots[chosenDie] != null)
-                    {
-                        for (int f = 0; f < 6; f++)
-                        {
-                            float p = f / 5f;
-                            float punch = 1f + Mathf.Sin(p * Mathf.PI) * 0.32f;
-                            _awayDieRoots[chosenDie].transform.localScale = new Vector3(punch, punch, 1f);
-                            yield return new WaitForSeconds(0.025f);
-                        }
-                        _awayDieRoots[chosenDie].transform.localScale = Vector3.one;
-                    }
-
-                    int originalVal = awayFaces[chosenDie];
-                    int boost = originalVal * (multiplier - 1);
-                    awayFaces[chosenDie] *= multiplier;
-                    awayBoosted[chosenDie] = true;
-                    if (_awayDice != null && chosenDie < _awayDice.Length && _awayDice[chosenDie] != null)
-                        SetDieFace(_awayDice[chosenDie], awayFaces[chosenDie]);
-
-                    _match.AdjustAwayTotal(boost);
-                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
-                    if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} x{multiplier}!";
-                    yield return new WaitForSeconds(0.70f);
-                }
-                // F. Reroll (BuffType 5: CPU targets lowest die, or 2 lowest if SP 25)
-                else if (awayAbility.type == 5 && awayFaces.Length > 0)
-                {
-                    int rerollCount = (awayAbility.id == 25) ? Mathf.Min(2, awayFaces.Length) : 1;
-                    for (int r = 0; r < rerollCount; r++)
-                    {
-                        int minDie = 0;
-                        int minVal = 999;
-                        for (int d = 0; d < awayFaces.Length; d++)
-                            if (awayFaces[d] < minVal) { minVal = awayFaces[d]; minDie = d; }
-
-                        int chosenDie = minDie;
-                        if (_isLocalMultiplayer)
-                        {
-                            if (_buffBeltText != null) _buffBeltText.text = "P2: PLEASE SELECT TARGET";
-                            int[] eligible = new int[awayFaces.Length];
-                            for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
-                            yield return StartCoroutine(SelectBuffTarget(1, eligible, minDie, chosen => chosenDie = chosen));
-                        }
-
-                        if (_awayDieBuffBadges != null && chosenDie < _awayDieBuffBadges.Length && _awayDieBuffBadges[chosenDie] != null)
-                        {
-                            _awayDieBuffBadges[chosenDie].sprite = awayMedalSprite;
-                            _awayDieBuffBadges[chosenDie].enabled = true;
-                        }
-
-                        AudioManager.Instance.PlayDiceRoll();
-                        for (int f = 1; f <= 7; f++)
-                        {
-                            var rollSprite = GetUiSprite($"Original/sprites/PlayerBody3/DiceRoll{f:00}");
-                            if (_awayDieRoots != null && _awayDieRoots[chosenDie] != null)
-                                _awayDieRoots[chosenDie].GetComponent<Image>().sprite = rollSprite;
-                            yield return new WaitForSeconds(0.045f);
-                        }
-                        if (_awayDieRoots != null && _awayDieRoots[chosenDie] != null)
-                            _awayDieRoots[chosenDie].GetComponent<Image>().sprite = GetUiSprite("Original/sprites/Buff6/DiceBackground");
-
-                        int oldVal = awayFaces[chosenDie];
-                        int newVal = UnityEngine.Random.Range(2, 7);
-                        awayFaces[chosenDie] = newVal;
-                        if (_awayDice != null && chosenDie < _awayDice.Length && _awayDice[chosenDie] != null)
-                            SetDieFace(_awayDice[chosenDie], newVal);
-
-                        _match.AdjustAwayTotal(newVal - oldVal);
-                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
-                        if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} REROLLED TO {newVal}!";
-                        yield return new WaitForSeconds(0.60f);
-                    }
-                }
-                // G. Single-die Tackle / Debuff (BuffType 0, Target 1: CPU targets Home highest die)
-                else if (awayAbility.type == 0 && awayAbility.target == 1 && homeFaces.Length > 0)
-                {
-                    int bestDie = 0;
-                    int maxVal = -1;
-                    for (int d = 0; d < homeFaces.Length; d++)
-                        if (homeFaces[d] > maxVal) { maxVal = homeFaces[d]; bestDie = d; }
-
-                    int chosenDie = bestDie;
-                    if (_isLocalMultiplayer)
-                    {
-                        if (_buffBeltText != null) _buffBeltText.text = "P2: PLEASE SELECT TARGET";
-                        int[] eligible = new int[homeFaces.Length];
-                        for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
-                        yield return StartCoroutine(SelectBuffTarget(0, eligible, bestDie, chosen => chosenDie = chosen));
-                    }
-
-                    if (_homeDieBuffBadges != null && chosenDie < _homeDieBuffBadges.Length && _homeDieBuffBadges[chosenDie] != null)
-                    {
-                        _homeDieBuffBadges[chosenDie].sprite = awayMedalSprite;
-                        _homeDieBuffBadges[chosenDie].enabled = true;
-                    }
-
-                    AudioManager.Instance.PlayTap();
-                    int oldVal = homeFaces[chosenDie];
-                    int reduction = 1;
-                    if (awayAbility.id == 19 || awayAbility.id == 70) reduction = 3;
-                    else if (awayAbility.id == 34 || awayAbility.id == 69 || awayAbility.id == 71) reduction = 2;
-                    else if (awayAbility.id == 37 || awayAbility.id == 72 || awayAbility.id == 73) reduction = Mathf.CeilToInt(oldVal / 2f);
-
-                    int newVal = Math.Max(0, oldVal - reduction);
-                    homeFaces[chosenDie] = newVal;
-                    homeReduced[chosenDie] = true;
-                    if (_homeDice != null && chosenDie < _homeDice.Length && _homeDice[chosenDie] != null)
-                        SetDieFace(_homeDice[chosenDie], newVal);
-
-                    _match.AdjustHomeTotal(newVal - oldVal);
-                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                    if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} -{reduction}!";
-                    yield return new WaitForSeconds(0.70f);
-                }
-                // H. Feint / Swaps (BuffType 3: CPU swaps its lowest die with Home's highest die)
-                else if (awayAbility.type == 3 && homeFaces.Length > 0 && awayFaces.Length > 0)
-                {
-                    AudioManager.Instance.PlayTransform();
-                    if (awayAbility.id == 49) // Team swap
-                    {
-                        for (int d = 0; d < Mathf.Min(homeFaces.Length, awayFaces.Length); d++)
-                        {
-                            if (homeFaces[d] > awayFaces[d])
-                            {
-                                int temp = awayFaces[d];
-                                awayFaces[d] = homeFaces[d];
-                                homeFaces[d] = temp;
-                                if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null) SetDieFace(_homeDice[d], homeFaces[d]);
-                                if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null) SetDieFace(_awayDice[d], awayFaces[d]);
-                                _match.AdjustAwayTotal(awayFaces[d] - temp);
-                                _match.AdjustHomeTotal(temp - awayFaces[d]);
-                            }
-                        }
-                    }
-                    else // Single swap
-                    {
-                        int minAwayDie = 0;
-                        int minAVal = 999;
-                        for (int d = 0; d < awayFaces.Length; d++)
-                            if (awayFaces[d] < minAVal) { minAVal = awayFaces[d]; minAwayDie = d; }
-
-                        if (_isLocalMultiplayer)
-                        {
-                            if (_buffBeltText != null) _buffBeltText.text = "P2: PLEASE SELECT TARGET";
-                            int[] eligible = new int[awayFaces.Length];
-                            for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
-                            yield return StartCoroutine(SelectBuffTarget(1, eligible, minAwayDie, chosen => minAwayDie = chosen));
-                            minAVal = awayFaces[minAwayDie];
-                        }
-
-                        int maxHomeDie = 0;
-                        int maxHVal = -1;
-                        for (int d = 0; d < homeFaces.Length; d++)
-                            if (homeFaces[d] > maxHVal) { maxHVal = homeFaces[d]; maxHomeDie = d; }
-
-                        if (maxHVal > minAVal)
-                        {
-                            awayFaces[minAwayDie] = maxHVal;
-                            homeFaces[maxHomeDie] = minAVal;
-                            if (_awayDice != null && minAwayDie < _awayDice.Length && _awayDice[minAwayDie] != null) SetDieFace(_awayDice[minAwayDie], maxHVal);
-                            if (_homeDice != null && maxHomeDie < _homeDice.Length && _homeDice[maxHomeDie] != null) SetDieFace(_homeDice[maxHomeDie], minAVal);
-                            if (_awayDieBuffBadges != null && minAwayDie < _awayDieBuffBadges.Length && _awayDieBuffBadges[minAwayDie] != null)
-                            {
-                                _awayDieBuffBadges[minAwayDie].sprite = awayMedalSprite;
-                                _awayDieBuffBadges[minAwayDie].enabled = true;
-                            }
-                            _match.AdjustAwayTotal(maxHVal - minAVal);
-                            _match.AdjustHomeTotal(minAVal - maxHVal);
-                        }
-                    }
-
-                    if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                    if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
-                    if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} FEINT SWAP!";
-                    yield return new WaitForSeconds(0.70f);
-                }
-                // I. Clear Reductions (Step-Over ID 28, 29, 30; Shielding ID 48)
-                else if (awayAbility.id == 28 || awayAbility.id == 29 || awayAbility.id == 30 || awayAbility.id == 48 || (awayAbility.type == 1 && awayAbility.id != 21))
-                {
-                    AudioManager.Instance.PlayBuff();
-                    int totalRestored = 0;
-                    for (int d = 0; d < awayFaces.Length; d++)
-                    {
-                        if (awayFaces[d] < originalAwayFaces[d])
-                        {
-                            int diff = originalAwayFaces[d] - awayFaces[d];
-                            awayFaces[d] = originalAwayFaces[d];
-                            totalRestored += diff;
-                            if (_awayDice != null && d < _awayDice.Length && _awayDice[d] != null) SetDieFace(_awayDice[d], awayFaces[d]);
-                            if (_awayDieBuffBadges != null && d < _awayDieBuffBadges.Length && _awayDieBuffBadges[d] != null)
-                            {
-                                _awayDieBuffBadges[d].sprite = awayMedalSprite;
-                                _awayDieBuffBadges[d].enabled = true;
-                            }
-                            if (awayAbility.id == 48) break;
-                        }
-                    }
-                    if (totalRestored > 0)
-                    {
-                        _match.AdjustAwayTotal(totalRestored);
-                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
-                    }
-                    if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} CLEARED REDUCTIONS!";
-                    yield return new WaitForSeconds(0.70f);
-                }
-                // J. Strip Bonuses / Marking (BuffType 4: Man Marking ID 41, 56, 58; Zonal Marking ID 22, 57)
-                else if (awayAbility.type == 4)
-                {
-                    AudioManager.Instance.PlayDebuff();
-                    int totalStripped = 0;
-                    for (int d = 0; d < homeFaces.Length; d++)
-                    {
-                        if (homeFaces[d] > originalHomeFaces[d] || homeBoosted[d])
-                        {
-                            int diff = homeFaces[d] - originalHomeFaces[d];
-                            homeFaces[d] = originalHomeFaces[d];
-                            homeBoosted[d] = false;
-                            totalStripped += diff;
-                            if (_homeDice != null && d < _homeDice.Length && _homeDice[d] != null) SetDieFace(_homeDice[d], homeFaces[d]);
-                            if (_homeDieBuffBadges != null && d < _homeDieBuffBadges.Length && _homeDieBuffBadges[d] != null)
-                            {
-                                _homeDieBuffBadges[d].sprite = awayMedalSprite;
-                                _homeDieBuffBadges[d].enabled = true;
-                            }
-                            if (awayAbility.target == 1) break;
-                        }
-                    }
-                    if (totalStripped > 0)
-                    {
-                        _match.AdjustHomeTotal(-totalStripped);
-                        if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
-                    }
-                    if (_buffBeltText != null) _buffBeltText.text = $"{awayAbility.name.ToUpper()} STRIPPED BONUSES!";
-                    yield return new WaitForSeconds(0.70f);
-                }
-                else
-                {
-                    yield return new WaitForSeconds(0.50f);
-                }
-            }
-
-            if (homeAbilities.Count == 0 && awayAbilities.Count == 0)
+            if (allAbilities.Count == 0)
             {
                 yield return new WaitForSeconds(0.35f);
             }
