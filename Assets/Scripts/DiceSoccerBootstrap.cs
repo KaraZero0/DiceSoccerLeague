@@ -2148,18 +2148,20 @@ namespace DiceSoccer
             pauseBtn.spriteState = pauseSpriteState;
 
             // Speed toggle button docked directly right of pause button:
-            var speedBtnGo = new GameObject("MatchSpeedBtn", typeof(RectTransform), typeof(Image), typeof(Button));
-            speedBtnGo.transform.SetParent(scoreboard.transform, false);
-            var speedRect = speedBtnGo.GetComponent<RectTransform>();
-            speedRect.anchorMin = speedRect.anchorMax = new Vector2(0.5f, 1f);
+            var speedPanel = AddPanel("MatchSpeedBtn", scoreboard.transform,
+                (_matchSpeed > 1f) ? new Color32(40, 130, 60, 240) : new Color32(35, 55, 75, 240),
+                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
+            var speedRect = speedPanel.rectTransform;
             speedRect.anchoredPosition = new Vector2(68f, -124f);
             speedRect.sizeDelta = new Vector2(58f, 52f);
-            var speedImg = speedBtnGo.GetComponent<Image>();
-            speedImg.sprite = GetUiSprite("Original/images/BlueButton");
-            speedImg.type = Image.Type.Sliced;
-            var speedBtn = speedBtnGo.GetComponent<Button>();
+            var speedOutline = speedPanel.gameObject.AddComponent<Outline>();
+            speedOutline.effectColor = new Color(0, 0, 0, 0.7f);
+            speedOutline.effectDistance = new Vector2(2f, -2f);
 
-            var speedText = AddText($"{_matchSpeed:0}X", speedBtnGo.transform, 18, (_matchSpeed > 1f) ? Gold : Paper,
+            var speedBtn = speedPanel.gameObject.AddComponent<Button>();
+            speedBtn.targetGraphic = speedPanel;
+
+            var speedText = AddText($"{_matchSpeed:0}X", speedPanel.transform, 18, (_matchSpeed > 1f) ? Gold : Paper,
                 Vector2.zero, Vector2.one);
             speedText.fontStyle = FontStyle.Bold;
             speedText.alignment = TextAnchor.MiddleCenter;
@@ -2170,6 +2172,7 @@ namespace DiceSoccer
                 Time.timeScale = _matchSpeed;
                 speedText.text = $"{_matchSpeed:0}X";
                 speedText.color = (_matchSpeed > 1f) ? (Color)Gold : (Color)Paper;
+                speedPanel.color = (_matchSpeed > 1f) ? new Color32(40, 130, 60, 240) : new Color32(35, 55, 75, 240);
                 AudioManager.Instance.PlayTap();
                 TriggerHaptic();
             });
