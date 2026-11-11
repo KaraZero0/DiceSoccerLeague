@@ -313,7 +313,244 @@ namespace DiceSoccer.Editor
             if (c1 != 1 || c2 != 2 || !simHomeCaptain.HasYellowCard(false, 5) || !simHomeCaptain.HasRedCard(false, 5))
                 throw new Exception($"Yellow -> Red card escalation failed! c1={c1}, c2={c2}");
 
+            // Additional thorough checks: BuffBelt no hardcoded x2, Field Die 0/15+, Wild Odd/Even, Reroll Wild/Whistle, Catalog Teams & Unlocks 1..96 / Ach 1..72
+            VerifyBuffBeltFieldDiceTeamsAndCampaign(bootstrap, catalog);
+
             Debug.Log("[TEST] Verified Ability Mechanics & Symmetry: All triggers, Captain passive, Entourage #1..21 rules, Cards, Loading slice, and Home/Away symmetrical adjustments passed perfectly!");
+        }
+
+        private static void VerifyBuffBeltFieldDiceTeamsAndCampaign(DiceSoccerBootstrap bootstrap, GameCatalog catalog)
+        {
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var sflags = BindingFlags.Static | BindingFlags.NonPublic;
+
+            // 1. Validate ALL 67 catalog abilities (IDs 16..82) resolve non-null medals and valid sprite IDs
+            var resolveId = typeof(DiceSoccerBootstrap).GetMethod("ResolveAbilitySpriteId", sflags);
+            var getMedal = typeof(DiceSoccerBootstrap).GetMethod("GetAbilityMedalSprite", sflags);
+            var getOverlay = typeof(DiceSoccerBootstrap).GetMethod("GetAbilityBadgeOverlayText", sflags);
+            if ((int)resolveId.Invoke(null, new object[] { 70 }) != 34)
+                throw new Exception("ResolveAbilitySpriteId(70) must resolve to 34 (Hard Tackle -2), not 19 (-3)!");
+
+            foreach (var ab in catalog.Data.abilities)
+            {
+                var sp = getMedal.Invoke(null, new object[] { ab }) as Sprite;
+                if (sp == null)
+                    throw new Exception($"Ability {ab.id} ({ab.name}) returned null medal sprite!");
+                string ov = getOverlay.Invoke(null, new object[] { ab }) as string;
+                if (ab.id == 18)
+                {
+                    if (sp.name != "DisplayBuffPlus" || ov != "3")
+                        throw new Exception($"Dribble +3 (ID 18) must use DisplayBuffPlus with '3' overlay, got {sp.name}/{ov}");
+                }
+                else if (ab.id == 82)
+                {
+                    if (sp.name != "BuffMedal82" || !string.IsNullOrEmpty(ov))
+                        throw new Exception($"Captain (ID 82) must use BuffMedal82 with empty overlay, got {sp.name}/{ov}");
+                }
+                else
+                {
+                    if (!string.IsNullOrEmpty(ov))
+                        throw new Exception($"Self-contained BuffMedal for ability {ab.id} must have empty overlay, got '{ov}'");
+                }
+            }
+
+            // 2. Start a match and verify BuffBelt badge text is NOT hardcoded "x2" and updates/clears cleanly
+            var startCareer = typeof(DiceSoccerBootstrap).GetMethod("StartCareerMatch", flags);
+            var startFixture = typeof(DiceSoccerBootstrap).GetMethod("StartCurrentFixture", flags);
+            startCareer.Invoke(bootstrap, null);
+            startFixture.Invoke(bootstrap, null);
+
+            if (GameObject.Find("MatchSpeedBtn") != null)
+                throw new Exception("MatchSpeedBtn must NOT appear on the in-match HUD (moved to Options)!");
+            var showOpts = typeof(DiceSoccerBootstrap).GetMethod("ShowOptions", flags);
+            showOpts?.Invoke(bootstrap, null);
+            var speedTickBox = GameObject.Find("SpeedTickBox")?.GetComponent<Button>();
+            if (speedTickBox == null)
+                throw new Exception("SpeedTickBox option must exist inside ShowOptionsDialog!");
+            int savedFast = PlayerPrefs.GetInt("diceSoccer.fastSpeed", 0);
+            try
+            {
+                speedTickBox.onClick.Invoke();
+                float expectedAfter = savedFast == 0 ? 2f : 1f;
+                var speedVal = (float)typeof(DiceSoccerBootstrap).GetField("_matchSpeed", flags).GetValue(bootstrap);
+                if (Math.Abs(speedVal - expectedAfter) > 0.01f)
+                    throw new Exception($"Options Speed toggle failed: expected {expectedAfter}, got {speedVal}");
+            }
+            finally
+            {
+                PlayerPrefs.SetInt("diceSoccer.fastSpeed", savedFast);
+                PlayerPrefs.Save();
+                var optBackdrop = GameObject.Find("OptionsBackdrop");
+                if (optBackdrop != null) UnityEngine.Object.DestroyImmediate(optBackdrop);
+                Time.timeScale = 1f;
+            }
+            startFixture.Invoke(bootstrap, null);
+
+            var badgeField = typeof(DiceSoccerBootstrap).GetField("_buffBeltBadgeText", flags);
+            var medalImgField = typeof(DiceSoccerBootstrap).GetField("_buffBeltMedal", flags);
+            var beltGoField = typeof(DiceSoccerBootstrap).GetField("_buffBeltGo", flags);
+            var setBelt = typeof(DiceSoccerBootstrap).GetMethod("SetBuffBeltDisplay", flags);
+            var hideBelt = typeof(DiceSoccerBootstrap).GetMethod("HideBuffBelt", flags);
+
+            var badgeTxt = badgeField.GetValue(bootstrap) as Text;
+            var medalImg = medalImgField.GetValue(bootstrap) as Image;
+            if (badgeTxt == null || medalImg == null)
+                throw new Exception("BuffBelt medal or badge Text not initialized during match!");
+            if (!string.IsNullOrEmpty(badgeTxt.text))
+                throw new Exception($"BuffBelt badge text must start empty (not 'x2'), got '{badgeTxt.text}'!");
+
+            var abTackle = catalog.TryGetAbility(33);
+            setBelt.Invoke(bootstrap, new object[] { getMedal.Invoke(null, new object[] { abTackle }), "TACKLE -1", getOverlay.Invoke(null, new object[] { abTackle }) });
+            if (medalImg.sprite.name != "BuffMedal33" || badgeTxt.text != "")
+                throw new Exception($"BuffBelt failed on Tackle -1: sprite={medalImg.sprite.name}, badge='{badgeTxt.text}'");
+
+            var abDrib3 = catalog.TryGetAbility(18);
+            setBelt.Invoke(bootstrap, new object[] { getMedal.Invoke(null, new object[] { abDrib3 }), "DRIBBLE +3!", getOverlay.Invoke(null, new object[] { abDrib3 }) });
+            if (medalImg.sprite.name != "DisplayBuffPlus" || badgeTxt.text != "3")
+                throw new Exception($"BuffBelt failed on Dribble +3: sprite={medalImg.sprite.name}, badge='{badgeTxt.text}'");
+
+            hideBelt.Invoke(bootstrap, null);
+            if (!string.IsNullOrEmpty(badgeTxt.text) || (beltGoField.GetValue(bootstrap) as GameObject).activeSelf)
+                throw new Exception("HideBuffBelt must hide BuffBelt and clear badge text!");
+
+            // 3. Field Die numeric rendering (0, 1..14, 16, 18, 24, 36) & Wild/Whistle Reroll (value == 0, NOT 1)
+            var setDieVis = typeof(DiceSoccerBootstrap).GetMethod("SetSideDieVisual", flags);
+            var homeDice = typeof(DiceSoccerBootstrap).GetField("_homeDice", flags).GetValue(bootstrap) as Image[];
+            var homeLabels = typeof(DiceSoccerBootstrap).GetField("_homeDieValueLabels", flags).GetValue(bootstrap) as Text[];
+            if (homeLabels == null || homeLabels.Length != 3 || homeLabels[0] == null)
+                throw new Exception("_homeDieValueLabels missing!");
+
+            // Buffed total 24 must NOT show Cross (DiceSide24) icon
+            setDieVis.Invoke(bootstrap, new object[] { 0, 0, 24, 24, true });
+            if (!homeLabels[0].enabled || homeLabels[0].text != "24" || homeDice[0].enabled)
+                throw new Exception("Numeric die value 24 must render ValueLabel '24' instead of Cross sprite!");
+
+            // Tackled to 0 must NOT clamp to DiceSide01
+            setDieVis.Invoke(bootstrap, new object[] { 0, 1, 0, 2, true });
+            if (!homeLabels[1].enabled || homeLabels[1].text != "0" || homeDice[1].enabled)
+                throw new Exception("Numeric die value 0 (tackled) must render ValueLabel '0' instead of DiceSide01!");
+
+            // Natural Wild (0 with comboFace 31) shows DiceSide31
+            setDieVis.Invoke(bootstrap, new object[] { 0, 2, 0, 31, true });
+            if (homeLabels[2].enabled || !homeDice[2].enabled || homeDice[2].sprite.name != "DiceSide31")
+                throw new Exception("Natural Wild (0/31) must display DiceSide31 sprite!");
+
+            // RollSinglePlayerDie with all Wild (31) must return (0, 31), NOT (1, 31)
+            var rollSingle = typeof(DiceSoccerBootstrap).GetMethod("RollSinglePlayerDie", sflags);
+            var wildOnly = new PlayerData { id = 9999, name = "WildTest", position = "MID", diceSides = new[] { 31, 31, 31, 31, 31, 31 } };
+            var (rolledVal, rolledRaw) = ((int, int))rollSingle.Invoke(null, new object[] { wildOnly });
+            if (rolledVal != 0 || rolledRaw != 31)
+                throw new Exception($"RollSinglePlayerDie on Wild-only die returned ({rolledVal}, {rolledRaw}), expected (0, 31)!");
+
+            // 4. Wild (31) triggers Odd Total (7) and Even Total (8)
+            var isTriggered = typeof(DiceSoccerBootstrap).GetMethod("IsAbilityTriggered", sflags);
+            if (!(bool)isTriggered.Invoke(null, new object[] { 7, 0, new[] { 31, 2, 2 }, 4 }))
+                throw new Exception("Wild (31) must satisfy Total is ODD (trigger 7)!");
+            if (!(bool)isTriggered.Invoke(null, new object[] { 8, 0, new[] { 31, 1, 2 }, 3 }))
+                throw new Exception("Wild (31) must satisfy Total is EVEN (trigger 8)!");
+
+            // 5. Audit all 5 Seasons, Competitions, Lineups & Kits in catalog
+            if (catalog.Data.seasons.Length != 5)
+                throw new Exception($"Expected 5 seasons, found {catalog.Data.seasons.Length}");
+            foreach (var season in catalog.Data.seasons)
+            {
+                var league = catalog.GetFixtures(season.id, "League");
+                if (league == null || league.Length == 0)
+                    throw new Exception($"Season {season.id} missing League fixtures!");
+                foreach (var comp in season.competitions)
+                {
+                    foreach (var fx in comp.fixtures ?? Array.Empty<FixtureData>())
+                    {
+                        var resolved = catalog.ResolveLineup(fx.lineup);
+                        if (resolved == null || resolved.Length != 7)
+                            throw new Exception($"Season {season.id} {comp.name} {fx.teamName} invalid lineup length!");
+                        if (resolved[0].position != "GK")
+                            throw new Exception($"Season {season.id} {comp.name} {fx.teamName} slot 0 is {resolved[0].position}, not GK!");
+                    }
+                }
+            }
+            for (int aid = 1; aid <= 72; aid++)
+            {
+                if (catalog.GetAchievement(aid) == null)
+                    throw new Exception($"Missing Achievement #{aid} in catalog!");
+                if (Resources.Load<Texture2D>($"Original/images/Trophy{aid:00}") == null)
+                    throw new Exception($"Missing Trophy{aid:00}.png!");
+            }
+
+            // 6. Test Campaign Season Replay Preservation (_maxUnlockedSeason) & Unlock -> Hire Flow
+            var seasonField = typeof(DiceSoccerBootstrap).GetField("_seasonIndex", flags);
+            var maxSeasonField = typeof(DiceSoccerBootstrap).GetField("_maxUnlockedSeason", flags);
+            var cashField = typeof(DiceSoccerBootstrap).GetField("_careerCash", flags);
+            var isPlayerUnlocked = typeof(DiceSoccerBootstrap).GetMethod("IsPlayerUnlocked", flags);
+            var hirePlayer = typeof(DiceSoccerBootstrap).GetMethod("HirePlayer", flags);
+            var evalProgress = typeof(DiceSoccerBootstrap).GetMethod("EvaluateCareerProgressAndAchievements", flags);
+            var ownedField = typeof(DiceSoccerBootstrap).GetField("_ownedPlayerIds", flags);
+            var achSetField = typeof(DiceSoccerBootstrap).GetField("_unlockedAchievementIds", flags);
+
+            // Snapshot key test prefs so repeat test runs stay clean
+            int savedAllUnlocked = PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0);
+            int savedMaxSeason = PlayerPrefs.GetInt("diceSoccer.maxSeason", 0);
+            int savedSeason = PlayerPrefs.GetInt("diceSoccer.season", 0);
+            int savedCash = PlayerPrefs.GetInt("diceSoccer.cash", 1000);
+            string savedRoster = PlayerPrefs.GetString($"diceSoccer.profile.{PlayerPrefs.GetInt("diceSoccer.profile.active", 0)}.roster", "");
+            int savedP15 = PlayerPrefs.GetInt("diceSoccer.unlockedPlayer.15", 0);
+            int savedVisitedCredits = PlayerPrefs.GetInt("diceSoccer.stats.visitedCredits", 0);
+            int savedVisitedNews = PlayerPrefs.GetInt("diceSoccer.stats.visitedNews", 0);
+            string savedAchs = PlayerPrefs.GetString("diceSoccer.achievements", "");
+
+            try
+            {
+                PlayerPrefs.SetInt("diceSoccer.allUnlocked", 0);
+                maxSeasonField.SetValue(bootstrap, 2);
+                seasonField.SetValue(bootstrap, 0);
+                typeof(DiceSoccerBootstrap).GetMethod("SaveCareerState", flags).Invoke(bootstrap, null);
+                if ((int)maxSeasonField.GetValue(bootstrap) != 2)
+                    throw new Exception("_maxUnlockedSeason dropped when replaying Season 0!");
+
+                // Unlocked player #15 must be hireable via HirePlayer, while locked player #96 must reject
+                var p15 = catalog.GetPlayer(15);
+                var p96 = catalog.GetPlayer(96);
+                var owned = ownedField.GetValue(bootstrap) as System.Collections.Generic.List<int>;
+                owned.Remove(96);
+                PlayerPrefs.SetInt("diceSoccer.unlockedPlayer.96", 0);
+                if ((bool)isPlayerUnlocked.Invoke(bootstrap, new object[] { p96 }))
+                    throw new Exception("Locked player #96 should not report unlocked before winning T4.2!");
+
+                PlayerPrefs.SetInt("diceSoccer.unlockedPlayer.15", 1);
+                owned.Remove(15);
+                if (!(bool)isPlayerUnlocked.Invoke(bootstrap, new object[] { p15 }))
+                    throw new Exception("Unlocked player #15 must report IsPlayerUnlocked == true!");
+
+                cashField.SetValue(bootstrap, 50000);
+                hirePlayer.Invoke(bootstrap, new object[] { 15 });
+                if (!owned.Contains(15))
+                    throw new Exception("HirePlayer failed to hire unlocked player #15!");
+
+                // Credits -> Ach #33, News -> Player #12
+                PlayerPrefs.SetInt("diceSoccer.stats.visitedCredits", 1);
+                PlayerPrefs.SetInt("diceSoccer.stats.visitedNews", 1);
+                evalProgress.Invoke(bootstrap, new object[] { false, false, false, false, false });
+                var achSet = achSetField.GetValue(bootstrap) as System.Collections.Generic.HashSet<int>;
+                if (!achSet.Contains(33))
+                    throw new Exception("Visiting Credits must unlock Ach #33!");
+                if (PlayerPrefs.GetInt("diceSoccer.unlockedPlayer.12", 0) != 1)
+                    throw new Exception("Visiting News/Authorities must unlock Player #12!");
+            }
+            finally
+            {
+                PlayerPrefs.SetInt("diceSoccer.allUnlocked", savedAllUnlocked);
+                PlayerPrefs.SetInt("diceSoccer.maxSeason", savedMaxSeason);
+                PlayerPrefs.SetInt("diceSoccer.season", savedSeason);
+                PlayerPrefs.SetInt("diceSoccer.cash", savedCash);
+                PlayerPrefs.SetString($"diceSoccer.profile.{PlayerPrefs.GetInt("diceSoccer.profile.active", 0)}.roster", savedRoster);
+                PlayerPrefs.SetInt("diceSoccer.unlockedPlayer.15", savedP15);
+                PlayerPrefs.SetInt("diceSoccer.stats.visitedCredits", savedVisitedCredits);
+                PlayerPrefs.SetInt("diceSoccer.stats.visitedNews", savedVisitedNews);
+                PlayerPrefs.SetString("diceSoccer.achievements", savedAchs);
+                PlayerPrefs.Save();
+            }
+
+            Debug.Log("[TEST] BuffBelt (no 'x2'), Field Die 0/15+ numerics, Wild Odd/Even, Teams, Campaign _maxUnlockedSeason, Player Unlocks & Achievements #1..72 all verified!");
         }
     }
 }

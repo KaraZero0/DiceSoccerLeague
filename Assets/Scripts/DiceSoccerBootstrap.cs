@@ -39,6 +39,8 @@ namespace DiceSoccer
         private Image[] _awayDice;
         private GameObject[] _homeDieRoots;
         private GameObject[] _awayDieRoots;
+        private Text[] _homeDieValueLabels;
+        private Text[] _awayDieValueLabels;
         private Image[] _homeDieBuffBadges;
         private Image[] _awayDieBuffBadges;
         private Image[] _homeDieGlows;
@@ -62,6 +64,7 @@ namespace DiceSoccer
         private GameObject _buffBeltGo;
         private Text _buffBeltText;
         private Image _buffBeltMedal;
+        private Text _buffBeltBadgeText;
         private MatchSimulation _match;
         private GameCatalog _catalog;
         private FixtureData[] _seasonFixtures;
@@ -73,6 +76,7 @@ namespace DiceSoccer
         private int _hireCandidateIndex;
         private int _selectedLineupSlot;
         private int _seasonIndex;
+        private int _maxUnlockedSeason;
         private int _fixtureIndex;
         private int _careerCash;
         private HashSet<int> _unlockedShirtIds = new HashSet<int> { 1 };
@@ -98,6 +102,17 @@ namespace DiceSoccer
         private int _trophyPage;
         private bool _currentResultRecorded;
         private bool _soundEnabled = true;
+        private int _matchMaxHomeRoll;
+        private bool _matchHadZeroHomeRoll;
+        private bool _matchHadZeroAwayRoll;
+        private bool _matchLastMinGoal;
+        private bool _matchLastMinMiss;
+        private bool _matchLastMinSave;
+        private bool _matchLastMinConcede;
+        private bool _matchLastMinEqualizer;
+        private bool _matchLastMinTieBreaker;
+        private readonly List<int> _pendingUnlockedPlayerIds = new List<int>();
+        private readonly List<AchievementData> _pendingUnlockedAchievements = new List<AchievementData>();
         private Vector3 _previousAcceleration;
         private bool _hasAccelerationSample;
         private bool _shakeArmed = true;
@@ -389,9 +404,9 @@ namespace DiceSoccer
             var catalogAvailable = Resources.Load<TextAsset>("Original/data/UnityCatalog") != null;
 
             // Manage unlocks after match 1 or if all unlocked
-            var manageUnlocked = catalogAvailable && (_fixtureIndex > 0 || _seasonIndex > 0 || PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1);
+            var manageUnlocked = catalogAvailable && (_fixtureIndex > 0 || _seasonIndex > 0 || _maxUnlockedSeason > 0 || PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1);
             // Multiplayer unlocks after training season or if all unlocked
-            var mpUnlocked = catalogAvailable && (_seasonIndex > 0 || _fixtureIndex >= 9 || PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1);
+            var mpUnlocked = catalogAvailable && (_seasonIndex > 0 || _maxUnlockedSeason > 0 || _fixtureIndex >= 3 || PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1);
 
             // Authentic left-aligned menu buttons: Campaign, Multiplayer, Manage (matches 2012 iOS v1.2.5 layout)
             var campaignBtn = AddSpriteButton("Campaign", "Original/images/MainMenuButtons01",
@@ -468,7 +483,13 @@ namespace DiceSoccer
             AddButton("☕ PAYPAL", box.transform, new Color32(0, 112, 186, 255),
                 new Vector2(0.30f, 0.12f), new Vector2(0.38f, 0.11f), ShowDonationModal);
             AddButton("OK", box.transform, Grass,
-                new Vector2(0.70f, 0.12f), new Vector2(0.38f, 0.11f), () => Destroy(overlay.gameObject));
+                new Vector2(0.70f, 0.12f), new Vector2(0.38f, 0.11f), () =>
+                {
+                    Destroy(overlay.gameObject);
+                    PlayerPrefs.SetInt("diceSoccer.stats.visitedNews", 1);
+                    EvaluateCareerProgressAndAchievements(false, false, false, true);
+                    ShowNextUnlockModalThen(null);
+                });
         }
 
         private void ShowLeagueSelect()
@@ -494,7 +515,7 @@ namespace DiceSoccer
                 _ => "Original/sprites/SeasonCrest/Season4Crest"
             };
 
-            bool isUnlocked = _selectedLeagueSeasonIndex <= _seasonIndex || PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1;
+            bool isUnlocked = _selectedLeagueSeasonIndex <= _maxUnlockedSeason || PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1;
 
             var crestGo = AddResourceImage("SeasonCrest", crestPath, frame,
                 new Vector2(0.5f, 0.54f), new Vector2(0.5f, 0.54f));
@@ -900,6 +921,8 @@ namespace DiceSoccer
             _currentCrestId = 1;
             _careerCash = 1000;
             _seasonIndex = 0;
+            _maxUnlockedSeason = 0;
+            _selectedLeagueSeasonIndex = 0;
             _fixtureIndex = 0;
 
             var lower = name.Trim().ToLowerInvariant();
@@ -914,6 +937,8 @@ namespace DiceSoccer
             PlayerPrefs.SetInt($"diceSoccer.profile.{slot}.crest", _currentCrestId);
             PlayerPrefs.SetInt($"diceSoccer.profile.{slot}.cash", _careerCash);
             PlayerPrefs.SetInt($"diceSoccer.profile.{slot}.season", _seasonIndex);
+            PlayerPrefs.SetInt($"diceSoccer.profile.{slot}.maxSeason", _maxUnlockedSeason);
+            PlayerPrefs.SetInt("diceSoccer.maxSeason", _maxUnlockedSeason);
             PlayerPrefs.SetInt($"diceSoccer.profile.{slot}.fixture", _fixtureIndex);
             PlayerPrefs.SetInt("diceSoccer.profile.active", slot);
             PlayerPrefs.Save();
@@ -1027,6 +1052,9 @@ namespace DiceSoccer
             PlayerPrefs.SetString("diceSoccer.unlockedPants", string.Join(",", _unlockedPantsIds));
             PlayerPrefs.SetString("diceSoccer.achievements", string.Join(",", _unlockedAchievementIds));
             PlayerPrefs.SetString("diceSoccer.unlockedEntourage", string.Join(",", _unlockedEntourageIds));
+            _maxUnlockedSeason = _catalog.Data.seasons != null ? Mathf.Max(0, _catalog.Data.seasons.Length - 1) : 4;
+            PlayerPrefs.SetInt("diceSoccer.maxSeason", _maxUnlockedSeason);
+            PlayerPrefs.SetInt($"diceSoccer.profile.{_currentProfileSlot}.maxSeason", _maxUnlockedSeason);
             PlayerPrefs.SetInt("diceSoccer.allUnlocked", 1);
             PlayerPrefs.Save();
             if (showNotice) AudioManager.Instance.PlayCash();
@@ -1243,10 +1271,10 @@ namespace DiceSoccer
             int[] p2Pants = new int[] { 2, 3, 4, 10 };
             int[][] p2Lineups = new int[][]
             {
-                new int[] { 8, 9, 10, 11, 12, 13, 14 },
-                new int[] { 15, 16, 17, 18, 19, 20, 21 },
-                new int[] { 22, 23, 24, 25, 26, 27, 28 },
-                new int[] { 29, 30, 31, 32, 33, 34, 35 }
+                new int[] { 9, 10, 11, 12, 14, 15, 16 },
+                new int[] { 17, 18, 19, 20, 22, 23, 24 },
+                new int[] { 25, 26, 27, 28, 30, 31, 32 },
+                new int[] { 33, 34, 35, 36, 38, 39, 40 }
             };
 
             var p2Idx = Mathf.Clamp(_p2RivalTeamIndex, 0, p2Lineups.Length - 1);
@@ -1264,13 +1292,7 @@ namespace DiceSoccer
                 pants = p2Pants[p2Idx]
             };
 
-            _currentResultRecorded = false;
-            _shakeArmed = true;
-            _shakeQuietSince = -1f;
-            _hasAccelerationSample = false;
-            _isKickoffPlayed = false;
-            _lastSubstitutedSlot = -1;
-            _remainingSubs = 3;
+            ResetMatchTrackingState();
             _match = new MatchSimulation(
                 p1Lineup,
                 p2Lineup,
@@ -1350,7 +1372,7 @@ namespace DiceSoccer
             var starCounterContainer = new GameObject("FixtureStarCounter", typeof(RectTransform));
             starCounterContainer.transform.SetParent(frame, false);
             var scRect = starCounterContainer.GetComponent<RectTransform>();
-            scRect.anchorMin = scRect.anchorMax = new Vector2(0.5f, 0.73f);
+            scRect.anchorMin = scRect.anchorMax = new Vector2(0.5f, 0.75f);
             scRect.sizeDelta = new Vector2(130f, 36f);
 
             var starCounterText = AddText($"{earnedStars}/{maxStars}", starCounterContainer.transform, 18, Ink,
@@ -1371,8 +1393,8 @@ namespace DiceSoccer
             var ballContainer = new GameObject("SoccerBallContainer", typeof(RectTransform));
             ballContainer.transform.SetParent(frame, false);
             var containerRect = ballContainer.GetComponent<RectTransform>();
-            containerRect.anchorMin = new Vector2(0.5f, 0.56f);
-            containerRect.anchorMax = new Vector2(0.5f, 0.56f);
+            containerRect.anchorMin = new Vector2(0.5f, 0.585f);
+            containerRect.anchorMax = new Vector2(0.5f, 0.585f);
             containerRect.sizeDelta = new Vector2(180f, 180f);
             containerRect.pivot = new Vector2(0.5f, 0.5f);
             StartCoroutine(AnimatePulse(containerRect));
@@ -1419,7 +1441,7 @@ namespace DiceSoccer
             var leftArrow = AddSpriteButton("LeftArrow",
                 canPrev ? "Original/images/LeftArrow" : "Original/images/LeftArrowDisabled",
                 canPrev ? "Original/images/LeftArrowSelected" : "Original/images/LeftArrowDisabled",
-                frame, new Vector2(0.12f, 0.56f), new Vector2(0.10f, 0.12f),
+                frame, new Vector2(0.12f, 0.585f), new Vector2(0.10f, 0.12f),
                 canPrev ? () => { _selectedFixtureIndex--; ShowLeagueFixtures(); } : null);
             leftArrow.interactable = canPrev;
 
@@ -1427,7 +1449,7 @@ namespace DiceSoccer
             var rightArrow = AddSpriteButton("RightArrow",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
-                frame, new Vector2(0.88f, 0.56f), new Vector2(0.10f, 0.12f),
+                frame, new Vector2(0.88f, 0.585f), new Vector2(0.10f, 0.12f),
                 canNext ? () => { _selectedFixtureIndex++; ShowLeagueFixtures(); } : null);
             rightArrow.interactable = canNext;
 
@@ -1457,12 +1479,12 @@ namespace DiceSoccer
 
             // 4. Match Info Below Ball
             var matchTitle = AddText($"MATCH {_selectedFixtureIndex + 1}", frame, 22, Ink,
-                new Vector2(0.1f, 0.365f), new Vector2(0.9f, 0.415f));
+                new Vector2(0.1f, 0.390f), new Vector2(0.9f, 0.435f));
             matchTitle.alignment = TextAnchor.MiddleCenter;
             matchTitle.fontStyle = FontStyle.Bold;
 
             var vsText = AddText($"vs. {fixture.teamName.ToUpperInvariant()}", frame, 17, Ink,
-                new Vector2(0.1f, 0.320f), new Vector2(0.9f, 0.365f));
+                new Vector2(0.1f, 0.345f), new Vector2(0.9f, 0.390f));
             vsText.alignment = TextAnchor.MiddleCenter;
             vsText.fontStyle = FontStyle.Bold;
 
@@ -1471,7 +1493,7 @@ namespace DiceSoccer
             if (!string.IsNullOrEmpty(savedScore))
             {
                 var scoreLabel = AddText(savedScore, frame, 20, Ink,
-                    new Vector2(0.2f, 0.270f), new Vector2(0.8f, 0.320f));
+                    new Vector2(0.2f, 0.290f), new Vector2(0.8f, 0.340f));
                 scoreLabel.alignment = TextAnchor.MiddleCenter;
                 scoreLabel.fontStyle = FontStyle.Bold;
             }
@@ -1827,7 +1849,7 @@ namespace DiceSoccer
         {
             var key = CompetitionProgressKey(competitionName);
             var stored = PlayerPrefs.GetInt(key, -1);
-            if (stored < 0 && competitionName == "League")
+            if (stored < 0 && competitionName == "League" && _seasonIndex == 0)
                 stored = PlayerPrefs.GetInt("diceSoccer.fixture", 0);
             return Mathf.Clamp(stored < 0 ? 0 : stored, 0,
                 _catalog.GetFixtures(_seasonIndex, competitionName).Length);
@@ -1946,13 +1968,9 @@ namespace DiceSoccer
             return count;
         }
 
-        private void StartCurrentFixture()
+        private void ResetMatchTrackingState()
         {
-            if (_catalog == null || _seasonFixtures == null ||
-                _selectedFixtureIndex < 0 || _selectedFixtureIndex >= _seasonFixtures.Length)
-                throw new InvalidOperationException("There is no current competition fixture to start.");
-
-            _currentFixture = _seasonFixtures[_selectedFixtureIndex];
+            _matchSpeed = PlayerPrefs.GetInt("diceSoccer.fastSpeed", 0) == 1 ? 2f : 1f;
             _currentResultRecorded = false;
             _shakeArmed = true;
             _shakeQuietSince = -1f;
@@ -1962,6 +1980,27 @@ namespace DiceSoccer
             _remainingSubs = 3;
             _homeShirleyUsed = false;
             _awayShirleyUsed = false;
+            _matchMaxHomeRoll = 0;
+            _matchHadZeroHomeRoll = false;
+            _matchHadZeroAwayRoll = false;
+            _matchLastMinGoal = false;
+            _matchLastMinMiss = false;
+            _matchLastMinSave = false;
+            _matchLastMinConcede = false;
+            _matchLastMinEqualizer = false;
+            _matchLastMinTieBreaker = false;
+            _pendingUnlockedPlayerIds.Clear();
+            _pendingUnlockedAchievements.Clear();
+        }
+
+        private void StartCurrentFixture()
+        {
+            if (_catalog == null || _seasonFixtures == null ||
+                _selectedFixtureIndex < 0 || _selectedFixtureIndex >= _seasonFixtures.Length)
+                throw new InvalidOperationException("There is no current competition fixture to start.");
+
+            _currentFixture = _seasonFixtures[_selectedFixtureIndex];
+            ResetMatchTrackingState();
             var homeLineup = _catalog.ResolveLineup(_lineupIds);
             _match = new MatchSimulation(
                 homeLineup,
@@ -2235,14 +2274,16 @@ namespace DiceSoccer
             _buffBeltMedal.preserveAspect = true;
             _buffBeltMedal.raycastTarget = false;
 
-            // Authentic badge ability multiplier text inside dome notch (matching media_1792577723570_15c588e0.png)
-            var medalBadgeText = AddText("x2", _buffBeltMedal.transform, 42, new Color32(245, 115, 0, 255),
-                Vector2.zero, Vector2.one);
+            // Dynamic badge overlay text (empty for self-contained BuffMedal* & EntourageAbility* sprites; only used for DisplayBuff* templates such as ID 18)
+            var medalBadgeText = AddText(string.Empty, _buffBeltMedal.transform, 40, Color.white,
+                new Vector2(0.36f, 0.05f), new Vector2(0.94f, 0.95f));
             medalBadgeText.fontStyle = FontStyle.Bold;
             medalBadgeText.alignment = TextAnchor.MiddleCenter;
+            medalBadgeText.raycastTarget = false;
             var medalOutline = medalBadgeText.gameObject.AddComponent<Outline>();
-            medalOutline.effectColor = new Color(1f, 1f, 1f, 0.90f);
+            medalOutline.effectColor = new Color(0f, 0f, 0f, 0.92f);
             medalOutline.effectDistance = new Vector2(2f, -2f);
+            _buffBeltBadgeText = medalBadgeText;
 
             _buffBeltText = AddText("PLEASE SELECT TARGET", _buffBeltGo.transform, 24, Paper,
                 new Vector2(0.5f, 0f), new Vector2(0.5f, 0f));
@@ -2369,41 +2410,6 @@ namespace DiceSoccer
             pauseSpriteState.pressedSprite = GetUiSprite("Original/images/PauseButtonPressed");
             pauseBtn.spriteState = pauseSpriteState;
 
-            // Speed toggle button docked directly right of pause button:
-            var speedGo = new GameObject("MatchSpeedBtn", typeof(RectTransform), typeof(Image));
-            speedGo.transform.SetParent(scoreboard.transform, false);
-            var speedRect = speedGo.GetComponent<RectTransform>();
-            speedRect.anchorMin = new Vector2(0.5f, 1f);
-            speedRect.anchorMax = new Vector2(0.5f, 1f);
-            speedRect.anchoredPosition = new Vector2(68f, -124f);
-            speedRect.sizeDelta = new Vector2(58f, 52f);
-            var speedPanel = speedGo.GetComponent<Image>();
-            speedPanel.color = (_matchSpeed > 1f) ? new Color32(40, 130, 60, 240) : new Color32(35, 55, 75, 240);
-            speedPanel.raycastTarget = true;
-
-            var speedOutline = speedGo.AddComponent<Outline>();
-            speedOutline.effectColor = new Color(0, 0, 0, 0.7f);
-            speedOutline.effectDistance = new Vector2(2f, -2f);
-
-            var speedBtn = speedGo.AddComponent<Button>();
-            speedBtn.targetGraphic = speedPanel;
-
-            var speedText = AddText($"{_matchSpeed:0}X", speedGo.transform, 18, (_matchSpeed > 1f) ? Gold : Paper,
-                Vector2.zero, Vector2.one);
-            speedText.fontStyle = FontStyle.Bold;
-            speedText.alignment = TextAnchor.MiddleCenter;
-
-            speedBtn.onClick.AddListener(() =>
-            {
-                _matchSpeed = (_matchSpeed <= 1f) ? 2f : 1f;
-                Time.timeScale = _matchSpeed;
-                speedText.text = $"{_matchSpeed:0}X";
-                speedText.color = (_matchSpeed > 1f) ? (Color)Gold : (Color)Paper;
-                speedPanel.color = (_matchSpeed > 1f) ? new Color32(40, 130, 60, 240) : new Color32(35, 55, 75, 240);
-                AudioManager.Instance.PlayTap();
-                TriggerHaptic();
-            });
-
             // Authentic in-match digital clock centered in bottom grass field area (matching 2012 iOS original)
             var clockGo = new GameObject("MatchClock", typeof(RectTransform), typeof(Text), typeof(Shadow));
             clockGo.transform.SetParent(_field, false);
@@ -2441,6 +2447,13 @@ namespace DiceSoccer
             _overlayContainer.anchorMin = Vector2.zero;
             _overlayContainer.anchorMax = Vector2.one;
             _overlayContainer.offsetMin = _overlayContainer.offsetMax = Vector2.zero;
+
+            // Keep BuffBelt above HUD badges (SubTriggerBtn) while still below Pause/Modal overlays:
+            if (_buffBeltGo != null)
+                _buffBeltGo.transform.SetAsLastSibling();
+            _overlayContainer.SetAsLastSibling();
+
+            Time.timeScale = _matchSpeed;
 
             // Kick-off banner:
             if (!_isKickoffPlayed)
@@ -2520,7 +2533,7 @@ namespace DiceSoccer
                 59 => 27,
                 61 or 62 or 63 => 51,
                 69 or 71 => 34,
-                70 => 19,
+                70 => 34,
                 72 or 73 => 37,
                 76 or 78 or 79 or 81 => 43,
                 80 => 47,
@@ -3568,7 +3581,7 @@ namespace DiceSoccer
             var header = AddMenuHeader(null, ShowHome);
 
             // Top-left UpButton next to Back button inside header bar
-            bool entourageUnlocked = _seasonIndex > 0 || _unlockedEntourageIds.Count > 0 || PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1;
+            bool entourageUnlocked = _seasonIndex > 0 || _maxUnlockedSeason > 0 || _unlockedEntourageIds.Count > 0 || PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1;
             AddSpriteButton("HeaderUpBtn",
                 entourageUnlocked ? "Original/sprites/EnemyLineupSS1/UpButton" : "Original/sprites/EnemyLineupSS1/UpButtonDisabled",
                 entourageUnlocked ? "Original/sprites/EnemyLineupSS2/UpButtonPressed" : "Original/sprites/EnemyLineupSS1/UpButtonDisabled",
@@ -3737,6 +3750,23 @@ namespace DiceSoccer
             }
         }
 
+        private bool IsPlayerUnlocked(PlayerData player)
+        {
+            if (player == null || player.id <= 0 || player.id >= 1000) return false;
+            if (_ownedPlayerIds != null && _ownedPlayerIds.Contains(player.id)) return true;
+            if (PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1) return true;
+            if (PlayerPrefs.GetInt($"diceSoccer.unlockedPlayer.{player.id}", 0) == 1) return true;
+            return string.IsNullOrWhiteSpace(player.unlockCriteria);
+        }
+
+        private void SpendCash(int amount)
+        {
+            if (amount <= 0) return;
+            _careerCash = Mathf.Max(0, _careerCash - amount);
+            int spent = PlayerPrefs.GetInt("diceSoccer.stats.cashSpent", 0) + amount;
+            PlayerPrefs.SetInt("diceSoccer.stats.cashSpent", spent);
+        }
+
         private void ShowPlayerPicker(int slot)
         {
             _catalog ??= GameCatalog.Load();
@@ -3786,7 +3816,7 @@ namespace DiceSoccer
             foreach (var p in _catalog.Data.players)
             {
                 if (p.id > 0 && p.id < 1000 && p.cost > 0 &&
-                    string.IsNullOrWhiteSpace(p.unlockCriteria) &&
+                    IsPlayerUnlocked(p) &&
                     !_ownedPlayerIds.Contains(p.id) &&
                     p.position == positionKey)
                 {
@@ -3798,7 +3828,7 @@ namespace DiceSoccer
             foreach (var p in _catalog.Data.players)
             {
                 if (p.id > 0 && p.id < 1000 &&
-                    (!string.IsNullOrWhiteSpace(p.unlockCriteria) || p.cost <= 0) &&
+                    (!IsPlayerUnlocked(p) || p.cost <= 0) &&
                     !_ownedPlayerIds.Contains(p.id) &&
                     p.position == positionKey)
                 {
@@ -3832,7 +3862,7 @@ namespace DiceSoccer
                 var capturedPlayer = player;
                 var pId = player.id;
                 bool isOwned = _ownedPlayerIds.Contains(pId);
-                bool isLocked = !isOwned && (!string.IsNullOrWhiteSpace(player.unlockCriteria) || player.cost <= 0);
+                bool isLocked = !isOwned && (!IsPlayerUnlocked(player) || player.cost <= 0);
                 bool isHire = !isOwned && !isLocked && player.cost > 0;
 
                 var c = cardCenters[i];
@@ -3850,7 +3880,7 @@ namespace DiceSoccer
                         {
                             if (_careerCash >= capturedPlayer.cost)
                             {
-                                _careerCash -= capturedPlayer.cost;
+                                SpendCash(capturedPlayer.cost);
                                 _ownedPlayerIds.Add(pId);
                                 if (slot >= 0 && IsRoleAllowed(capturedPlayer, slot))
                                 {
@@ -3858,11 +3888,13 @@ namespace DiceSoccer
                                     PlayerPrefs.SetString(LineupPreferenceKey, string.Join(",", _lineupIds));
                                 }
                                 SaveCareerState();
+                                EvaluateCareerProgressAndAchievements(false, false, false, true);
                                 AudioManager.Instance.PlayTransform();
                                 if (slot >= 0 && IsRoleAllowed(capturedPlayer, slot))
                                     ShowManage();
                                 else
                                     ShowPlayerPicker(slot);
+                                ShowNextUnlockModalThen(null);
                             }
                             else
                             {
@@ -3936,7 +3968,7 @@ namespace DiceSoccer
             foreach (var player in _catalog.Data.players)
             {
                 if (player.id > 0 && player.id < 1000 && player.cost > 0 &&
-                    string.IsNullOrWhiteSpace(player.unlockCriteria) &&
+                    IsPlayerUnlocked(player) &&
                     !_ownedPlayerIds.Contains(player.id))
                     candidates.Add(player);
             }
@@ -4008,7 +4040,7 @@ namespace DiceSoccer
         {
             var player = _catalog.GetPlayer(playerId);
             if (player.id <= 0 || player.id >= 1000 || player.cost <= 0 ||
-                !string.IsNullOrWhiteSpace(player.unlockCriteria))
+                !IsPlayerUnlocked(player))
                 throw new InvalidOperationException(
                     $"Player {player.name} is not eligible for hiring from the available roster.");
             if (_ownedPlayerIds.Contains(player.id))
@@ -4016,13 +4048,14 @@ namespace DiceSoccer
             if (_careerCash < player.cost)
                 return;
 
-            _careerCash -= player.cost;
+            SpendCash(player.cost);
             _ownedPlayerIds.Add(player.id);
-            PlayerPrefs.SetInt("diceSoccer.cash", _careerCash);
             PlayerPrefs.SetString(RosterPreferenceKey, string.Join(",", _ownedPlayerIds));
-            PlayerPrefs.Save();
+            SaveCareerState();
+            EvaluateCareerProgressAndAchievements(false, false, false, true);
             AudioManager.Instance.PlayBuy();
             ShowHiring();
+            ShowNextUnlockModalThen(null);
         }
 
         private void AssignPlayerToSlot(int targetSlot, int playerId)
@@ -4949,19 +4982,34 @@ namespace DiceSoccer
                 }
                 else
                 {
-                    var canAfford = _careerCash >= ent.cost;
-                    AddButton(canAfford ? $"{ent.cost:N0}" : $"NEED {ent.cost:N0}", card.transform, canAfford ? Grass : new Color32(60, 65, 70, 255),
-                        new Vector2(0.85f, 0.5f), new Vector2(0.24f, 0.5f), () =>
-                        {
-                            if (_careerCash >= capturedEnt.cost)
+                    bool isLockedByCriteria = !string.IsNullOrWhiteSpace(ent.unlockCriteria) && PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 0;
+                    if (isLockedByCriteria)
+                    {
+                        var lockBtn = AddButton("LOCKED", card.transform, new Color32(75, 78, 84, 255),
+                            new Vector2(0.85f, 0.5f), new Vector2(0.24f, 0.5f), () => AudioManager.Instance.PlayDisappoint());
+                        lockBtn.interactable = true;
+                        AddText(ent.unlockCriteria, card.transform, 10, new Color32(150, 45, 35, 255),
+                            new Vector2(0.24f, 0.01f), new Vector2(0.72f, 0.16f));
+                    }
+                    else
+                    {
+                        var canAfford = _careerCash >= ent.cost;
+                        string buyLabel = ent.cost <= 0 ? "FREE" : $"{ent.cost:N0}";
+                        AddButton(canAfford ? buyLabel : $"NEED {ent.cost:N0}", card.transform, canAfford ? Grass : new Color32(60, 65, 70, 255),
+                            new Vector2(0.85f, 0.5f), new Vector2(0.24f, 0.5f), () =>
                             {
-                                _careerCash -= capturedEnt.cost;
-                                _unlockedEntourageIds.Add(capturedEnt.id);
-                                SaveCareerState();
-                                AudioManager.Instance.PlayBuy();
-                                ShowEntourage();
-                            }
-                        });
+                                if (_careerCash >= capturedEnt.cost)
+                                {
+                                    SpendCash(capturedEnt.cost);
+                                    _unlockedEntourageIds.Add(capturedEnt.id);
+                                    SaveCareerState();
+                                    EvaluateCareerProgressAndAchievements(false, false, false, true);
+                                    AudioManager.Instance.PlayBuy();
+                                    ShowEntourage();
+                                    ShowNextUnlockModalThen(null);
+                                }
+                            });
+                    }
                 }
             }
 
@@ -5072,11 +5120,11 @@ namespace DiceSoccer
                     }
                     return true;
 
-                case 7: // Total is ODD
-                    return (total % 2 != 0);
+                case 7: // Total is ODD (Wild 31 acts as wildcard)
+                    return wildCount > 0 || (total % 2 != 0);
 
-                case 8: // Total is EVEN
-                    return (total % 2 == 0);
+                case 8: // Total is EVEN (Wild 31 acts as wildcard)
+                    return wildCount > 0 || (total % 2 == 0);
 
                 case 9:
                 case 10:
@@ -5130,35 +5178,110 @@ namespace DiceSoccer
             return 5;
         }
 
-        private static int RollSinglePlayerDieValue(PlayerData player)
+        private static (int value, int lastRawFace) RollSinglePlayerDie(PlayerData player)
         {
             if (player == null || player.diceSides == null || player.diceSides.Length == 0)
-                return UnityEngine.Random.Range(2, 7);
+            {
+                int fallback = UnityEngine.Random.Range(2, 7);
+                return (fallback, fallback);
+            }
 
             int total = 0;
+            int lastRawFace = 1;
             int safety = 0;
             while (safety++ < 5)
             {
                 int f = player.diceSides[UnityEngine.Random.Range(0, player.diceSides.Length)];
                 if (f >= 101) f -= 100;
-                if (f >= 1 && f <= 10) { total += f; break; }
+                lastRawFace = f;
+                if (f >= 1 && f <= 14) { total += f; break; }
                 if (f >= 16 && f <= 18) { total += (f - 15); continue; }
                 if (f == 24) continue;
                 if (f == 31 || f == 32 || f == 23 || f == 26) break;
                 total += Mathf.Clamp(f, 1, 6);
                 break;
             }
-            return Mathf.Max(1, total);
+            return (Mathf.Max(0, total), lastRawFace);
+        }
+
+        private void SetBuffBeltDisplay(Sprite medalSprite, string message, string badgeText = "")
+        {
+            if (_buffBeltGo != null) _buffBeltGo.SetActive(true);
+            if (_buffBeltMedal != null && medalSprite != null) _buffBeltMedal.sprite = medalSprite;
+            if (_buffBeltBadgeText != null) _buffBeltBadgeText.text = badgeText ?? string.Empty;
+            if (_buffBeltText != null) _buffBeltText.text = message ?? string.Empty;
+        }
+
+        private void HideBuffBelt()
+        {
+            if (_buffBeltBadgeText != null) _buffBeltBadgeText.text = string.Empty;
+            if (_buffBeltGo != null) _buffBeltGo.SetActive(false);
+        }
+
+        private static string GetAbilityBadgeOverlayText(AbilityData ab)
+        {
+            if (ab != null && ab.id == 18) return "3";
+            return string.Empty;
+        }
+
+        private void ClearSideDieVisualForRoll(int side, int dieIdx)
+        {
+            var dImgs = (side == 0) ? _homeDice : _awayDice;
+            var labels = (side == 0) ? _homeDieValueLabels : _awayDieValueLabels;
+            if (dImgs != null && dieIdx >= 0 && dieIdx < dImgs.Length && dImgs[dieIdx] != null)
+                dImgs[dieIdx].enabled = false;
+            if (labels != null && dieIdx >= 0 && dieIdx < labels.Length && labels[dieIdx] != null)
+                labels[dieIdx].enabled = false;
+        }
+
+        private void SetSideDieVisual(int side, int dieIdx, int value, int rawComboFace = 0, bool allowSpecialIcon = true)
+        {
+            var dImgs = (side == 0) ? _homeDice : _awayDice;
+            var labels = (side == 0) ? _homeDieValueLabels : _awayDieValueLabels;
+            Image faceImg = (dImgs != null && dieIdx >= 0 && dieIdx < dImgs.Length) ? dImgs[dieIdx] : null;
+            Text valLabel = (labels != null && dieIdx >= 0 && dieIdx < labels.Length) ? labels[dieIdx] : null;
+
+            bool isSpecialZero = allowSpecialIcon && value == 0 &&
+                (rawComboFace == 31 || rawComboFace == 32 || rawComboFace == 23 || rawComboFace == 26);
+
+            if (isSpecialZero)
+            {
+                if (valLabel != null) valLabel.enabled = false;
+                if (faceImg != null) SetDieFace(faceImg, rawComboFace);
+                return;
+            }
+
+            if (value >= 1 && value <= 14)
+            {
+                if (valLabel != null) valLabel.enabled = false;
+                if (faceImg != null) SetDieFace(faceImg, value);
+                return;
+            }
+
+            // Numeric values 0 (tackled / disqualified) or >= 15 (buffed/multiplied totals) render crisp numeric digits
+            if (faceImg != null) faceImg.enabled = false;
+            if (valLabel != null)
+            {
+                valLabel.text = Mathf.Max(0, value).ToString();
+                valLabel.enabled = true;
+            }
+        }
+
+        private void SetRawSideDieFace(int side, int dieIdx, int rawFace)
+        {
+            var dImgs = (side == 0) ? _homeDice : _awayDice;
+            var labels = (side == 0) ? _homeDieValueLabels : _awayDieValueLabels;
+            if (labels != null && dieIdx >= 0 && dieIdx < labels.Length && labels[dieIdx] != null)
+                labels[dieIdx].enabled = false;
+            if (dImgs != null && dieIdx >= 0 && dieIdx < dImgs.Length && dImgs[dieIdx] != null)
+                SetDieFace(dImgs[dieIdx], rawFace);
         }
 
         private IEnumerator AnimateEncounter(int[] homeFaces, int[] awayFaces, int attackingSide)
         {
             _inEncounterAnimation = true;
             if (_shakePrompt != null) _shakePrompt.gameObject.SetActive(false);
-            if (_buffBeltGo != null)
-            {
-                _buffBeltGo.SetActive(false);
-            }
+            HideBuffBelt();
             _matchReport.text = "Rolling the dice...";
 
             var loc = _match.Location;
@@ -5198,6 +5321,7 @@ namespace DiceSoccer
                         _homeDieRoots[i].GetComponent<RectTransform>().anchorMin =
                             _homeDieRoots[i].GetComponent<RectTransform>().anchorMax = new Vector2(x, y);
                         if (_homeDice[i] != null) _homeDice[i].enabled = false;
+                        if (_homeDieValueLabels != null && _homeDieValueLabels[i] != null) _homeDieValueLabels[i].enabled = false;
                     }
                     else if (_homeDieRoots[i] != null) _homeDieRoots[i].SetActive(false);
 
@@ -5209,6 +5333,7 @@ namespace DiceSoccer
                         _awayDieRoots[i].GetComponent<RectTransform>().anchorMin =
                             _awayDieRoots[i].GetComponent<RectTransform>().anchorMax = new Vector2(x, y);
                         if (_awayDice[i] != null) _awayDice[i].enabled = false;
+                        if (_awayDieValueLabels != null && _awayDieValueLabels[i] != null) _awayDieValueLabels[i].enabled = false;
                     }
                     else if (_awayDieRoots[i] != null) _awayDieRoots[i].SetActive(false);
                 }
@@ -5236,14 +5361,14 @@ namespace DiceSoccer
                     int initFace = (homeSeqs != null && i < homeSeqs.Length && homeSeqs[i] != null && homeSeqs[i].Length > 0)
                         ? homeSeqs[i][0] : homeFaces[i];
                     if (_homeDieRoots[i] != null) _homeDieRoots[i].GetComponent<Image>().sprite = diceBaseSprite;
-                    if (_homeDice[i] != null) SetDieFace(_homeDice[i], initFace);
+                    SetRawSideDieFace(0, i, initFace);
                 }
                 for (var i = 0; i < awayFaces.Length; i++)
                 {
                     int initFace = (awaySeqs != null && i < awaySeqs.Length && awaySeqs[i] != null && awaySeqs[i].Length > 0)
                         ? awaySeqs[i][0] : awayFaces[i];
                     if (_awayDieRoots[i] != null) _awayDieRoots[i].GetComponent<Image>().sprite = diceBaseSprite;
-                    if (_awayDice[i] != null) SetDieFace(_awayDice[i], initFace);
+                    SetRawSideDieFace(1, i, initFace);
                 }
 
                 // Elastic settle bounce on landing
@@ -5287,11 +5412,11 @@ namespace DiceSoccer
                 bool isHome = (side == 0);
                 var seqs = isHome ? homeSeqs : awaySeqs;
                 var facesArr = isHome ? homeFaces : awayFaces;
+                var comboArr = isHome ? comboHomeFaces : comboAwayFaces;
                 var origArr = isHome ? originalHomeFaces : originalAwayFaces;
                 var dribArr = isHome ? homeDribbleBonus : awayDribbleBonus;
                 var boostArr = isHome ? homeBoosted : awayBoosted;
                 var dieRoots = isHome ? _homeDieRoots : _awayDieRoots;
-                var diceImgs = isHome ? _homeDice : _awayDice;
                 var dieBadges = isHome ? _homeDieBuffBadges : _awayDieBuffBadges;
 
                 for (int i = 0; i < facesArr.Length; i++)
@@ -5323,16 +5448,10 @@ namespace DiceSoccer
 
                             if (dieRoots != null && i < dieRoots.Length && dieRoots[i] != null)
                             {
-                                Vector2 pos = dieRoots[i].GetComponent<RectTransform>().anchorMin;
                                 string burstName = localAb != null ? localAb.name : (stepFace == 24 ? "Cross" : $"Dribble +{stepFace - 15}");
                                 Sprite medal = GetAbilityMedalSprite(localAb);
 
-                                if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                                {
-                                    _buffBeltGo.SetActive(true);
-                                    _buffBeltMedal.sprite = medal;
-                                    _buffBeltText.text = $"{burstName.ToUpper()}! ROLLING AGAIN...";
-                                }
+                                SetBuffBeltDisplay(medal, $"{burstName.ToUpper()}! ROLLING AGAIN...", GetAbilityBadgeOverlayText(localAb));
                                 if (dieBadges != null && i < dieBadges.Length && dieBadges[i] != null)
                                 {
                                     dieBadges[i].sprite = medal;
@@ -5343,6 +5462,7 @@ namespace DiceSoccer
                                 yield return new WaitForSeconds(0.28f);
 
                                 // Re-roll this die visually on the pitch
+                                ClearSideDieVisualForRoll(side, i);
                                 AudioManager.Instance.PlayDiceRoll();
                                 for (int f = 1; f <= 7; f++)
                                 {
@@ -5350,8 +5470,7 @@ namespace DiceSoccer
                                     yield return new WaitForSeconds(0.040f);
                                 }
                                 dieRoots[i].GetComponent<Image>().sprite = GetUiSprite("Original/sprites/Buff6/DiceBackground");
-                                if (diceImgs != null && i < diceImgs.Length && diceImgs[i] != null)
-                                    SetDieFace(diceImgs[i], nextFace);
+                                SetRawSideDieFace(side, i, nextFace);
                                 yield return new WaitForSeconds(0.20f);
                             }
                         }
@@ -5365,20 +5484,24 @@ namespace DiceSoccer
                         }
                     }
 
-                    facesArr[i] = origArr[i] + dribArr[i];
-                    if (dribArr[i] > 0 && diceImgs != null && i < diceImgs.Length && diceImgs[i] != null)
+                    // Keep Dribble bonus as part of baseline so Phase 4 Marking / Cleanse / Entourage swaps preserve natural Dribble pips (Intercept strips Dribble explicitly)
+                    origArr[i] = baseNum + dribArr[i];
+                    facesArr[i] = origArr[i];
+                    if (dribArr[i] > 0)
                     {
-                        SetDieFace(diceImgs[i], facesArr[i]);
+                        SetSideDieVisual(side, i, facesArr[i], comboArr[i], true);
                     }
                 }
             }
 
-            int originalHomeTotal = _match.LastHomeTotal;
-            int originalAwayTotal = _match.LastAwayTotal;
+            int homeDiceSum = 0;
+            for (int i = 0; i < homeFaces.Length; i++) homeDiceSum += homeFaces[i];
+            int awayDiceSum = 0;
+            for (int i = 0; i < awayFaces.Length; i++) awayDiceSum += awayFaces[i];
 
             // 5. Reveal base duel totals with counting animation
+            HideBuffBelt();
             _matchReport.text = "Counting the dice...";
-            if (_buffBeltText != null) _buffBeltText.text = "COUNTING THE DICE...";
 
             if (_homeTotalText != null && _awayTotalText != null)
             {
@@ -5448,7 +5571,8 @@ namespace DiceSoccer
                     if (spId > 0)
                     {
                         var ab = _catalog?.TryGetAbility(spId);
-                        if (ab != null && IsAbilityTriggered(ab.trigger, i, comboHomeFaces, originalHomeTotal))
+                        if (ab != null && ((ab.id != 47 && ab.id != 80) || _match.Possession == 0) &&
+                            IsAbilityTriggered(ab.trigger, i, comboHomeFaces, homeDiceSum))
                         {
                             allAbilities.Add((0, ab, i, currentLineup[s]));
                         }
@@ -5465,7 +5589,8 @@ namespace DiceSoccer
                     if (spId > 0)
                     {
                         var ab = _catalog?.TryGetAbility(spId);
-                        if (ab != null && IsAbilityTriggered(ab.trigger, i, comboAwayFaces, originalAwayTotal))
+                        if (ab != null && ((ab.id != 47 && ab.id != 80) || _match.Possession == 1) &&
+                            IsAbilityTriggered(ab.trigger, i, comboAwayFaces, awayDiceSum))
                         {
                             allAbilities.Add((1, ab, i, awayLineup[s]));
                         }
@@ -5485,15 +5610,9 @@ namespace DiceSoccer
 
             void UpdateSideDieVisual(int s, int dieIdx, int val)
             {
-                var dImgs = (s == 0) ? _homeDice : _awayDice;
                 var cFaces = (s == 0) ? comboHomeFaces : comboAwayFaces;
-                if (dImgs != null && dieIdx >= 0 && dieIdx < dImgs.Length && dImgs[dieIdx] != null)
-                {
-                    if (val == 0 && dieIdx < cFaces.Length && cFaces[dieIdx] == 31)
-                        SetDieFace(dImgs[dieIdx], 31);
-                    else
-                        SetDieFace(dImgs[dieIdx], val);
-                }
+                int rawCombo = (cFaces != null && dieIdx >= 0 && dieIdx < cFaces.Length) ? cFaces[dieIdx] : 0;
+                SetSideDieVisual(s, dieIdx, val, rawCombo, true);
             }
 
             void AdjustSideTotal(int s, int delta)
@@ -5559,11 +5678,7 @@ namespace DiceSoccer
                 // Skip re-roll abilities if this slot was intercepted by the opponent!
                 if (activeAbility.type == 5 && activeAbility.id != 64 && myIntercepted[burstDie])
                 {
-                    if (_buffBeltGo != null && _buffBeltText != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} INTERCEPTED!";
-                    }
+                    SetBuffBeltDisplay(GetAbilityMedalSprite(activeAbility), $"{activeAbility.name.ToUpper()} INTERCEPTED!", GetAbilityBadgeOverlayText(activeAbility));
                     yield return new WaitForSeconds(0.45f);
                     continue;
                 }
@@ -5574,6 +5689,7 @@ namespace DiceSoccer
 
                 string badgeSpritePath = GetTriggerBadgePath(activeAbility.trigger);
                 Sprite abilityMedalSprite = GetAbilityMedalSprite(activeAbility);
+                string abilityBadgeOverlay = GetAbilityBadgeOverlayText(activeAbility);
 
                 yield return StartCoroutine(PlayAbilityBurst(burstPos, badgeSpritePath, activeAbility.name));
 
@@ -5592,12 +5708,7 @@ namespace DiceSoccer
                             }
                             if (isHuman)
                             {
-                                if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                                {
-                                    _buffBeltGo.SetActive(true);
-                                    _buffBeltMedal.sprite = abilityMedalSprite;
-                                    _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
-                                }
+                                SetBuffBeltDisplay(abilityMedalSprite, $"{pPrefix}PLEASE SELECT TARGET", abilityBadgeOverlay);
                                 int[] eligible = new int[oppFaces.Length];
                                 for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
                                 yield return StartCoroutine(SelectBuffTarget(oppSide, eligible, bestDef, c => chosenOpp = c));
@@ -5616,22 +5727,18 @@ namespace DiceSoccer
                                 oppDieBadges[d].sprite = abilityMedalSprite;
                                 oppDieBadges[d].enabled = true;
                             }
-                            // If opponent die had a Dribble local re-roll bonus, Intercept strips it!
+                            // If opponent die had a Dribble local re-roll bonus, Intercept strips it from both current and baseline!
                             if (oppDribble[d] > 0)
                             {
                                 int strip = (activeAbility.id == 76) ? oppDribble[d] : Mathf.Min(oppDribble[d], 3);
                                 oppDribble[d] -= strip;
                                 oppFaces[d] = Math.Max(0, oppFaces[d] - strip);
+                                oppOrigFaces[d] = Math.Max(0, oppOrigFaces[d] - strip);
                                 UpdateSideDieVisual(oppSide, d, oppFaces[d]);
                                 AdjustSideTotal(oppSide, -strip);
                             }
                         }
-                        if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                        {
-                            _buffBeltGo.SetActive(true);
-                            _buffBeltMedal.sprite = abilityMedalSprite;
-                            _buffBeltText.text = $"{activeAbility.name.ToUpper()} BLOCKED REROLLS!";
-                        }
+                        SetBuffBeltDisplay(abilityMedalSprite, $"{activeAbility.name.ToUpper()} BLOCKED REROLLS!", abilityBadgeOverlay);
                         yield return new WaitForSeconds(0.65f);
                     }
                 }
@@ -5648,12 +5755,7 @@ namespace DiceSoccer
 
                         if (isHuman)
                         {
-                            if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                            {
-                                _buffBeltGo.SetActive(true);
-                                _buffBeltMedal.sprite = abilityMedalSprite;
-                                _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
-                            }
+                            SetBuffBeltDisplay(abilityMedalSprite, $"{pPrefix}PLEASE SELECT TARGET", abilityBadgeOverlay);
                             int[] eligible = new int[myFaces.Length];
                             for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
                             yield return StartCoroutine(SelectBuffTarget(side, eligible, bestOwn, c => chosenOwn = c));
@@ -5679,12 +5781,7 @@ namespace DiceSoccer
                             myDieBadges[d].enabled = true;
                         }
                     }
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} IMMUNITY!";
-                    }
+                    SetBuffBeltDisplay(abilityMedalSprite, $"{activeAbility.name.ToUpper()} IMMUNITY!", abilityBadgeOverlay);
                     yield return new WaitForSeconds(0.65f);
                 }
                 // 2. Saving Tackle (ID 44): Choose a die and switch its positive and negative bonuses
@@ -5703,12 +5800,7 @@ namespace DiceSoccer
                         int chosenDie = bestOwn;
                         if (isHuman)
                         {
-                            if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                            {
-                                _buffBeltGo.SetActive(true);
-                                _buffBeltMedal.sprite = abilityMedalSprite;
-                                _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
-                            }
+                            SetBuffBeltDisplay(abilityMedalSprite, $"{pPrefix}PLEASE SELECT TARGET", abilityBadgeOverlay);
                             int[] eligible = new int[myFaces.Length];
                             for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
                             yield return StartCoroutine(SelectBuffTarget(side, eligible, bestOwn, c => chosenDie = c));
@@ -5729,12 +5821,7 @@ namespace DiceSoccer
                         }
                         AdjustSideTotal(side, newVal - oldVal);
                     }
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} REVERSED!";
-                    }
+                    SetBuffBeltDisplay(abilityMedalSprite, $"{activeAbility.name.ToUpper()} REVERSED!", abilityBadgeOverlay);
                     yield return new WaitForSeconds(0.65f);
                 }
                 // A. Through Pass (ID 47, 80): Mark extra forward advance once duel completes!
@@ -5742,12 +5829,7 @@ namespace DiceSoccer
                 {
                     if (_match.Possession == side)
                     {
-                        if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                        {
-                            _buffBeltGo.SetActive(true);
-                            _buffBeltMedal.sprite = abilityMedalSprite;
-                            _buffBeltText.text = "THROUGH PASS! ADVANCING!";
-                        }
+                        SetBuffBeltDisplay(abilityMedalSprite, "THROUGH PASS! ADVANCING!", abilityBadgeOverlay);
                         yield return StartCoroutine(PlayThroughPassAnimation(isHome));
                         pendingThroughPassSide = side;
                         yield return new WaitForSeconds(0.50f);
@@ -5756,18 +5838,14 @@ namespace DiceSoccer
                 // A2. Dive! (ID 26, 45): Roll the REFEREE die ([10, 32, 32, 32, 32, 32]) at the end of this play
                 else if (activeAbility.id == 26 || activeAbility.id == 45)
                 {
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = "DIVE! ROLLING REFEREE DIE...";
-                    }
+                    SetBuffBeltDisplay(abilityMedalSprite, "DIVE! ROLLING REFEREE DIE...", abilityBadgeOverlay);
                     AudioManager.Instance.PlayWhistle();
                     int[] refSides = { 10, 32, 32, 32, 32, 32 };
                     int refRoll = refSides[UnityEngine.Random.Range(0, refSides.Length)];
 
                     if (myDieRoots != null && burstDie < myDieRoots.Length && myDieRoots[burstDie] != null)
                     {
+                        ClearSideDieVisualForRoll(side, burstDie);
                         AudioManager.Instance.PlayDiceRoll();
                         for (int f = 1; f <= 7; f++)
                         {
@@ -5775,9 +5853,7 @@ namespace DiceSoccer
                             yield return new WaitForSeconds(0.045f);
                         }
                         myDieRoots[burstDie].GetComponent<Image>().sprite = GetUiSprite("Original/sprites/Buff6/DiceBackground");
-                        var dImgs = isHome ? _homeDice : _awayDice;
-                        if (dImgs != null && burstDie < dImgs.Length && dImgs[burstDie] != null)
-                            SetDieFace(dImgs[burstDie], refRoll);
+                        SetRawSideDieFace(side, burstDie, refRoll);
                     }
 
                     if (refRoll == 10)
@@ -5786,32 +5862,40 @@ namespace DiceSoccer
                         int oldVal = myFaces[burstDie];
                         myFaces[burstDie] = 10;
                         myBoosted[burstDie] = true;
+                        UpdateSideDieVisual(side, burstDie, 10);
                         AdjustSideTotal(side, 10 - oldVal);
-                        if (_buffBeltText != null) _buffBeltText.text = "REFEREE FOOLED! +10 FREE KICK!";
+                        SetBuffBeltDisplay(abilityMedalSprite, "REFEREE FOOLED! +10 FREE KICK!", abilityBadgeOverlay);
                     }
                     else
                     {
-                        // Referee Whistle (32): caught diving -> +1 to all opponents (Ability 32)
+                        // Referee Whistle (32): caught diving -> +1 to all non-immune opponents (Ability 32)
                         AudioManager.Instance.PlayDebuff();
+                        if (activeAbility.id == 45)
+                        {
+                            UpdateSideDieVisual(side, burstDie, myFaces[burstDie]);
+                        }
+                        else
+                        {
+                            var myComboFaces = isHome ? comboHomeFaces : comboAwayFaces;
+                            if (burstDie < myComboFaces.Length) myComboFaces[burstDie] = 32;
+                            UpdateSideDieVisual(side, burstDie, myFaces[burstDie]);
+                        }
                         for (int d = 0; d < oppFaces.Length; d++)
                         {
+                            if (oppImmune[d]) continue;
                             oppFaces[d] += 1;
+                            oppBoosted[d] = true;
                             UpdateSideDieVisual(oppSide, d, oppFaces[d]);
                             AdjustSideTotal(oppSide, 1);
                         }
-                        if (_buffBeltText != null) _buffBeltText.text = "CAUGHT DIVING! +1 TO OPPONENTS!";
+                        SetBuffBeltDisplay(GetUiSprite("Original/sprites/Buff6/BuffMedal32"), "CAUGHT DIVING! +1 TO OPPONENTS!");
                     }
                     yield return new WaitForSeconds(0.70f);
                 }
                 // B. Defensive Wall (ID 27, 59: +1 to all teammates) or +5 (ID 64)
                 else if (activeAbility.id == 27 || activeAbility.id == 59 || activeAbility.id == 64)
                 {
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = (activeAbility.id == 64) ? "+5 TRIPLE BONUS!" : $"{activeAbility.name.ToUpper()} +1!";
-                    }
+                    SetBuffBeltDisplay(abilityMedalSprite, (activeAbility.id == 64) ? "+5 TRIPLE BONUS!" : $"{activeAbility.name.ToUpper()} +1!", abilityBadgeOverlay);
                     AudioManager.Instance.PlayBuff();
                     if (activeAbility.id == 64)
                     {
@@ -5837,12 +5921,7 @@ namespace DiceSoccer
                 // D. Team-wide Debuffs against Opponent (Target == 2: Sliding Tackle ID 20, 36; Clearance ID 35; Offside Trap ID 38)
                 else if (activeAbility.type == 0 && activeAbility.target == 2 && oppFaces.Length > 0)
                 {
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = $"{activeAbility.name.ToUpper()}!";
-                    }
+                    SetBuffBeltDisplay(abilityMedalSprite, $"{activeAbility.name.ToUpper()}!", abilityBadgeOverlay);
                     AudioManager.Instance.PlayDebuff();
                     int teamRed = (activeAbility.id == 20) ? 3 : ((activeAbility.id == 36) ? 2 : 1);
                     for (int d = 0; d < oppFaces.Length; d++)
@@ -5874,12 +5953,7 @@ namespace DiceSoccer
                     int chosenDie = bestDie;
                     if (isHuman)
                     {
-                        if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                        {
-                            _buffBeltGo.SetActive(true);
-                            _buffBeltMedal.sprite = abilityMedalSprite;
-                            _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
-                        }
+                        SetBuffBeltDisplay(abilityMedalSprite, $"{pPrefix}PLEASE SELECT TARGET", abilityBadgeOverlay);
                         int[] eligible = new int[myFaces.Length];
                         for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
                         yield return StartCoroutine(SelectBuffTarget(side, eligible, bestDie, chosen => chosenDie = chosen));
@@ -5920,7 +5994,7 @@ namespace DiceSoccer
                         UpdateSideDieVisual(side, chosenDie, myFaces[chosenDie]);
 
                         AdjustSideTotal(side, boost);
-                        if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} x{multiplier}!";
+                        SetBuffBeltDisplay(abilityMedalSprite, $"{activeAbility.name.ToUpper()} x{multiplier}!", abilityBadgeOverlay);
                         yield return new WaitForSeconds(0.70f);
                     }
                 }
@@ -5938,14 +6012,9 @@ namespace DiceSoccer
                         int chosenDie = bestDie;
                         if (isHuman)
                         {
-                            if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                            {
-                                _buffBeltGo.SetActive(true);
-                                _buffBeltMedal.sprite = abilityMedalSprite;
-                                _buffBeltText.text = (rerollCount > 1)
-                                    ? $"{pPrefix}SELECT DIE {r + 1} OF {rerollCount}"
-                                    : $"{pPrefix}PLEASE SELECT TARGET";
-                            }
+                            SetBuffBeltDisplay(abilityMedalSprite,
+                                (rerollCount > 1) ? $"{pPrefix}SELECT DIE {r + 1} OF {rerollCount}" : $"{pPrefix}PLEASE SELECT TARGET",
+                                abilityBadgeOverlay);
                             int[] eligible = new int[myFaces.Length];
                             for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
                             yield return StartCoroutine(SelectBuffTarget(side, eligible, bestDie, chosen => chosenDie = chosen));
@@ -5959,6 +6028,7 @@ namespace DiceSoccer
                                 myDieBadges[chosenDie].enabled = true;
                             }
 
+                            ClearSideDieVisualForRoll(side, chosenDie);
                             AudioManager.Instance.PlayDiceRoll();
                             for (int f = 1; f <= 7; f++)
                             {
@@ -5973,13 +6043,18 @@ namespace DiceSoccer
                             PlayerData targetPlayer = (myLineup != null && chosenDie < myActiveSlots.Length && myActiveSlots[chosenDie] < myLineup.Length)
                                 ? myLineup[myActiveSlots[chosenDie]] : triggeringPlayer;
                             int oldVal = myFaces[chosenDie];
-                            int newVal = RollSinglePlayerDieValue(targetPlayer);
+                            var (newVal, newRawFace) = RollSinglePlayerDie(targetPlayer);
+                            var myComboArr = isHome ? comboHomeFaces : comboAwayFaces;
+                            if (chosenDie < myComboArr.Length) myComboArr[chosenDie] = newRawFace;
                             myFaces[chosenDie] = newVal;
                             myOrigFaces[chosenDie] = newVal;
+                            myBoosted[chosenDie] = false;
+                            myReduced[chosenDie] = false;
                             UpdateSideDieVisual(side, chosenDie, newVal);
 
                             AdjustSideTotal(side, newVal - oldVal);
-                            if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} REROLLED TO {newVal}!";
+                            string rolledDisplay = newRawFace == 31 ? "WILD" : (newRawFace == 32 ? "WHISTLE" : newVal.ToString());
+                            SetBuffBeltDisplay(abilityMedalSprite, $"{activeAbility.name.ToUpper()} REROLLED TO {rolledDisplay}!", abilityBadgeOverlay);
                             yield return new WaitForSeconds(0.60f);
                         }
                     }
@@ -5995,12 +6070,7 @@ namespace DiceSoccer
                     int chosenDie = bestDie;
                     if (isHuman)
                     {
-                        if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                        {
-                            _buffBeltGo.SetActive(true);
-                            _buffBeltMedal.sprite = abilityMedalSprite;
-                            _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
-                        }
+                        SetBuffBeltDisplay(abilityMedalSprite, $"{pPrefix}PLEASE SELECT TARGET", abilityBadgeOverlay);
                         int[] oppEligible = new int[oppFaces.Length];
                         for (int e = 0; e < oppEligible.Length; e++) oppEligible[e] = e;
                         yield return StartCoroutine(SelectBuffTarget(oppSide, oppEligible, bestDie, chosen => chosenDie = chosen));
@@ -6027,7 +6097,7 @@ namespace DiceSoccer
                         UpdateSideDieVisual(oppSide, chosenDie, newVal);
 
                         AdjustSideTotal(oppSide, newVal - oldVal);
-                        if (_buffBeltText != null) _buffBeltText.text = $"{activeAbility.name.ToUpper()} -{reduction}!";
+                        SetBuffBeltDisplay(abilityMedalSprite, $"{activeAbility.name.ToUpper()} -{reduction}!", abilityBadgeOverlay);
                         yield return new WaitForSeconds(0.70f);
                     }
                 }
@@ -6051,12 +6121,7 @@ namespace DiceSoccer
                         chosenMyDie = bestMyDie;
                         if (isHuman)
                         {
-                            if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                            {
-                                _buffBeltGo.SetActive(true);
-                                _buffBeltMedal.sprite = abilityMedalSprite;
-                                _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
-                            }
+                            SetBuffBeltDisplay(abilityMedalSprite, $"{pPrefix}PLEASE SELECT TARGET", abilityBadgeOverlay);
                             int[] eligible = new int[myFaces.Length];
                             for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
                             yield return StartCoroutine(SelectBuffTarget(side, eligible, bestMyDie, chosen => chosenMyDie = chosen));
@@ -6109,12 +6174,7 @@ namespace DiceSoccer
                         }
                     }
 
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = $"{activeAbility.name.ToUpper()}!";
-                    }
+                    SetBuffBeltDisplay(abilityMedalSprite, $"{activeAbility.name.ToUpper()}!", abilityBadgeOverlay);
                     yield return new WaitForSeconds(0.70f);
                 }
                 // I. Clear Reductions (Step-Over ID 28, 29, 30; Shielding ID 48)
@@ -6133,12 +6193,7 @@ namespace DiceSoccer
                         chosenShieldDie = bestDef;
                         if (isHuman)
                         {
-                            if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                            {
-                                _buffBeltGo.SetActive(true);
-                                _buffBeltMedal.sprite = abilityMedalSprite;
-                                _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
-                            }
+                            SetBuffBeltDisplay(abilityMedalSprite, $"{pPrefix}PLEASE SELECT TARGET", abilityBadgeOverlay);
                             int[] eligible = new int[myFaces.Length];
                             for (int e = 0; e < eligible.Length; e++) eligible[e] = e;
                             yield return StartCoroutine(SelectBuffTarget(side, eligible, bestDef, chosen => chosenShieldDie = chosen));
@@ -6165,12 +6220,7 @@ namespace DiceSoccer
                         }
                     }
                     if (totalRestored > 0) AdjustSideTotal(side, totalRestored);
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} CLEARED REDUCTIONS!";
-                    }
+                    SetBuffBeltDisplay(abilityMedalSprite, $"{activeAbility.name.ToUpper()} CLEARED REDUCTIONS!", abilityBadgeOverlay);
                     yield return new WaitForSeconds(0.70f);
                 }
                 // J. Strip Bonuses / Marking (Man Marking ID 41, 56, 58; Zonal Marking ID 22, 57)
@@ -6189,12 +6239,7 @@ namespace DiceSoccer
                         chosenMarkDie = bestDef;
                         if (isHuman)
                         {
-                            if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                            {
-                                _buffBeltGo.SetActive(true);
-                                _buffBeltMedal.sprite = abilityMedalSprite;
-                                _buffBeltText.text = $"{pPrefix}PLEASE SELECT TARGET";
-                            }
+                            SetBuffBeltDisplay(abilityMedalSprite, $"{pPrefix}PLEASE SELECT TARGET", abilityBadgeOverlay);
                             int[] oppEligible = new int[oppFaces.Length];
                             for (int e = 0; e < oppEligible.Length; e++) oppEligible[e] = e;
                             yield return StartCoroutine(SelectBuffTarget(oppSide, oppEligible, bestDef, chosen => chosenMarkDie = chosen));
@@ -6222,12 +6267,7 @@ namespace DiceSoccer
                         }
                     }
                     if (totalStripped > 0) AdjustSideTotal(oppSide, -totalStripped);
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = abilityMedalSprite;
-                        _buffBeltText.text = $"{activeAbility.name.ToUpper()} STRIPPED BONUSES!";
-                    }
+                    SetBuffBeltDisplay(abilityMedalSprite, $"{activeAbility.name.ToUpper()} STRIPPED BONUSES!", abilityBadgeOverlay);
                     yield return new WaitForSeconds(0.70f);
                 }
             }
@@ -6245,27 +6285,56 @@ namespace DiceSoccer
             // Captain Tie-Breaker Notification
             if (_match.LastHomeTotal == _match.LastAwayTotal && (_match.HomeWinOnTie || _match.AwayWinOnTie))
             {
-                if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                {
-                    _buffBeltGo.SetActive(true);
-                    _buffBeltMedal.sprite = GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
-                    _buffBeltText.text = "CAPTAIN BREAKS THE TIE!";
-                }
+                SetBuffBeltDisplay(GetUiSprite("Original/sprites/Buff6/BuffMedal82"), "CAPTAIN BREAKS THE TIE!");
                 AudioManager.Instance.PlayPowerup(1);
                 yield return new WaitForSeconds(0.70f);
+            }
+
+            // Track roll achievements before completing encounter
+            if (!_isLocalMultiplayer)
+            {
+                int finalHomeRoll = _match.LastHomeTotal;
+                int finalAwayRoll = _match.LastAwayTotal;
+                if (finalHomeRoll > _matchMaxHomeRoll) _matchMaxHomeRoll = finalHomeRoll;
+                if (finalHomeRoll == 0) _matchHadZeroHomeRoll = true;
+                if (finalAwayRoll == 0) _matchHadZeroAwayRoll = true;
             }
 
             // 7. Complete encounter evaluation using the BUFFED totals!
             var oldHomeScore = _match.HomeScore;
             var oldAwayScore = _match.AwayScore;
             var oldPossession = _match.Possession;
+            int secondsBeforeResolution = _match.SecondsRemaining;
 
             var report = _match.CompleteEncounter();
             report = CompactMatchReport(report, _match.ClockText());
 
+            if (!_isLocalMultiplayer && _seasonIndex > 0 && secondsBeforeResolution < 60)
+            {
+                if (_match.HomeScore > oldHomeScore)
+                {
+                    _matchLastMinGoal = true;
+                    if (_match.HomeScore == _match.AwayScore) _matchLastMinEqualizer = true;
+                    if (oldHomeScore == oldAwayScore) _matchLastMinTieBreaker = true;
+                }
+                else if (_match.AwayScore > oldAwayScore)
+                {
+                    _matchLastMinConcede = true;
+                }
+                else if (oldLocation == 2 && (report.Contains("SAVED") || report.Contains("MISS") || report.Contains("DENIED")))
+                {
+                    _matchLastMinMiss = true;
+                }
+                else if (oldLocation == -2 && (report.Contains("SAVED") || report.Contains("SAVE")))
+                {
+                    _matchLastMinSave = true;
+                }
+            }
+
             _matchScore.text = $"{_match.HomeScore} - {_match.AwayScore}";
             if (_matchClock != null) _matchClock.text = _match.ClockText();
             _matchReport.text = report;
+            if (_buffBeltBadgeText != null) _buffBeltBadgeText.text = string.Empty;
             if (_buffBeltText != null) _buffBeltText.text = report;
 
             // Pause on revealed outcome
@@ -6291,6 +6360,8 @@ namespace DiceSoccer
                 {
                     if (_homeDieRoots[i] != null) _homeDieRoots[i].SetActive(false);
                     if (_awayDieRoots[i] != null) _awayDieRoots[i].SetActive(false);
+                    if (_homeDieValueLabels != null && _homeDieValueLabels[i] != null) _homeDieValueLabels[i].enabled = false;
+                    if (_awayDieValueLabels != null && _awayDieValueLabels[i] != null) _awayDieValueLabels[i].enabled = false;
                     if (_homeDieBuffBadges != null && _homeDieBuffBadges[i] != null) _homeDieBuffBadges[i].enabled = false;
                     if (_awayDieBuffBadges != null && _awayDieBuffBadges[i] != null) _awayDieBuffBadges[i].enabled = false;
                     if (_homeDieGlows != null && _homeDieGlows[i] != null) _homeDieGlows[i].enabled = false;
@@ -6299,7 +6370,7 @@ namespace DiceSoccer
             }
             if (_homeTotalText != null) _homeTotalText.enabled = false;
             if (_awayTotalText != null) _awayTotalText.enabled = false;
-            if (_buffBeltGo != null) _buffBeltGo.SetActive(false);
+            HideBuffBelt();
 
             // Restore duel players on the pitch before shot/resolution with authentic poofs
             AudioManager.Instance.PlayTransform();
@@ -6650,15 +6721,13 @@ namespace DiceSoccer
                 bool produced2x = isHome ? homeProduced2x : awayProduced2x;
                 bool isHuman = isHome || _isLocalMultiplayer;
 
-                void ApplyDieChange(int targetSide, int dieIdx, int newVal)
+                void ApplyDieChange(int targetSide, int dieIdx, int newVal, bool allowSpecialIcon = true)
                 {
                     var arr = targetSide == 0 ? homeFaces : awayFaces;
-                    var imgs = targetSide == 0 ? _homeDice : _awayDice;
                     if (dieIdx < 0 || dieIdx >= arr.Length) return;
                     int diff = newVal - arr[dieIdx];
                     arr[dieIdx] = newVal;
-                    if (imgs != null && dieIdx < imgs.Length && imgs[dieIdx] != null)
-                        SetDieFace(imgs[dieIdx], newVal);
+                    SetSideDieVisual(targetSide, dieIdx, newVal, 0, allowSpecialIcon);
                     if (targetSide == 0)
                     {
                         _match.AdjustHomeTotal(diff);
@@ -6675,12 +6744,7 @@ namespace DiceSoccer
                 {
                     StartCoroutine(PulseEntourageIcon(isHome, eid));
                     AudioManager.Instance.PlayPowerup(1);
-                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
-                    {
-                        _buffBeltGo.SetActive(true);
-                        _buffBeltMedal.sprite = GetUiSprite($"Original/images/EntourageAbility{eid:00}");
-                        _buffBeltText.text = message;
-                    }
+                    SetBuffBeltDisplay(GetUiSprite($"Original/images/EntourageAbility{eid:00}"), message);
                 }
 
                 foreach (int eid in entourages)
@@ -6696,6 +6760,7 @@ namespace DiceSoccer
                             if (myFaces[d] < minV) { minV = myFaces[d]; chosen = d; }
                         if (isHuman && myFaces.Length > 1)
                         {
+                            SetBuffBeltDisplay(GetUiSprite("Original/images/EntourageAbility03"), "MIGUEL PANINI: SELECT TARGET");
                             int[] elig = new int[myFaces.Length];
                             for (int e = 0; e < elig.Length; e++) elig[e] = e;
                             yield return StartCoroutine(SelectBuffTarget(side, elig, chosen, c => chosen = c));
@@ -6714,6 +6779,7 @@ namespace DiceSoccer
                             if (myFaces[d] > maxV) { maxV = myFaces[d]; chosen = d; }
                         if (isHuman && myFaces.Length > 1)
                         {
+                            SetBuffBeltDisplay(GetUiSprite("Original/images/EntourageAbility07"), "DICEY DAVE: SELECT TARGET");
                             int[] elig = new int[myFaces.Length];
                             for (int e = 0; e < elig.Length; e++) elig[e] = e;
                             yield return StartCoroutine(SelectBuffTarget(side, elig, chosen, c => chosen = c));
@@ -6812,6 +6878,7 @@ namespace DiceSoccer
                         {
                             if (isHuman && oppFaces.Length > 1)
                             {
+                                SetBuffBeltDisplay(GetUiSprite("Original/images/EntourageAbility17"), "PARSHALL: SELECT ENEMY DIE");
                                 int[] elig = new int[oppFaces.Length];
                                 for (int e = 0; e < elig.Length; e++) elig[e] = e;
                                 yield return StartCoroutine(SelectBuffTarget(oppSide, elig, targetOpp, c => targetOpp = c));
@@ -6853,7 +6920,7 @@ namespace DiceSoccer
                                 var rigs = oppIsHome ? _homePlayers : _awayPlayers;
                                 if (rigs != null && oppSlots[d] < rigs.Length && rigs[oppSlots[d]] != null)
                                     rigs[oppSlots[d]].GetComponent<LayeredPlayerRig>()?.SetCardState(_match.HasYellowCard(oppIsHome, oppSlots[d]), _match.HasRedCard(oppIsHome, oppSlots[d]));
-                                if (card == 2) ApplyDieChange(oppSide, d, 0);
+                                if (card == 2) ApplyDieChange(oppSide, d, 0, false);
                                 ShowEntourageBanner(20, card == 2 ? "SECOND YELLOW! RED CARD!" : "PIERRE BEAR ISSUES YELLOW CARD!");
                                 yield return new WaitForSeconds(0.60f);
                             }
@@ -7324,6 +7391,19 @@ namespace DiceSoccer
                 var p2Won = _match.AwayScore > _match.HomeScore;
                 var isDraw = _match.HomeScore == _match.AwayScore;
 
+                if (!_currentResultRecorded)
+                {
+                    _currentResultRecorded = true;
+                    int mpMatches = PlayerPrefs.GetInt("diceSoccer.stats.mpMatches", 0) + 1;
+                    PlayerPrefs.SetInt("diceSoccer.stats.mpMatches", mpMatches);
+                    if (p1Won)
+                    {
+                        int mpWins = PlayerPrefs.GetInt("diceSoccer.stats.mpWins", 0) + 1;
+                        PlayerPrefs.SetInt("diceSoccer.stats.mpWins", mpWins);
+                    }
+                    EvaluateCareerProgressAndAchievements(p1Won, isDraw, true, true);
+                }
+
                 if (p1Won || p2Won)
                 {
                     AudioManager.Instance.PlayMedalCeremonyLong();
@@ -7383,7 +7463,8 @@ namespace DiceSoccer
                 AddButton("⚔ REMATCH (1v1)", mpBox.transform, Grass,
                     new Vector2(0.5f, 0.26f), new Vector2(0.75f, 0.085f), () =>
                     {
-                        StartLocalMultiplayerMatch();
+                        Destroy(mpBackdrop.gameObject);
+                        ShowNextUnlockModalThen(StartLocalMultiplayerMatch);
                     });
 
                 // Main menu button
@@ -7391,7 +7472,8 @@ namespace DiceSoccer
                     new Vector2(0.5f, 0.14f), new Vector2(0.75f, 0.075f), () =>
                     {
                         _isLocalMultiplayer = false;
-                        ShowHome();
+                        Destroy(mpBackdrop.gameObject);
+                        ShowNextUnlockModalThen(ShowHome);
                     });
 
                 if (p1Won || p2Won)
@@ -7436,10 +7518,10 @@ namespace DiceSoccer
                 new Color(0f, 0f, 0f, 0.82f), new Vector2(0.5f, 0.5f), Vector2.one);
             backdrop.raycastTarget = true;
 
-            // Base yellow card with "GAMEOVER" header (410x600)
+            // Base yellow card with "GAMEOVER" header (proportional 460x610 frame)
             var box = AddResourceImage("GameOverBox", "Original/sprites/GameOver/GameOverBox", backdrop.transform,
                 new Vector2(0.5f, 0.52f), new Vector2(0.5f, 0.52f));
-            box.rectTransform.sizeDelta = new Vector2(410f, 600f);
+            box.rectTransform.sizeDelta = new Vector2(460f, 610f);
             box.preserveAspect = true;
 
             // Colored bottom pill overlay (green VictoryBox, yellow DrawBox, red DefeatBox)
@@ -7467,13 +7549,13 @@ namespace DiceSoccer
             scoreTextSingle.fontStyle = FontStyle.Bold;
 
             var rewardTextSingle = AddText($"REWARD:\n{_lastPayout:N0} credits", box.transform, 20, Ink,
-                new Vector2(0.1f, 0.44f), new Vector2(0.9f, 0.58f));
+                new Vector2(0.1f, 0.45f), new Vector2(0.9f, 0.59f));
             rewardTextSingle.fontStyle = FontStyle.Bold;
 
             var statsTextSingle = AddText(
                 $"Shots: {_match.HomeShots} - {_match.AwayShots}   Saves: {_match.HomeSaves} - {_match.AwaySaves}\nTackles Won: {_match.HomeTackles} - {_match.AwayTackles}",
-                box.transform, 12, Ink,
-                new Vector2(0.08f, 0.33f), new Vector2(0.92f, 0.42f));
+                box.transform, 14, Ink,
+                new Vector2(0.08f, 0.34f), new Vector2(0.92f, 0.43f));
             statsTextSingle.alignment = TextAnchor.MiddleCenter;
 
             if (won)
@@ -7534,37 +7616,34 @@ namespace DiceSoccer
                         }
                     };
 
-                    if (_seasonIndex == 0 && _selectedFixtureIndex == 0 && won && PlayerPrefs.GetInt("diceSoccer.unlockedPlayer.5", 0) == 0)
-                    {
-                        PlayerPrefs.SetInt("diceSoccer.unlockedPlayer.5", 1);
-                        PlayerPrefs.Save();
-                        Destroy(backdrop.gameObject);
-                        ShowPlayerUnlockedModal(5, proceedToFixtures);
-                    }
-                    else if (_seasonIndex == 0 && _selectedFixtureIndex == 1 && PlayerPrefs.GetInt("diceSoccer.unlockedPlayer.15", 0) == 0)
-                    {
-                        PlayerPrefs.SetInt("diceSoccer.unlockedPlayer.15", 1);
-                        PlayerPrefs.Save();
-                        Destroy(backdrop.gameObject);
-                        ShowPlayerUnlockedModal(15, proceedToFixtures);
-                    }
-                    else if (_seasonIndex == 0 && _selectedFixtureIndex == 2 && PlayerPrefs.GetInt("diceSoccer.unlockedPlayer.8", 0) == 0)
-                    {
-                        PlayerPrefs.SetInt("diceSoccer.unlockedPlayer.8", 1);
-                        PlayerPrefs.Save();
-                        Destroy(backdrop.gameObject);
-                        ShowPlayerUnlockedModal(8, proceedToFixtures);
-                    }
-                    else
-                    {
-                        proceedToFixtures();
-                    }
+                    Destroy(backdrop.gameObject);
+                    ShowNextUnlockModalThen(proceedToFixtures);
                 });
+        }
+
+        private void ShowNextUnlockModalThen(Action onAllDone)
+        {
+            if (_pendingUnlockedPlayerIds.Count > 0)
+            {
+                int nextPid = _pendingUnlockedPlayerIds[0];
+                _pendingUnlockedPlayerIds.RemoveAt(0);
+                ShowPlayerUnlockedModal(nextPid, () => ShowNextUnlockModalThen(onAllDone));
+                return;
+            }
+            if (_pendingUnlockedAchievements.Count > 0)
+            {
+                var nextAch = _pendingUnlockedAchievements[0];
+                _pendingUnlockedAchievements.RemoveAt(0);
+                ShowAchievementUnlockedModal(nextAch, () => ShowNextUnlockModalThen(onAllDone));
+                return;
+            }
+            onAllDone?.Invoke();
         }
 
         private void ShowPlayerUnlockedModal(int playerId, Action onDone)
         {
-            if (_overlayContainer == null)
+            var unlockContainer = _overlayContainer != null ? _overlayContainer : (_safeArea != null ? _safeArea : (_canvas != null ? _canvas.transform : null));
+            if (unlockContainer == null)
             {
                 onDone?.Invoke();
                 return;
@@ -7580,7 +7659,7 @@ namespace DiceSoccer
 
             AudioManager.Instance.PlayMedalCeremony();
 
-            var backdrop = AddPanel("PlayerUnlockedBackdrop", _overlayContainer,
+            var backdrop = AddPanel("PlayerUnlockedBackdrop", unlockContainer,
                 new Color(0f, 0f, 0f, 0.82f), new Vector2(0.5f, 0.5f), Vector2.one);
             backdrop.raycastTarget = true;
 
@@ -7706,7 +7785,6 @@ namespace DiceSoccer
                 new Vector2(0.5f, 0.16f), new Vector2(0.65f, 0.12f),
                 () => {
                     Time.timeScale = 1f;
-                    _matchSpeed = 1f;
                     ShowForfeitConfirmation(backdrop.transform);
                 });
         }
@@ -7755,147 +7833,88 @@ namespace DiceSoccer
 
             var box = AddResourceImage("OptionsBox", "Original/sprites/AchievementsSS4/LongDialogBox", optionsBackdrop.transform,
                 new Vector2(0.5f, 0.52f), new Vector2(0.5f, 0.52f));
-            box.rectTransform.sizeDelta = new Vector2(340f, 520f);
+            box.rectTransform.sizeDelta = new Vector2(360f, 560f);
             box.preserveAspect = false;
 
             var title = AddText("OPTIONS", box.transform, 22, Ink,
-                new Vector2(0.12f, 0.83f), new Vector2(0.88f, 0.91f));
+                new Vector2(0.12f, 0.845f), new Vector2(0.88f, 0.925f));
             title.fontStyle = FontStyle.Bold;
 
-            // Row 1: MUSIC
-            var musicLabel = AddText("MUSIC", box.transform, 16, Ink,
-                new Vector2(0.16f, 0.75f), new Vector2(0.65f, 0.83f));
-            musicLabel.alignment = TextAnchor.MiddleLeft;
-            musicLabel.fontStyle = FontStyle.Bold;
+            void AddOptionCheckboxRow(string namePrefix, string labelText, float centerY, bool initialValue, Func<bool> onToggle)
+            {
+                var label = AddText(labelText, box.transform, 15, Ink,
+                    new Vector2(0.15f, centerY - 0.038f), new Vector2(0.68f, centerY + 0.038f));
+                label.alignment = TextAnchor.MiddleLeft;
+                label.fontStyle = FontStyle.Bold;
 
-            var musicTickBox = AddResourceImage("MusicTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
-                new Vector2(0.76f, 0.79f), new Vector2(0.76f, 0.79f));
-            musicTickBox.rectTransform.sizeDelta = new Vector2(30f, 30f);
-            musicTickBox.preserveAspect = true;
+                var tickBox = AddResourceImage($"{namePrefix}TickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
+                    new Vector2(0.77f, centerY), new Vector2(0.77f, centerY));
+                tickBox.rectTransform.sizeDelta = new Vector2(28f, 28f);
+                tickBox.preserveAspect = true;
 
-            var musicTick = AddResourceImage("MusicTick", "Original/sprites/OptionsSS/OptionsTick", musicTickBox.transform,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            musicTick.rectTransform.sizeDelta = new Vector2(24f, 24f);
-            musicTick.preserveAspect = true;
-            musicTick.gameObject.SetActive(AudioManager.Instance.MusicEnabled);
+                var tick = AddResourceImage($"{namePrefix}Tick", "Original/sprites/OptionsSS/OptionsTick", tickBox.transform,
+                    new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+                tick.rectTransform.sizeDelta = new Vector2(22f, 22f);
+                tick.preserveAspect = true;
+                tick.gameObject.SetActive(initialValue);
 
-            void ToggleMusic()
+                void HandleToggle()
+                {
+                    bool next = onToggle();
+                    tick.gameObject.SetActive(next);
+                    AudioManager.Instance.PlayTap();
+                }
+
+                var boxBtn = tickBox.gameObject.AddComponent<Button>();
+                boxBtn.onClick.AddListener(HandleToggle);
+                var labelBtn = label.gameObject.AddComponent<Button>();
+                labelBtn.transition = Selectable.Transition.None;
+                labelBtn.onClick.AddListener(HandleToggle);
+            }
+
+            AddOptionCheckboxRow("Music", "MUSIC", 0.775f, AudioManager.Instance.MusicEnabled, () =>
             {
                 AudioManager.Instance.MusicEnabled = !AudioManager.Instance.MusicEnabled;
-                musicTick.gameObject.SetActive(AudioManager.Instance.MusicEnabled);
-                AudioManager.Instance.PlayTap();
-            }
+                return AudioManager.Instance.MusicEnabled;
+            });
 
-            var musicBtn = musicTickBox.gameObject.AddComponent<Button>();
-            musicBtn.onClick.AddListener(ToggleMusic);
-            var musicLabelBtn = musicLabel.gameObject.AddComponent<Button>();
-            musicLabelBtn.transition = Selectable.Transition.None;
-            musicLabelBtn.onClick.AddListener(ToggleMusic);
-
-            // Row 2: SFX
-            var sfxLabel = AddText("SFX", box.transform, 16, Ink,
-                new Vector2(0.16f, 0.65f), new Vector2(0.65f, 0.73f));
-            sfxLabel.alignment = TextAnchor.MiddleLeft;
-            sfxLabel.fontStyle = FontStyle.Bold;
-
-            var sfxTickBox = AddResourceImage("SfxTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
-                new Vector2(0.76f, 0.69f), new Vector2(0.76f, 0.69f));
-            sfxTickBox.rectTransform.sizeDelta = new Vector2(30f, 30f);
-            sfxTickBox.preserveAspect = true;
-
-            var sfxTick = AddResourceImage("SfxTick", "Original/sprites/OptionsSS/OptionsTick", sfxTickBox.transform,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            sfxTick.rectTransform.sizeDelta = new Vector2(24f, 24f);
-            sfxTick.preserveAspect = true;
-            sfxTick.gameObject.SetActive(AudioManager.Instance.SfxEnabled);
-
-            void ToggleSfx()
+            AddOptionCheckboxRow("Sfx", "SFX", 0.690f, AudioManager.Instance.SfxEnabled, () =>
             {
                 AudioManager.Instance.SfxEnabled = !AudioManager.Instance.SfxEnabled;
-                sfxTick.gameObject.SetActive(AudioManager.Instance.SfxEnabled);
-                AudioManager.Instance.PlayTap();
-            }
+                return AudioManager.Instance.SfxEnabled;
+            });
 
-            var sfxBtn = sfxTickBox.gameObject.AddComponent<Button>();
-            sfxBtn.onClick.AddListener(ToggleSfx);
-            var sfxLabelBtn = sfxLabel.gameObject.AddComponent<Button>();
-            sfxLabelBtn.transition = Selectable.Transition.None;
-            sfxLabelBtn.onClick.AddListener(ToggleSfx);
-
-            // Row 3: VIBRATION
-            var vibLabel = AddText("VIBRATION", box.transform, 16, Ink,
-                new Vector2(0.16f, 0.55f), new Vector2(0.65f, 0.63f));
-            vibLabel.alignment = TextAnchor.MiddleLeft;
-            vibLabel.fontStyle = FontStyle.Bold;
-
-            var vibTickBox = AddResourceImage("VibTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
-                new Vector2(0.76f, 0.59f), new Vector2(0.76f, 0.59f));
-            vibTickBox.rectTransform.sizeDelta = new Vector2(30f, 30f);
-            vibTickBox.preserveAspect = true;
-
-            var vibTick = AddResourceImage("VibTick", "Original/sprites/OptionsSS/OptionsTick", vibTickBox.transform,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            vibTick.rectTransform.sizeDelta = new Vector2(24f, 24f);
-            vibTick.preserveAspect = true;
-            var vibEnabled = PlayerPrefs.GetInt("diceSoccer.vibration", 1) != 0;
-            vibTick.gameObject.SetActive(vibEnabled);
-
-            void ToggleVibration()
+            AddOptionCheckboxRow("Vib", "VIBRATION", 0.605f, PlayerPrefs.GetInt("diceSoccer.vibration", 1) != 0, () =>
             {
-                var cur = PlayerPrefs.GetInt("diceSoccer.vibration", 1) != 0;
-                var next = !cur;
+                bool next = PlayerPrefs.GetInt("diceSoccer.vibration", 1) == 0;
                 PlayerPrefs.SetInt("diceSoccer.vibration", next ? 1 : 0);
                 PlayerPrefs.Save();
-                vibTick.gameObject.SetActive(next);
                 if (next) TriggerHaptic();
-                AudioManager.Instance.PlayTap();
-            }
+                return next;
+            });
 
-            var vibBtn = vibTickBox.gameObject.AddComponent<Button>();
-            vibBtn.onClick.AddListener(ToggleVibration);
-            var vibLabelBtn = vibLabel.gameObject.AddComponent<Button>();
-            vibLabelBtn.transition = Selectable.Transition.None;
-            vibLabelBtn.onClick.AddListener(ToggleVibration);
-
-            // Row 4: FULL SCREEN (Toggle between authentic 2:3 aspect ratio and Fullscreen)
-            var fsLabel = AddText("FULL SCREEN", box.transform, 16, Ink,
-                new Vector2(0.16f, 0.45f), new Vector2(0.65f, 0.53f));
-            fsLabel.alignment = TextAnchor.MiddleLeft;
-            fsLabel.fontStyle = FontStyle.Bold;
-
-            var fsTickBox = AddResourceImage("FsTickBox", "Original/sprites/OptionsSS/OptionsTickBox", box.transform,
-                new Vector2(0.76f, 0.49f), new Vector2(0.76f, 0.49f));
-            fsTickBox.rectTransform.sizeDelta = new Vector2(30f, 30f);
-            fsTickBox.preserveAspect = true;
-
-            var fsTick = AddResourceImage("FsTick", "Original/sprites/OptionsSS/OptionsTick", fsTickBox.transform,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            fsTick.rectTransform.sizeDelta = new Vector2(24f, 24f);
-            fsTick.preserveAspect = true;
-            bool isFs = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0) == 1;
-            fsTick.gameObject.SetActive(isFs);
-
-            void ToggleFullScreen()
+            AddOptionCheckboxRow("Fs", "FULL SCREEN", 0.520f, PlayerPrefs.GetInt("diceSoccer.fullscreen", 0) == 1, () =>
             {
-                int cur = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0);
-                int next = cur == 1 ? 0 : 1;
-                PlayerPrefs.SetInt("diceSoccer.fullscreen", next);
+                bool next = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0) == 0;
+                PlayerPrefs.SetInt("diceSoccer.fullscreen", next ? 1 : 0);
                 PlayerPrefs.Save();
-                fsTick.gameObject.SetActive(next == 1);
                 ApplySafeArea();
-                AudioManager.Instance.PlayTap();
-            }
+                return next;
+            });
 
-            var fsBtn = fsTickBox.gameObject.AddComponent<Button>();
-            fsBtn.onClick.AddListener(ToggleFullScreen);
-            var fsLabelBtn = fsLabel.gameObject.AddComponent<Button>();
-            fsLabelBtn.transition = Selectable.Transition.None;
-            fsLabelBtn.onClick.AddListener(ToggleFullScreen);
+            AddOptionCheckboxRow("Speed", "2X MATCH SPEED", 0.435f, PlayerPrefs.GetInt("diceSoccer.fastSpeed", 0) == 1, () =>
+            {
+                bool next = PlayerPrefs.GetInt("diceSoccer.fastSpeed", 0) == 0;
+                PlayerPrefs.SetInt("diceSoccer.fastSpeed", next ? 1 : 0);
+                PlayerPrefs.Save();
+                _matchSpeed = next ? 2f : 1f;
+                return next;
+            });
 
             // Button 1: CREDITS
             AddSpriteButton("Credits", "Original/sprites/OptionsSS/CreditsButton",
                 "Original/sprites/OptionsSS/CreditsButtonPressed", box.transform,
-                new Vector2(0.5f, 0.35f), new Vector2(0.68f, 0.09f), () =>
+                new Vector2(0.5f, 0.325f), new Vector2(0.64f, 0.085f), () =>
                 {
                     ShowCreditsDialog(optionsBackdrop.transform);
                 });
@@ -7903,7 +7922,7 @@ namespace DiceSoccer
             // Button 2: HANDBOOK
             AddSpriteButton("Handbook", "Original/sprites/OptionsSS/HandbookButton",
                 "Original/sprites/OptionsSS/HandbookButtonPressed", box.transform,
-                new Vector2(0.5f, 0.23f), new Vector2(0.68f, 0.09f), () =>
+                new Vector2(0.5f, 0.220f), new Vector2(0.64f, 0.085f), () =>
                 {
                     ShowHandbookDialog(optionsBackdrop.transform);
                 });
@@ -7911,7 +7930,7 @@ namespace DiceSoccer
             // Button 3: DONE
             AddSpriteButton("Done", "Original/images/DoneButton",
                 "Original/images/DoneButtonPressed", box.transform,
-                new Vector2(0.5f, 0.09f), new Vector2(0.44f, 0.08f), () =>
+                new Vector2(0.5f, 0.095f), new Vector2(0.42f, 0.080f), () =>
                 {
                     Destroy(optionsBackdrop.gameObject);
                 });
@@ -7948,6 +7967,9 @@ namespace DiceSoccer
                 new Vector2(0.5f, 0.11f), new Vector2(0.48f, 0.08f), () =>
                 {
                     Destroy(hbBackdrop.gameObject);
+                    PlayerPrefs.SetInt("diceSoccer.stats.visitedNews", 1);
+                    EvaluateCareerProgressAndAchievements(false, false, false, true);
+                    ShowNextUnlockModalThen(null);
                 });
         }
 
@@ -7991,6 +8013,9 @@ namespace DiceSoccer
                 new Vector2(0.5f, 0.11f), new Vector2(0.48f, 0.08f), () =>
                 {
                     Destroy(crBackdrop.gameObject);
+                    PlayerPrefs.SetInt("diceSoccer.stats.visitedCredits", 1);
+                    EvaluateCareerProgressAndAchievements(false, false, false, true);
+                    ShowNextUnlockModalThen(null);
                 });
         }
 
@@ -8124,6 +8149,19 @@ namespace DiceSoccer
 
             var won = _match.HomeScore > _match.AwayScore;
             var drew = _match.HomeScore == _match.AwayScore;
+            var lost = _match.HomeScore < _match.AwayScore;
+            bool forfeitedEarly = _match.SecondsRemaining > 0 && _match.HomeShots == 0 && _match.AwayShots == 0;
+
+            if (won) PlayerPrefs.SetInt("diceSoccer.stats.wins", PlayerPrefs.GetInt("diceSoccer.stats.wins", 0) + 1);
+            else if (drew) PlayerPrefs.SetInt("diceSoccer.stats.draws", PlayerPrefs.GetInt("diceSoccer.stats.draws", 0) + 1);
+            else if (lost) PlayerPrefs.SetInt("diceSoccer.stats.losses", PlayerPrefs.GetInt("diceSoccer.stats.losses", 0) + 1);
+
+            if (!forfeitedEarly && _currentFixture != null && !string.IsNullOrEmpty(_currentFixture.teamName) &&
+                _currentFixture.teamName.IndexOf("Chancy", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                PlayerPrefs.SetInt("diceSoccer.stats.survivedChancy", 1);
+            }
+
             _lastPayout = _competitionName == "League"
                 ? won ? _currentFixture.cashWin
                     : drew ? _currentFixture.cashDraw
@@ -8159,10 +8197,13 @@ namespace DiceSoccer
                     PlayerPrefs.SetInt(starKey, matchStars);
                 PlayerPrefs.SetString($"diceSoccer.season.{_seasonIndex}.match.{_selectedFixtureIndex}.score",
                     $"{_match.HomeScore} - {_match.AwayScore}");
+                if (won)
+                    PlayerPrefs.SetInt($"diceSoccer.season.{_seasonIndex}.League.won.{_selectedFixtureIndex}", 1);
 
                 if (_selectedFixtureIndex == _fixtureIndex)
                     _fixtureIndex++;
-                PlayerPrefs.SetInt("diceSoccer.fixture", _fixtureIndex);
+                if (_seasonIndex == 0)
+                    PlayerPrefs.SetInt("diceSoccer.fixture", _fixtureIndex);
             }
             else
             {
@@ -8170,10 +8211,12 @@ namespace DiceSoccer
                     won ? 1 : -1);
                 if (won && _selectedFixtureIndex == _fixtureIndex)
                     _fixtureIndex++;
+                if (won && _seasonFixtures != null && _selectedFixtureIndex >= _seasonFixtures.Length - 1)
+                    PlayerPrefs.SetInt($"diceSoccer.season.{_seasonIndex}.{_competitionName}.trophyWon", 1);
             }
             PlayerPrefs.SetInt(CompetitionProgressKey(_competitionName), _fixtureIndex);
             SaveCareerState();
-            CheckAchievements(won, drew);
+            EvaluateCareerProgressAndAchievements(won, drew, false, true, !forfeitedEarly);
         }
 
         private string SeasonEndButtonLabel()
@@ -8206,17 +8249,19 @@ namespace DiceSoccer
             if (_seasonIndex < _catalog.Data.seasons.Length - 1)
             {
                 _seasonIndex++;
+                _maxUnlockedSeason = Mathf.Max(_maxUnlockedSeason, _seasonIndex);
                 _selectedLeagueSeasonIndex = _seasonIndex;
                 _competitionName = "League";
                 _seasonFixtures = _catalog.GetFixtures(_seasonIndex, _competitionName);
-                _fixtureIndex = 0;
-                _selectedFixtureIndex = 0;
+                _fixtureIndex = LoadCompetitionProgress(_competitionName);
+                _selectedFixtureIndex = _fixtureIndex;
 
                 PlayerPrefs.SetInt("diceSoccer.season", _seasonIndex);
                 PlayerPrefs.SetInt($"diceSoccer.profile.{_currentProfileSlot}.season", _seasonIndex);
-                PlayerPrefs.SetInt(CompetitionProgressKey(_competitionName), 0);
-                PlayerPrefs.SetInt("diceSoccer.fixture", 0);
+                PlayerPrefs.SetInt("diceSoccer.maxSeason", _maxUnlockedSeason);
+                PlayerPrefs.SetInt($"diceSoccer.profile.{_currentProfileSlot}.maxSeason", _maxUnlockedSeason);
                 SaveCareerState();
+                EvaluateCareerProgressAndAchievements(false, false, false, false, false);
 
                 ShowSeasonPromotedModal(_seasonIndex);
             }
@@ -8228,10 +8273,18 @@ namespace DiceSoccer
 
         private void LoadCareerProgress()
         {
+            _catalog ??= GameCatalog.Load();
+            _matchSpeed = PlayerPrefs.GetInt("diceSoccer.fastSpeed", 0) == 1 ? 2f : 1f;
+            int maxSeasonCap = (_catalog?.Data?.seasons != null && _catalog.Data.seasons.Length > 0)
+                ? _catalog.Data.seasons.Length - 1 : 4;
+
             _currentProfileSlot = Mathf.Clamp(PlayerPrefs.GetInt("diceSoccer.profile.active", 0), 0, 2);
             _teamName = PlayerPrefs.GetString($"diceSoccer.profile.{_currentProfileSlot}.name",
                 PlayerPrefs.GetString("diceSoccer.teamName", "SANUKU"));
-            _seasonIndex = Mathf.Max(0, PlayerPrefs.GetInt($"diceSoccer.profile.{_currentProfileSlot}.season", PlayerPrefs.GetInt("diceSoccer.season", 0)));
+            _seasonIndex = Mathf.Clamp(PlayerPrefs.GetInt($"diceSoccer.profile.{_currentProfileSlot}.season", PlayerPrefs.GetInt("diceSoccer.season", 0)), 0, maxSeasonCap);
+            _maxUnlockedSeason = Mathf.Clamp(
+                Mathf.Max(_seasonIndex, PlayerPrefs.GetInt($"diceSoccer.profile.{_currentProfileSlot}.maxSeason", PlayerPrefs.GetInt("diceSoccer.maxSeason", _seasonIndex))),
+                0, maxSeasonCap);
             _selectedLeagueSeasonIndex = _seasonIndex;
             _fixtureIndex = Mathf.Max(0, PlayerPrefs.GetInt($"diceSoccer.profile.{_currentProfileSlot}.fixture", PlayerPrefs.GetInt("diceSoccer.fixture", 0)));
             _careerCash = Mathf.Max(0, PlayerPrefs.GetInt($"diceSoccer.profile.{_currentProfileSlot}.cash", PlayerPrefs.GetInt("diceSoccer.cash", 1000)));
@@ -8270,10 +8323,13 @@ namespace DiceSoccer
 
         private void SaveCareerState()
         {
+            _maxUnlockedSeason = Mathf.Max(_maxUnlockedSeason, _seasonIndex);
+
             PlayerPrefs.SetInt("diceSoccer.profile.active", _currentProfileSlot);
             PlayerPrefs.SetInt($"diceSoccer.profile.{_currentProfileSlot}.exists", 1);
             PlayerPrefs.SetString($"diceSoccer.profile.{_currentProfileSlot}.name", _teamName);
             PlayerPrefs.SetInt($"diceSoccer.profile.{_currentProfileSlot}.season", _seasonIndex);
+            PlayerPrefs.SetInt($"diceSoccer.profile.{_currentProfileSlot}.maxSeason", _maxUnlockedSeason);
             PlayerPrefs.SetInt($"diceSoccer.profile.{_currentProfileSlot}.fixture", _fixtureIndex);
             PlayerPrefs.SetInt($"diceSoccer.profile.{_currentProfileSlot}.cash", _careerCash);
             PlayerPrefs.SetInt($"diceSoccer.profile.{_currentProfileSlot}.crest", _currentCrestId);
@@ -8281,6 +8337,7 @@ namespace DiceSoccer
             // Maintain standard keys
             PlayerPrefs.SetString("diceSoccer.teamName", _teamName);
             PlayerPrefs.SetInt("diceSoccer.season", _seasonIndex);
+            PlayerPrefs.SetInt("diceSoccer.maxSeason", _maxUnlockedSeason);
             PlayerPrefs.SetInt("diceSoccer.fixture", _fixtureIndex);
             PlayerPrefs.SetInt("diceSoccer.cash", _careerCash);
             PlayerPrefs.SetInt("diceSoccer.currentShirt", _currentShirtId);
@@ -8300,49 +8357,307 @@ namespace DiceSoccer
 
         private void CheckAchievements(bool won, bool drew)
         {
+            EvaluateCareerProgressAndAchievements(won, drew, false, false, _match != null && !_isLocalMultiplayer);
+        }
+
+        private int GetSeasonCompletedCount(int seasonIdx, string compName)
+        {
+            var fixtures = _catalog?.GetFixtures(seasonIdx, compName);
+            if (fixtures == null || fixtures.Length == 0) return 0;
+            int val = PlayerPrefs.GetInt($"diceSoccer.season.{seasonIdx}.{compName}.fixture", -1);
+            if (val < 0 && seasonIdx == 0 && compName == "League")
+                val = PlayerPrefs.GetInt("diceSoccer.fixture", 0);
+            return Mathf.Clamp(val < 0 ? 0 : val, 0, fixtures.Length);
+        }
+
+        private bool IsSeasonLeagueAllWon(int seasonIdx)
+        {
+            var fixtures = _catalog?.GetFixtures(seasonIdx, "League");
+            if (fixtures == null || fixtures.Length == 0) return false;
+            if (GetSeasonCompletedCount(seasonIdx, "League") < fixtures.Length) return false;
+            for (int i = 0; i < fixtures.Length; i++)
+            {
+                if (PlayerPrefs.GetInt($"diceSoccer.season.{seasonIdx}.League.won.{i}", 0) != 1)
+                    return false;
+            }
+            return true;
+        }
+
+        private bool IsTournamentMatchWon(int seasonIdx, string compName, int fixtureIndex)
+        {
+            return PlayerPrefs.GetInt($"diceSoccer.season.{seasonIdx}.{compName}.result.{fixtureIndex}", 0) == 1;
+        }
+
+        private bool DidWinAnyTournamentMatch(int seasonIdx, string compName)
+        {
+            var fixtures = _catalog?.GetFixtures(seasonIdx, compName);
+            if (fixtures == null) return false;
+            for (int i = 0; i < fixtures.Length; i++)
+            {
+                if (IsTournamentMatchWon(seasonIdx, compName, i)) return true;
+            }
+            return false;
+        }
+
+        private bool IsTournamentWon(int seasonIdx, string compName)
+        {
+            if (PlayerPrefs.GetInt($"diceSoccer.season.{seasonIdx}.{compName}.trophyWon", 0) == 1)
+                return true;
+            var fixtures = _catalog?.GetFixtures(seasonIdx, compName);
+            return fixtures != null && fixtures.Length > 0 && IsTournamentMatchWon(seasonIdx, compName, fixtures.Length - 1);
+        }
+
+        private int GetTotalEarnedStarsAllSeasons()
+        {
+            int total = 0;
+            int count = (_catalog?.Data?.seasons != null) ? _catalog.Data.seasons.Length : 5;
+            for (int s = 0; s < count; s++)
+                total += GetEarnedStarsForSeason(s);
+            return total;
+        }
+
+        private bool HasEquippedWag()
+        {
+            if (_equippedEntourageIds == null || _equippedEntourageIds.Count == 0 || _catalog == null) return false;
+            foreach (int eid in _equippedEntourageIds)
+            {
+                var ent = _catalog.GetEntourage(eid);
+                if (ent != null && ent.position == "WAG") return true;
+            }
+            return false;
+        }
+
+        private void EvaluateCareerProgressAndAchievements(bool won, bool drew, bool isLocalMp = false, bool enqueueModals = false, bool isCareerMatchEnd = false)
+        {
             _catalog ??= GameCatalog.Load();
+            int wins = PlayerPrefs.GetInt("diceSoccer.stats.wins", 0);
+            int draws = PlayerPrefs.GetInt("diceSoccer.stats.draws", 0);
+            int losses = PlayerPrefs.GetInt("diceSoccer.stats.losses", 0);
+            int mpMatches = PlayerPrefs.GetInt("diceSoccer.stats.mpMatches", 0);
+            int mpWins = PlayerPrefs.GetInt("diceSoccer.stats.mpWins", 0);
+            int cashSpent = PlayerPrefs.GetInt("diceSoccer.stats.cashSpent", 0);
+            int totalStars = GetTotalEarnedStarsAllSeasons();
+            bool hasMatchScores = !isLocalMp && isCareerMatchEnd && _match != null;
+            int homeScore = hasMatchScores ? _match.HomeScore : -1;
+            int awayScore = hasMatchScores ? _match.AwayScore : -1;
+
+            // 1. Evaluate all unlockable players (#5..#96) in ascending ID order (tier unlockers #27/#46/#64/#72 check lower IDs already evaluated)
+            if (isCareerMatchEnd && _seasonIndex == 0 && _selectedFixtureIndex == 0 && won && PlayerPrefs.GetInt("diceSoccer.unlockedPlayer.5", 0) == 0)
+            {
+                PlayerPrefs.SetInt("diceSoccer.unlockedPlayer.5", 1);
+                if (enqueueModals && !_pendingUnlockedPlayerIds.Contains(5)) _pendingUnlockedPlayerIds.Add(5);
+            }
+
+            int[] unlockableIds =
+            {
+                8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
+                33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
+                58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82,
+                83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96
+            };
+
+            bool anyPlayerChanged = false;
+            for (int idx = 0; idx < unlockableIds.Length; idx++)
+            {
+                int pid = unlockableIds[idx];
+                if (PlayerPrefs.GetInt($"diceSoccer.unlockedPlayer.{pid}", 0) == 1) continue;
+
+                bool cond = pid switch
+                {
+                    8 => GetSeasonCompletedCount(0, "League") >= 3,
+                    9 => hasMatchScores && awayScore == 0,
+                    10 => GetSeasonCompletedCount(1, "League") >= 6,
+                    11 => _careerCash >= 10000,
+                    12 => PlayerPrefs.GetInt("diceSoccer.stats.visitedNews", 0) == 1,
+                    13 => GetSeasonCompletedCount(1, "T1") >= 4,
+                    14 => GetSeasonCompletedCount(1, "League") >= 1,
+                    15 => GetSeasonCompletedCount(0, "League") >= 2,
+                    16 => IsSeasonLeagueAllWon(0),
+                    17 => GetSeasonCompletedCount(1, "T2") >= 2,
+                    18 => GetSeasonCompletedCount(1, "League") >= 9,
+                    19 => GetSeasonCompletedCount(1, "T1") >= 2,
+                    20 => GetSeasonCompletedCount(1, "T2") >= 4,
+                    21 => !isLocalMp && _matchMaxHomeRoll >= 20,
+                    22 => !isLocalMp && _matchHadZeroHomeRoll,
+                    23 => wins >= 10,
+                    24 => hasMatchScores && homeScore >= 3,
+                    25 => !isLocalMp && _matchMaxHomeRoll >= 50,
+                    26 => wins >= 20,
+                    27 => AreAllPlayersInRangeUnlocked(1, 16),
+                    28 => PlayerPrefs.GetInt("diceSoccer.stats.survivedChancy", 0) == 1,
+                    29 => DidWinAnyTournamentMatch(2, "T2"),
+                    30 => IsSeasonLeagueAllWon(1),
+                    31 => draws >= 10,
+                    32 => IsTournamentWon(1, "T1"),
+                    33 => !isLocalMp && _matchHadZeroAwayRoll,
+                    34 => !isLocalMp && _matchMaxHomeRoll >= 40,
+                    35 => !isLocalMp && _matchMaxHomeRoll >= 30,
+                    36 => GetSeasonCompletedCount(2, "League") >= 4,
+                    37 => wins >= 30,
+                    38 => hasMatchScores && awayScore >= 3,
+                    39 => GetSeasonCompletedCount(2, "League") >= 12,
+                    40 => DidWinAnyTournamentMatch(2, "T1"),
+                    41 => _maxUnlockedSeason >= 2,
+                    42 => IsTournamentWon(1, "T2"),
+                    43 => IsTournamentWon(2, "T1"),
+                    44 => GetSeasonCompletedCount(2, "T1") >= 3,
+                    45 => GetSeasonCompletedCount(2, "T1") >= 5,
+                    46 => AreAllPlayersInRangeUnlocked(17, 32),
+                    47 => hasMatchScores && homeScore >= 7,
+                    48 => totalStars >= 119,
+                    49 => GetSeasonCompletedCount(3, "League") >= 4,
+                    50 => totalStars >= 118,
+                    51 => losses >= 10,
+                    52 => wins >= 40,
+                    53 => IsTournamentWon(2, "T2"),
+                    54 => _careerCash >= 2000000,
+                    55 => GetSeasonCompletedCount(2, "T2") >= 3,
+                    56 => _careerCash >= 5000000,
+                    57 => DidWinAnyTournamentMatch(3, "T2"),
+                    58 => GetSeasonCompletedCount(2, "T2") >= 5,
+                    59 => cashSpent >= 10000000,
+                    60 => !isLocalMp && _matchMaxHomeRoll >= 60,
+                    61 => GetSeasonCompletedCount(3, "League") >= 8,
+                    62 => _maxUnlockedSeason >= 3,
+                    63 => hasMatchScores && homeScore >= 5,
+                    64 => AreAllPlayersInRangeUnlocked(33, 48),
+                    65 => wins >= 50,
+                    66 => !isLocalMp && _matchMaxHomeRoll >= 70,
+                    67 => !isLocalMp && _matchMaxHomeRoll >= 100,
+                    68 => !isLocalMp && _matchMaxHomeRoll >= 80,
+                    69 => IsTournamentWon(1, "T1") && IsTournamentWon(1, "T2") && IsTournamentWon(2, "T1") && IsTournamentWon(2, "T2") && IsTournamentWon(3, "T1") && IsTournamentWon(3, "T2"),
+                    70 => IsTournamentWon(3, "T1"),
+                    71 => DidWinAnyTournamentMatch(3, "T1"),
+                    72 => AreAllPlayersInRangeUnlocked(49, 64),
+                    73 => _maxUnlockedSeason >= 4,
+                    74 => !isLocalMp && _matchMaxHomeRoll >= 90,
+                    75 => GetSeasonCompletedCount(3, "T1") >= 3,
+                    76 => IsTournamentWon(3, "T2"),
+                    77 => totalStars >= 120,
+                    78 => IsSeasonLeagueAllWon(2),
+                    79 => GetSeasonCompletedCount(3, "T2") >= 3,
+                    80 => IsSeasonLeagueAllWon(3),
+                    81 => !isLocalMp && _matchLastMinConcede,
+                    82 => IsTournamentMatchWon(4, "T1", 2),
+                    83 => GetSeasonCompletedCount(4, "League") >= 3,
+                    84 => GetSeasonCompletedCount(4, "League") >= 7,
+                    85 => !isLocalMp && _matchLastMinMiss,
+                    86 => !isLocalMp && _matchLastMinGoal,
+                    87 => mpWins >= 2,
+                    88 => GetSeasonCompletedCount(4, "League") >= 11,
+                    89 => GetSeasonCompletedCount(4, "T1") >= 1,
+                    90 => mpMatches >= 1,
+                    91 => GetSeasonCompletedCount(4, "T2") >= 2,
+                    92 => IsTournamentMatchWon(4, "T2", 3),
+                    93 => IsSeasonLeagueAllWon(4),
+                    94 => GetSeasonCompletedCount(4, "League") >= 14 && GetEarnedStarsForSeason(4) >= 30,
+                    95 => IsTournamentWon(4, "T1"),
+                    96 => IsTournamentWon(4, "T2"),
+                    _ => false
+                };
+
+                if (cond)
+                {
+                    PlayerPrefs.SetInt($"diceSoccer.unlockedPlayer.{pid}", 1);
+                    anyPlayerChanged = true;
+                    if (enqueueModals && !_pendingUnlockedPlayerIds.Contains(pid))
+                        _pendingUnlockedPlayerIds.Add(pid);
+                }
+            }
+
+            // 2. Standalone Entourage milestone unlocks (#15, #16, #20)
+            bool entourageAdded = false;
+            if (GetSeasonCompletedCount(4, "League") >= 11 && _unlockedEntourageIds.Add(15)) entourageAdded = true;
+            if (IsTournamentMatchWon(4, "T1", 2) && _unlockedEntourageIds.Add(16)) entourageAdded = true;
+            if (GetSeasonCompletedCount(4, "League") >= 14 && _unlockedEntourageIds.Add(20)) entourageAdded = true;
+
+            // 3. Evaluate all 72 Achievements
             var newAchievements = new List<AchievementData>();
-
-            // ID 1: Completed All 3 Matches in Training Season
-            if (_seasonIndex == 0 && _fixtureIndex >= 3 && !_unlockedAchievementIds.Contains(1))
+            for (int aid = 1; aid <= 72; aid++)
             {
-                var ach = _catalog.GetAchievement(1);
-                if (ach != null) newAchievements.Add(ach);
-            }
+                if (_unlockedAchievementIds.Contains(aid)) continue;
+                bool cond = aid switch
+                {
+                    1 => GetSeasonCompletedCount(0, "League") >= 3,
+                    2 => IsSeasonLeagueAllWon(0),
+                    3 => _maxUnlockedSeason >= 2,
+                    4 => IsSeasonLeagueAllWon(1),
+                    5 => IsTournamentWon(1, "T1"),
+                    6 => IsTournamentWon(1, "T2"),
+                    7 => _maxUnlockedSeason >= 3,
+                    8 => IsSeasonLeagueAllWon(2),
+                    9 => IsTournamentWon(2, "T1"),
+                    10 => IsTournamentWon(2, "T2"),
+                    11 => _maxUnlockedSeason >= 4,
+                    12 => IsSeasonLeagueAllWon(3),
+                    13 => IsTournamentWon(3, "T1"),
+                    14 => IsTournamentWon(3, "T2"),
+                    15 => IsSeasonLeagueAllWon(1) && IsSeasonLeagueAllWon(2) && IsSeasonLeagueAllWon(3),
+                    16 => IsTournamentWon(1, "T1") && IsTournamentWon(1, "T2") && IsTournamentWon(2, "T1") && IsTournamentWon(2, "T2") && IsTournamentWon(3, "T1") && IsTournamentWon(3, "T2"),
+                    17 => wins >= 10,
+                    18 => wins >= 20,
+                    19 => wins >= 30,
+                    20 => wins >= 40,
+                    21 => wins >= 50,
+                    22 => draws >= 10,
+                    23 => losses >= 10,
+                    24 => CountUnlockedPlayersByPosition("GK") >= 10,
+                    25 => CountUnlockedPlayersByPosition("FWD") >= 30,
+                    26 => CountUnlockedPlayersByPosition("MID") >= 10,
+                    27 => CountUnlockedPlayersByPosition("DEF") >= 30,
+                    28 => AreAllPlayersInRangeUnlocked(1, 16),
+                    29 => AreAllPlayersInRangeUnlocked(17, 32),
+                    30 => AreAllPlayersInRangeUnlocked(33, 48),
+                    31 => AreAllPlayersInRangeUnlocked(49, 64),
+                    32 => AreAllPlayersInRangeUnlocked(65, 80),
+                    33 => PlayerPrefs.GetInt("diceSoccer.stats.visitedCredits", 0) == 1,
+                    34 => _careerCash >= 10000,
+                    35 => _careerCash >= 2000000,
+                    36 => _careerCash >= 5000000,
+                    37 => cashSpent >= 10000000,
+                    38 => hasMatchScores && awayScore == 0,
+                    39 => hasMatchScores && awayScore >= 3,
+                    40 => hasMatchScores && homeScore >= 3,
+                    41 => hasMatchScores && homeScore >= 5,
+                    42 => hasMatchScores && homeScore >= 4,
+                    43 => hasMatchScores && homeScore >= 6,
+                    44 => !isLocalMp && _matchMaxHomeRoll >= 20,
+                    45 => !isLocalMp && _matchMaxHomeRoll >= 30,
+                    46 => !isLocalMp && _matchMaxHomeRoll >= 40,
+                    47 => !isLocalMp && _matchMaxHomeRoll >= 50,
+                    48 => !isLocalMp && _matchMaxHomeRoll >= 60,
+                    49 => !isLocalMp && _matchMaxHomeRoll >= 70,
+                    50 => !isLocalMp && _matchMaxHomeRoll >= 80,
+                    51 => !isLocalMp && _matchMaxHomeRoll >= 90,
+                    52 => !isLocalMp && _matchMaxHomeRoll >= 100,
+                    53 => !isLocalMp && _matchHadZeroHomeRoll,
+                    54 => !isLocalMp && _matchHadZeroAwayRoll,
+                    55 => !isLocalMp && _seasonIndex > 0 && _matchLastMinGoal,
+                    56 => !isLocalMp && _seasonIndex > 0 && _matchLastMinMiss,
+                    57 => !isLocalMp && _seasonIndex > 0 && _matchLastMinSave,
+                    58 => !isLocalMp && _seasonIndex > 0 && _matchLastMinConcede,
+                    59 => !isLocalMp && _seasonIndex > 0 && _matchLastMinEqualizer,
+                    60 => !isLocalMp && _seasonIndex > 0 && _matchLastMinTieBreaker,
+                    61 => GetSeasonCompletedCount(4, "League") >= 14 && GetEarnedStarsForSeason(4) >= 30,
+                    62 => IsSeasonLeagueAllWon(4),
+                    63 => IsTournamentWon(4, "T1"),
+                    64 => IsTournamentWon(4, "T2"),
+                    65 => isCareerMatchEnd && won && HasEquippedWag(),
+                    66 => !isLocalMp && _matchMaxHomeRoll >= 150,
+                    67 => isCareerMatchEnd && won && _seasonIndex == 4 && CountUnusedBenchPlayers() == 0,
+                    68 => isCareerMatchEnd && won && _seasonIndex == 4 && _equippedEntourageIds.Count == 0,
+                    69 => AreAllPlayersInRangeUnlocked(81, 96),
+                    70 => _unlockedEntourageIds.Count >= 21,
+                    71 => mpMatches >= 1,
+                    72 => mpWins >= 2,
+                    _ => false
+                };
 
-            // ID 2: Won All 3 Matches in Training Season
-            if (_seasonIndex == 0 && _fixtureIndex >= 3 && won && !_unlockedAchievementIds.Contains(2))
-            {
-                var ach = _catalog.GetAchievement(2);
-                if (ach != null) newAchievements.Add(ach);
-            }
-
-            // ID 3: Season 1 Qualification
-            if (_seasonIndex >= 1 && !_unlockedAchievementIds.Contains(3))
-            {
-                var ach = _catalog.GetAchievement(3);
-                if (ach != null) newAchievements.Add(ach);
-            }
-
-            // ID 4: Won All Games In Season 1 League
-            if (_seasonIndex == 1 && _fixtureIndex >= 5 && won && !_unlockedAchievementIds.Contains(4))
-            {
-                var ach = _catalog.GetAchievement(4);
-                if (ach != null) newAchievements.Add(ach);
-            }
-
-            // ID 54: Clean Sheet (AwayScore == 0)
-            if (won && _match != null && _match.AwayScore == 0 && !_unlockedAchievementIds.Contains(54))
-            {
-                var ach = _catalog.GetAchievement(54);
-                if (ach != null) newAchievements.Add(ach);
-            }
-
-            // ID 47: High Score (HomeScore >= 5)
-            if (won && _match != null && _match.HomeScore >= 5 && !_unlockedAchievementIds.Contains(47))
-            {
-                var ach = _catalog.GetAchievement(47);
-                if (ach != null) newAchievements.Add(ach);
+                if (cond)
+                {
+                    var ach = _catalog.GetAchievement(aid);
+                    if (ach != null) newAchievements.Add(ach);
+                }
             }
 
             foreach (var ach in newAchievements)
@@ -8351,15 +8666,61 @@ namespace DiceSoccer
                 if (ach.goldReward > 0) _careerCash += ach.goldReward;
                 if (ach.entourageReward > 0) _unlockedEntourageIds.Add(ach.entourageReward);
                 if (ach.pantsReward > 0) _unlockedPantsIds.Add(ach.pantsReward);
+                if (enqueueModals) _pendingUnlockedAchievements.Add(ach);
             }
 
+            // Re-check bankroll/all-entourage achievements if a gold/entourage reward just satisfied them
             if (newAchievements.Count > 0)
+            {
+                if (!_unlockedAchievementIds.Contains(34) && _careerCash >= 10000) GrantBonusAchievement(34, enqueueModals);
+                if (!_unlockedAchievementIds.Contains(35) && _careerCash >= 2000000) GrantBonusAchievement(35, enqueueModals);
+                if (!_unlockedAchievementIds.Contains(36) && _careerCash >= 5000000) GrantBonusAchievement(36, enqueueModals);
+                if (!_unlockedAchievementIds.Contains(70) && _unlockedEntourageIds.Count >= 21) GrantBonusAchievement(70, enqueueModals);
+            }
+
+            if (newAchievements.Count > 0 || anyPlayerChanged || entourageAdded)
             {
                 SaveCareerState();
             }
         }
 
-        private void ShowAchievementUnlockedModal(AchievementData ach)
+        private void GrantBonusAchievement(int aid, bool enqueueModals)
+        {
+            var ach = _catalog?.GetAchievement(aid);
+            if (ach == null || _unlockedAchievementIds.Contains(aid)) return;
+            _unlockedAchievementIds.Add(aid);
+            if (ach.goldReward > 0) _careerCash += ach.goldReward;
+            if (ach.entourageReward > 0) _unlockedEntourageIds.Add(ach.entourageReward);
+            if (ach.pantsReward > 0) _unlockedPantsIds.Add(ach.pantsReward);
+            if (enqueueModals) _pendingUnlockedAchievements.Add(ach);
+        }
+
+        private bool AreAllPlayersInRangeUnlocked(int minId, int maxId)
+        {
+            if (_catalog?.Data?.players == null) return false;
+            int found = 0;
+            foreach (var p in _catalog.Data.players)
+            {
+                if (p == null || p.id < minId || p.id > maxId) continue;
+                found++;
+                if (!IsPlayerUnlocked(p)) return false;
+            }
+            return found > 0;
+        }
+
+        private int CountUnlockedPlayersByPosition(string pos)
+        {
+            if (_catalog?.Data?.players == null) return 0;
+            int count = 0;
+            foreach (var p in _catalog.Data.players)
+            {
+                if (p != null && p.id >= 1 && p.id <= 96 && p.position == pos && IsPlayerUnlocked(p))
+                    count++;
+            }
+            return count;
+        }
+
+        private void ShowAchievementUnlockedModal(AchievementData ach, Action onDone = null)
         {
             var container = _overlayContainer != null ? _overlayContainer : (_safeArea != null ? _safeArea : _canvas.transform);
             var modal = new GameObject("AchievementUnlockedModal", typeof(RectTransform), typeof(Image));
@@ -8399,7 +8760,11 @@ namespace DiceSoccer
             }
 
             AddSpriteButton("DoneBtn", "Original/images/DoneButton", "Original/images/DoneButtonPressed", box.transform,
-                new Vector2(0.5f, 0.09f), new Vector2(0.48f, 0.10f), () => Destroy(modal));
+                new Vector2(0.5f, 0.09f), new Vector2(0.48f, 0.10f), () =>
+                {
+                    Destroy(modal);
+                    onDone?.Invoke();
+                });
         }
 
         private Image[] CreateDiceRowBelt(Transform parent, bool home)
@@ -8478,6 +8843,7 @@ namespace DiceSoccer
                 throw new FileNotFoundException($"Required original die face is missing: Resources/{path}.png");
             sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
                 new Vector2(0.5f, 0.5f), 100f);
+            sprite.name = texture.name;
             DiceSprites.Add(face, sprite);
             return sprite;
         }
@@ -8602,6 +8968,8 @@ namespace DiceSoccer
             _awayDice = new Image[3];
             _homeDieRoots = new GameObject[3];
             _awayDieRoots = new GameObject[3];
+            _homeDieValueLabels = new Text[3];
+            _awayDieValueLabels = new Text[3];
             _homeDieBuffBadges = new Image[3];
             _awayDieBuffBadges = new Image[3];
             _homeDieGlows = new Image[3];
@@ -8652,6 +9020,15 @@ namespace DiceSoccer
                 hFaceImg.preserveAspect = true;
                 hFaceImg.raycastTarget = false;
                 hFaceImg.enabled = false;
+
+                var hValLbl = AddText(string.Empty, hRoot.transform, 42, new Color32(34, 34, 34, 255),
+                    new Vector2(0.08f, 0.08f), new Vector2(0.92f, 0.92f));
+                hValLbl.name = "ValueLabel";
+                hValLbl.fontStyle = FontStyle.Bold;
+                hValLbl.alignment = TextAnchor.MiddleCenter;
+                hValLbl.raycastTarget = false;
+                hValLbl.enabled = false;
+                _homeDieValueLabels[i] = hValLbl;
 
                 // Buff Badge child (top-right corner overlay)
                 var hBadgeGo = new GameObject("BuffBadge", typeof(RectTransform), typeof(Image));
@@ -8710,6 +9087,15 @@ namespace DiceSoccer
                 aFaceImg.raycastTarget = false;
                 aFaceImg.enabled = false;
 
+                var aValLbl = AddText(string.Empty, aRoot.transform, 42, new Color32(34, 34, 34, 255),
+                    new Vector2(0.08f, 0.08f), new Vector2(0.92f, 0.92f));
+                aValLbl.name = "ValueLabel";
+                aValLbl.fontStyle = FontStyle.Bold;
+                aValLbl.alignment = TextAnchor.MiddleCenter;
+                aValLbl.raycastTarget = false;
+                aValLbl.enabled = false;
+                _awayDieValueLabels[i] = aValLbl;
+
                 // Buff Badge child (top-left corner overlay)
                 var aBadgeGo = new GameObject("BuffBadge", typeof(RectTransform), typeof(Image));
                 aBadgeGo.transform.SetParent(aRoot.transform, false);
@@ -8754,6 +9140,9 @@ namespace DiceSoccer
         {
             if (ab == null)
                 return GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
+
+            if (ab.id == 18)
+                return GetUiSprite("Original/sprites/Buff6/DisplayBuffPlus");
 
             int spriteId = ResolveAbilitySpriteId(ab.id);
 
@@ -9555,6 +9944,12 @@ namespace DiceSoccer
             _awayTotalText = null;
             _homeDieRoots = null;
             _awayDieRoots = null;
+            _homeDieValueLabels = null;
+            _awayDieValueLabels = null;
+            _buffBeltGo = null;
+            _buffBeltText = null;
+            _buffBeltMedal = null;
+            _buffBeltBadgeText = null;
             _homePlayerScales = null;
             _awayPlayerScales = null;
             _matchPlayRoot = null;
@@ -9918,6 +10313,7 @@ namespace DiceSoccer
                 return null;
             sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
                 new Vector2(0.5f, 0.5f), 100f);
+            sprite.name = texture.name;
             UiSprites.Add(resourcePath, sprite);
             return sprite;
         }
