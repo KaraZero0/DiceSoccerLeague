@@ -260,6 +260,21 @@ namespace DiceSoccer.Editor
                 if (hTot != null) { hTot.rectTransform.anchorMin = hTot.rectTransform.anchorMax = new Vector2(0.135f, 0.24f); hTot.text = match.LastHomeTotal.ToString(); hTot.enabled = true; }
                 if (aTot != null) { aTot.rectTransform.anchorMin = aTot.rectTransform.anchorMax = new Vector2(0.865f, 0.24f); aTot.text = match.LastAwayTotal.ToString(); aTot.enabled = true; }
                 capture("09b_match_encounter_active.png");
+
+                // 9f. BuffBelt Active State & Buffed High-Numeric Die (verifies no fixed 'x2' & clean numeric 16/24)
+                var setBuffBelt = typeof(DiceSoccerBootstrap).GetMethod("SetBuffBeltDisplay", BindingFlags.Instance | BindingFlags.NonPublic);
+                var getAbilityMedal = typeof(DiceSoccerBootstrap).GetMethod("GetAbilityMedalSprite", BindingFlags.Static | BindingFlags.NonPublic);
+                var setSideDie = typeof(DiceSoccerBootstrap).GetMethod("SetSideDieVisual", BindingFlags.Instance | BindingFlags.NonPublic);
+                var abTackle = catalog?.TryGetAbility(33);
+                if (abTackle != null && setBuffBelt != null && getAbilityMedal != null)
+                {
+                    var medalSp = getAbilityMedal.Invoke(null, new object[] { abTackle }) as Sprite;
+                    setBuffBelt.Invoke(bootstrap, new object[] { medalSp, "TACKLE -1!", "" });
+                }
+                setSideDie?.Invoke(bootstrap, new object[] { 0, 0, 16, 16, true });
+                setSideDie?.Invoke(bootstrap, new object[] { 1, 0, 0, 2, true });
+                capture("09f_match_buffbelt_and_numerics.png");
+                typeof(DiceSoccerBootstrap).GetMethod("HideBuffBelt", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(bootstrap, null);
             }
 
             // 9c. Half Time Modal
