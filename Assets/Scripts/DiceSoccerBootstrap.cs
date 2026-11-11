@@ -115,6 +115,12 @@ namespace DiceSoccer
         private int _remainingSubs = 3;
         private readonly Vector2[] _homeBasePositions = new Vector2[7];
         private readonly Vector2[] _awayBasePositions = new Vector2[7];
+        private readonly Image[] _homeEntourageIcons = new Image[2];
+        private readonly Image[] _awayEntourageIcons = new Image[2];
+        private bool _homeShirleyUsed;
+        private bool _awayShirleyUsed;
+        private Text _subRemainingText;
+        private RectTransform _subDrawerGo;
 
         private void TriggerHaptic()
         {
@@ -349,8 +355,18 @@ namespace DiceSoccer
             AudioManager.Instance.StopCrowd();
             ClearCanvas();
             AddMenuBackdrop(true);
-            AddMenuHeader(null, ShowProfileSelect);
+            AddMenuHeader(null, null);
             AddMenuFooter();
+
+            var frame = CreateCenteredReferenceFrame("HomeFrame");
+
+            // Official Dice Soccer Title Logo in the sky
+            var homeLogo = AddResourceImage("HomeLogo", "Original/images/StartScreenLogo", frame,
+                new Vector2(0.5f, 0.77f), new Vector2(0.5f, 0.77f));
+            homeLogo.rectTransform.sizeDelta = new Vector2(460f, 210f);
+            homeLogo.preserveAspect = true;
+            homeLogo.raycastTarget = false;
+            StartCoroutine(AnimatePulse(homeLogo.rectTransform));
 
             var catalogAvailable = Resources.Load<TextAsset>("Original/data/UnityCatalog") != null;
 
@@ -361,13 +377,13 @@ namespace DiceSoccer
 
             // Authentic left-aligned menu buttons: Campaign, Multiplayer, Manage (matches 2012 iOS v1.2.5 layout)
             var campaignBtn = AddSpriteButton("Campaign", "Original/images/MainMenuButtons01",
-                "Original/images/MainMenuButtons01Pressed", _safeArea,
+                "Original/images/MainMenuButtons01Pressed", frame,
                 new Vector2(0.38f, 0.56f), new Vector2(0.54f, 0.115f), ShowLeagueSelect);
             campaignBtn.interactable = catalogAvailable;
 
             var mpNormal = mpUnlocked ? "Original/images/MainMenuButtons02" : "Original/images/MainMenuButtons02Disabled";
             var mpPressed = mpUnlocked ? "Original/images/MainMenuButtons02Pressed" : "Original/images/MainMenuButtons02Disabled";
-            var mpBtn = AddSpriteButton("Multiplayer", mpNormal, mpPressed, _safeArea,
+            var mpBtn = AddSpriteButton("Multiplayer", mpNormal, mpPressed, frame,
                 new Vector2(0.38f, 0.43f), new Vector2(0.54f, 0.115f), mpUnlocked ? ShowMultiplayer : () =>
                 {
                     AudioManager.Instance.PlayDisappoint();
@@ -376,7 +392,7 @@ namespace DiceSoccer
 
             var manageNormal = manageUnlocked ? "Original/images/MainMenuButtons03" : "Original/images/MainMenuButtons03Disabled";
             var managePressed = manageUnlocked ? "Original/images/MainMenuButtons03Pressed" : "Original/images/MainMenuButtons03Disabled";
-            var manageBtn = AddSpriteButton("Manage", manageNormal, managePressed, _safeArea,
+            var manageBtn = AddSpriteButton("Manage", manageNormal, managePressed, frame,
                 new Vector2(0.38f, 0.30f), new Vector2(0.54f, 0.115f), manageUnlocked ? ShowManage : () =>
                 {
                     AudioManager.Instance.PlayDisappoint();
@@ -385,21 +401,21 @@ namespace DiceSoccer
 
             // Authentic right vertical button stack: iCloud, Support (Handbook), News (matches 2012 iOS v1.2.5 layout)
             AddSpriteButton("iCloudButton", "Original/sprites/iCloudSS/iCloudButton",
-                "Original/sprites/iCloudSS/iCloudButtonPressed", _safeArea,
+                "Original/sprites/iCloudSS/iCloudButtonPressed", frame,
                 new Vector2(0.86f, 0.68f), new Vector2(0.13f, 0.088f), ShowProfileSelect);
 
             AddSpriteButton("SupportButton", "Original/sprites/StartScreenLogoAnimation2/SupportButton",
-                "Original/sprites/StartScreenLogoAnimation2/SupportButtonPressed", _safeArea,
+                "Original/sprites/StartScreenLogoAnimation2/SupportButtonPressed", frame,
                 new Vector2(0.86f, 0.56f), new Vector2(0.13f, 0.088f), () => ShowHandbookDialog(_safeArea));
 
             AddSpriteButton("NewsButton", "Original/sprites/StartScreenLogoAnimation2/NewsButton",
-                "Original/sprites/StartScreenLogoAnimation2/NewsButtonPressed", _safeArea,
+                "Original/sprites/StartScreenLogoAnimation2/NewsButtonPressed", frame,
                 new Vector2(0.86f, 0.44f), new Vector2(0.13f, 0.088f), ShowNewsModal);
 
             if (!catalogAvailable)
             {
                 AddText("Run Tools/extract_assets.py to import the original game data.",
-                    _safeArea, 16, new Color32(255, 193, 133, 255),
+                    frame, 16, new Color32(255, 193, 133, 255),
                     new Vector2(0.05f, 0.14f), new Vector2(0.95f, 0.19f));
             }
         }
@@ -448,6 +464,8 @@ namespace DiceSoccer
             _selectedLeagueSeasonIndex = Mathf.Clamp(_selectedLeagueSeasonIndex, 0, _catalog.Data.seasons.Length - 1);
             var season = _catalog.Data.seasons[_selectedLeagueSeasonIndex];
 
+            var frame = CreateCenteredReferenceFrame("LeagueSelectFrame");
+
             // Large Season Crest in Center (matching media_1792577571727_b6fde5ba.png):
             string crestPath = _selectedLeagueSeasonIndex switch
             {
@@ -460,7 +478,7 @@ namespace DiceSoccer
 
             bool isUnlocked = _selectedLeagueSeasonIndex <= _seasonIndex || PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1;
 
-            var crestGo = AddResourceImage("SeasonCrest", crestPath, _safeArea,
+            var crestGo = AddResourceImage("SeasonCrest", crestPath, frame,
                 new Vector2(0.5f, 0.54f), new Vector2(0.5f, 0.54f));
             crestGo.rectTransform.sizeDelta = new Vector2(340f, 340f);
             crestGo.preserveAspect = true;
@@ -493,8 +511,8 @@ namespace DiceSoccer
             // Left & Right Navigation Arrows
             if (_selectedLeagueSeasonIndex > 0)
             {
-                AddSpriteButton("LeftArrow", "Original/images/LeftArrow", "Original/images/LeftArrowSelected", _safeArea,
-                    new Vector2(0.14f, 0.54f), new Vector2(0.12f, 0.09f), () =>
+                AddSpriteButton("LeftArrow", "Original/images/LeftArrow", "Original/images/LeftArrowSelected", frame,
+                    new Vector2(0.09f, 0.54f), new Vector2(0.12f, 0.09f), () =>
                     {
                         _selectedLeagueSeasonIndex--;
                         ShowLeagueSelect();
@@ -502,8 +520,8 @@ namespace DiceSoccer
             }
             else
             {
-                var leftDisabled = AddResourceImage("LeftArrowDisabled", "Original/images/LeftArrowDisabled", _safeArea,
-                    new Vector2(0.14f, 0.54f), new Vector2(0.14f, 0.54f));
+                var leftDisabled = AddResourceImage("LeftArrowDisabled", "Original/images/LeftArrowDisabled", frame,
+                    new Vector2(0.09f, 0.54f), new Vector2(0.09f, 0.54f));
                 leftDisabled.rectTransform.sizeDelta = new Vector2(70f, 80f);
                 leftDisabled.preserveAspect = true;
                 leftDisabled.raycastTarget = false;
@@ -511,8 +529,8 @@ namespace DiceSoccer
 
             if (_selectedLeagueSeasonIndex < _catalog.Data.seasons.Length - 1)
             {
-                AddSpriteButton("RightArrow", "Original/images/RightArrow", "Original/images/RightArrowSelected", _safeArea,
-                    new Vector2(0.86f, 0.54f), new Vector2(0.12f, 0.09f), () =>
+                AddSpriteButton("RightArrow", "Original/images/RightArrow", "Original/images/RightArrowSelected", frame,
+                    new Vector2(0.91f, 0.54f), new Vector2(0.12f, 0.09f), () =>
                     {
                         _selectedLeagueSeasonIndex++;
                         ShowLeagueSelect();
@@ -520,15 +538,15 @@ namespace DiceSoccer
             }
             else
             {
-                var rightDisabled = AddResourceImage("RightArrowDisabled", "Original/images/RightArrowDisabled", _safeArea,
-                    new Vector2(0.86f, 0.54f), new Vector2(0.86f, 0.54f));
+                var rightDisabled = AddResourceImage("RightArrowDisabled", "Original/images/RightArrowDisabled", frame,
+                    new Vector2(0.91f, 0.54f), new Vector2(0.91f, 0.54f));
                 rightDisabled.rectTransform.sizeDelta = new Vector2(70f, 80f);
                 rightDisabled.preserveAspect = true;
                 rightDisabled.raycastTarget = false;
             }
 
             // Season Name below crest (white with bold black outline matching media_1792577571727_b6fde5ba.png)
-            var nameText = AddText(season.name.ToUpperInvariant(), _safeArea, 26, Color.white,
+            var nameText = AddText(season.name.ToUpperInvariant(), frame, 26, Color.white,
                 new Vector2(0.08f, 0.31f), new Vector2(0.92f, 0.38f));
             nameText.fontStyle = FontStyle.Bold;
             nameText.alignment = TextAnchor.MiddleCenter;
@@ -542,7 +560,7 @@ namespace DiceSoccer
             int earnedStars = GetEarnedStarsForSeason(_selectedLeagueSeasonIndex);
 
             var starContainer = new GameObject("StarProgress", typeof(RectTransform));
-            starContainer.transform.SetParent(_safeArea, false);
+            starContainer.transform.SetParent(frame, false);
             var starRect = starContainer.GetComponent<RectTransform>();
             starRect.anchorMin = starRect.anchorMax = new Vector2(0.5f, 0.16f);
             starRect.sizeDelta = new Vector2(170f, 50f);
@@ -579,9 +597,11 @@ namespace DiceSoccer
             ClearCanvas();
             AddMenuBackdrop(true);
 
+            var frame = CreateCenteredReferenceFrame("ProfileSelectFrame");
+
             // Title Hero Logo at top (Easter Egg: Tap 5 times to reveal archival dedication!)
             var logo = AddResourceImage("StartScreenLogo", "Original/images/StartScreenLogo",
-                _safeArea, new Vector2(0.18f, 0.72f), new Vector2(0.82f, 0.96f));
+                frame, new Vector2(0.18f, 0.72f), new Vector2(0.82f, 0.96f));
             logo.preserveAspect = true;
             logo.raycastTarget = true;
 
@@ -620,9 +640,9 @@ namespace DiceSoccer
                 int pSeason = PlayerPrefs.GetInt($"diceSoccer.profile.{slot}.season", 0);
                 int pCash = PlayerPrefs.GetInt($"diceSoccer.profile.{slot}.cash", 1000);
 
-                // Slot main button (explicit 410x135 aspect ratio matching ProfileButton.png 456x150)
+                // Slot main button (explicit 410x120 aspect ratio matching ProfileButton.png 456x150)
                 var slotBtn = AddSpriteButton($"ProfileSlot_{slot}", "Original/images/ProfileButton",
-                    "Original/images/ProfileButtonSelected", _safeArea,
+                    "Original/images/ProfileButtonSelected", frame,
                     new Vector2(0.42f, y), new Vector2(0.64f, 0.125f), () =>
                     {
                         if (exists)
@@ -639,27 +659,27 @@ namespace DiceSoccer
 
                 if (exists)
                 {
-                    // Crest centered directly inside the square badge cutout of ProfileButton (cutout center is x=0.127, y=0.50)
+                    // Crest centered directly inside the rounded tab of ProfileButton (tab center is x=0.111f, y=0.50f)
                     var crest = AddResourceImage($"SlotCrest_{slot}", $"Original/images/CustomCrest{pCrest}", slotBtn.transform,
-                        new Vector2(0.127f, 0.50f), new Vector2(0.127f, 0.50f));
-                    crest.rectTransform.sizeDelta = new Vector2(76f, 76f);
+                        new Vector2(0.111f, 0.50f), new Vector2(0.111f, 0.50f));
+                    crest.rectTransform.sizeDelta = new Vector2(58f, 58f);
                     crest.preserveAspect = true;
                     crest.raycastTarget = false;
 
-                    // Name in center
+                    // Name in center on main button body
                     var nameTxt = AddText(pName.ToUpperInvariant(), slotBtn.transform, 22, Ink,
-                        new Vector2(0.26f, 0.50f), new Vector2(0.96f, 0.90f));
+                        new Vector2(0.25f, 0.50f), new Vector2(0.96f, 0.90f));
                     nameTxt.fontStyle = FontStyle.Bold;
                     nameTxt.alignment = TextAnchor.MiddleLeft;
 
                     // Subtext
                     var subTxt = AddText($"SEASON {pSeason}  •  {pCash:N0} COINS", slotBtn.transform, 13, new Color32(90, 80, 70, 255),
-                        new Vector2(0.26f, 0.12f), new Vector2(0.96f, 0.50f));
+                        new Vector2(0.25f, 0.12f), new Vector2(0.96f, 0.50f));
                     subTxt.alignment = TextAnchor.MiddleLeft;
 
                     // Active Delete button to the right of profile button
                     AddSpriteButton($"Delete_{slot}", "Original/images/DeleteProfileButton",
-                        "Original/images/DeleteProfileButtonSelected", _safeArea,
+                        "Original/images/DeleteProfileButtonSelected", frame,
                         new Vector2(0.85f, y), new Vector2(0.12f, 0.082f), () =>
                         {
                             ShowDeleteConfirmation(slot, pName);
@@ -667,23 +687,23 @@ namespace DiceSoccer
                 }
                 else
                 {
-                    // Subtle placeholder crest for empty slot matching original
+                    // Subtle placeholder crest for empty slot centered in badge tab
                     var placeholderCrest = AddResourceImage($"SlotCrestEmpty_{slot}", "Original/images/CustomCrest1", slotBtn.transform,
-                        new Vector2(0.127f, 0.50f), new Vector2(0.127f, 0.50f));
-                    placeholderCrest.rectTransform.sizeDelta = new Vector2(76f, 76f);
+                        new Vector2(0.111f, 0.50f), new Vector2(0.111f, 0.50f));
+                    placeholderCrest.rectTransform.sizeDelta = new Vector2(58f, 58f);
                     placeholderCrest.preserveAspect = true;
                     placeholderCrest.color = new Color(0.2f, 0.2f, 0.2f, 0.28f);
                     placeholderCrest.raycastTarget = false;
 
                     // New Profile empty slot label
                     var newTxt = AddText("New Profile", slotBtn.transform, 22, new Color32(110, 100, 90, 255),
-                        new Vector2(0.26f, 0.20f), new Vector2(0.96f, 0.80f));
+                        new Vector2(0.25f, 0.20f), new Vector2(0.96f, 0.80f));
                     newTxt.fontStyle = FontStyle.Bold;
                     newTxt.alignment = TextAnchor.MiddleLeft;
 
                     // Disabled grey Delete button for empty slot (matching media_1792577433465_f8339b5f.png)
                     var delDis = AddResourceImage($"DeleteDisabled_{slot}", "Original/images/DeleteProfileButtonDisabled",
-                        _safeArea, new Vector2(0.85f, y), new Vector2(0.85f, y));
+                        frame, new Vector2(0.85f, y), new Vector2(0.85f, y));
                     delDis.rectTransform.sizeDelta = new Vector2(76f, 76f);
                     delDis.preserveAspect = true;
                     delDis.raycastTarget = false;
@@ -693,8 +713,9 @@ namespace DiceSoccer
             // Bottom Action button
             if (anyExists)
             {
-                AddButton("ENTER GAME", _safeArea, Grass,
-                    new Vector2(0.50f, 0.14f), new Vector2(0.60f, 0.08f), () =>
+                AddSpriteButton("EnterGameBtn", "Original/images/StartButton",
+                    "Original/images/StartButtonPressed", frame,
+                    new Vector2(0.50f, 0.14f), new Vector2(0.48f, 0.088f), () =>
                     {
                         int targetSlot = _currentProfileSlot;
                         if (PlayerPrefs.GetInt($"diceSoccer.profile.{targetSlot}.exists", 0) != 1)
@@ -713,8 +734,9 @@ namespace DiceSoccer
             }
             else
             {
-                AddButton("CREATE PROFILE", _safeArea, Grass,
-                    new Vector2(0.50f, 0.14f), new Vector2(0.60f, 0.08f), () =>
+                AddSpriteButton("CreateProfileBtn", "Original/images/StartButton",
+                    "Original/images/StartButtonPressed", frame,
+                    new Vector2(0.50f, 0.14f), new Vector2(0.48f, 0.088f), () =>
                     {
                         ShowNewProfileModal(0);
                     });
@@ -1105,12 +1127,14 @@ namespace DiceSoccer
             _safeArea.SetAsLastSibling();
             AddMenuHeader("1 VS 1", ShowHome);
 
-            var subTitle = AddText("1 VS 1 PASS & PLAY ON THIS DEVICE", _safeArea, 14, Ink,
+            var frame = CreateCenteredReferenceFrame("MultiplayerFrame");
+
+            var subTitle = AddText("1 VS 1 PASS & PLAY ON THIS DEVICE", frame, 14, Ink,
                 new Vector2(0.05f, 0.81f), new Vector2(0.95f, 0.86f));
             subTitle.fontStyle = FontStyle.Bold;
 
             // Player 1 Team Box (Left)
-            var p1Box = AddResourceImage("P1Box", "Original/sprites/ShopSS/ShopBox", _safeArea,
+            var p1Box = AddResourceImage("P1Box", "Original/sprites/ShopSS/ShopBox", frame,
                 new Vector2(0.04f, 0.48f), new Vector2(0.44f, 0.78f));
             p1Box.preserveAspect = false;
 
@@ -1127,7 +1151,7 @@ namespace DiceSoccer
                 new Vector2(0.05f, 0.08f), new Vector2(0.95f, 0.28f));
 
             // VS Label
-            var vsText = AddText("VS", _safeArea, 30, Ink,
+            var vsText = AddText("VS", frame, 30, Ink,
                 new Vector2(0.44f, 0.58f), new Vector2(0.56f, 0.68f));
             vsText.fontStyle = FontStyle.Bold;
 
@@ -1136,7 +1160,7 @@ namespace DiceSoccer
             int[] p2CrestIds = new int[] { 2, 3, 1, 2 };
             _p2RivalTeamIndex = Mathf.Clamp(_p2RivalTeamIndex, 0, p2TeamNames.Length - 1);
 
-            var p2Box = AddResourceImage("P2Box", "Original/sprites/ShopSS/ShopBox", _safeArea,
+            var p2Box = AddResourceImage("P2Box", "Original/sprites/ShopSS/ShopBox", frame,
                 new Vector2(0.56f, 0.48f), new Vector2(0.96f, 0.78f));
             p2Box.preserveAspect = false;
             p2Box.raycastTarget = true;
@@ -1165,7 +1189,7 @@ namespace DiceSoccer
                 new Vector2(0.05f, 0.08f), new Vector2(0.95f, 0.28f));
 
             // Instructions Box
-            var infoBox = AddResourceImage("InfoBox", "Original/sprites/AchievementsSS4/LongDialogBox", _safeArea,
+            var infoBox = AddResourceImage("InfoBox", "Original/sprites/AchievementsSS4/LongDialogBox", frame,
                 new Vector2(0.08f, 0.25f), new Vector2(0.92f, 0.44f));
             infoBox.preserveAspect = false;
 
@@ -1180,10 +1204,10 @@ namespace DiceSoccer
 
             // Start Match Button
             AddSpriteButton("Start1v1Btn", "Original/sprites/EnemyLineupSS1/FormationPlayButton",
-                "Original/sprites/EnemyLineupSS1/FormationPlayButtonPressed", _safeArea,
+                "Original/sprites/EnemyLineupSS1/FormationPlayButtonPressed", frame,
                 new Vector2(0.50f, 0.16f), new Vector2(0.38f, 0.09f), StartLocalMultiplayerMatch);
 
-            AddButton("BACK TO MENU", _safeArea, new Color32(68, 79, 84, 255),
+            AddButton("BACK TO MENU", frame, new Color32(68, 79, 84, 255),
                 new Vector2(0.50f, 0.06f), new Vector2(0.55f, 0.055f), ShowHome);
         }
 
@@ -1282,11 +1306,13 @@ namespace DiceSoccer
                           _fixtureIndex > 0 && !IsPreviousTournamentFixtureWon());
             var isCompleted = _selectedFixtureIndex < _fixtureIndex;
 
+            var frame = CreateCenteredReferenceFrame("FixturesFrame");
+
             // 1. Top Sky Header: Season Name in 2 lines centered (matches 2012 iOS layout)
             var seasonTitle = _seasonIndex == 0
                 ? "TRAINING\nSEASON"
                 : (_competitionName == "League" ? $"SEASON {_seasonIndex}\nLEAGUE" : $"TOURNAMENT\n{_competitionName}");
-            var seasonText = AddText(seasonTitle, _safeArea, 22, Ink,
+            var seasonText = AddText(seasonTitle, frame, 22, Ink,
                 new Vector2(0.1f, 0.77f), new Vector2(0.9f, 0.88f));
             seasonText.alignment = TextAnchor.MiddleCenter;
             seasonText.fontStyle = FontStyle.Bold;
@@ -1296,7 +1322,7 @@ namespace DiceSoccer
             var previewBtn = AddSpriteButton("PreviewBtn",
                 locked ? "Original/sprites/MatchSelectionSS2/PreviewButtonDisabled" : "Original/sprites/MatchSelectionSS2/PreviewButton",
                 locked ? "Original/sprites/MatchSelectionSS2/PreviewButtonDisabled" : "Original/sprites/MatchSelectionSS2/PreviewButtonPressed",
-                _safeArea, new Vector2(0.89f, 0.77f), new Vector2(0.14f, 0.085f),
+                frame, new Vector2(0.83f, 0.80f), new Vector2(0.24f, 0.065f),
                 locked ? null : () => ShowOpponentPreview(fixture));
             previewBtn.interactable = !locked;
 
@@ -1304,7 +1330,7 @@ namespace DiceSoccer
             int maxStars = _seasonFixtures.Length * 3;
             int earnedStars = GetEarnedStarsForSeason(_seasonIndex);
             var starCounterContainer = new GameObject("FixtureStarCounter", typeof(RectTransform));
-            starCounterContainer.transform.SetParent(_safeArea, false);
+            starCounterContainer.transform.SetParent(frame, false);
             var scRect = starCounterContainer.GetComponent<RectTransform>();
             scRect.anchorMin = scRect.anchorMax = new Vector2(0.5f, 0.73f);
             scRect.sizeDelta = new Vector2(130f, 36f);
@@ -1325,7 +1351,7 @@ namespace DiceSoccer
                 : "Original/sprites/MatchSelectionSS1/SoccerBallButton";
 
             var ballContainer = new GameObject("SoccerBallContainer", typeof(RectTransform));
-            ballContainer.transform.SetParent(_safeArea, false);
+            ballContainer.transform.SetParent(frame, false);
             var containerRect = ballContainer.GetComponent<RectTransform>();
             containerRect.anchorMin = new Vector2(0.5f, 0.56f);
             containerRect.anchorMax = new Vector2(0.5f, 0.56f);
@@ -1375,7 +1401,7 @@ namespace DiceSoccer
             var leftArrow = AddSpriteButton("LeftArrow",
                 canPrev ? "Original/images/LeftArrow" : "Original/images/LeftArrowDisabled",
                 canPrev ? "Original/images/LeftArrowSelected" : "Original/images/LeftArrowDisabled",
-                _safeArea, new Vector2(0.12f, 0.56f), new Vector2(0.10f, 0.12f),
+                frame, new Vector2(0.12f, 0.56f), new Vector2(0.10f, 0.12f),
                 canPrev ? () => { _selectedFixtureIndex--; ShowLeagueFixtures(); } : null);
             leftArrow.interactable = canPrev;
 
@@ -1383,7 +1409,7 @@ namespace DiceSoccer
             var rightArrow = AddSpriteButton("RightArrow",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
-                _safeArea, new Vector2(0.88f, 0.56f), new Vector2(0.10f, 0.12f),
+                frame, new Vector2(0.88f, 0.56f), new Vector2(0.10f, 0.12f),
                 canNext ? () => { _selectedFixtureIndex++; ShowLeagueFixtures(); } : null);
             rightArrow.interactable = canNext;
 
@@ -1394,30 +1420,30 @@ namespace DiceSoccer
 
             var starLeft = AddResourceImage("StarLeft", matchStars >= 1 ? goldStarPath : emptyStarPath, ballContainer.transform,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            starLeft.rectTransform.anchoredPosition = new Vector2(-38f, -72f);
-            starLeft.rectTransform.sizeDelta = new Vector2(44f, 44f);
+            starLeft.rectTransform.anchoredPosition = new Vector2(-46f, -74f);
+            starLeft.rectTransform.sizeDelta = new Vector2(62f, 50f);
             starLeft.preserveAspect = true;
 
             var starRight = AddResourceImage("StarRight", matchStars >= 2 ? goldStarPath : emptyStarPath, ballContainer.transform,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            starRight.rectTransform.anchoredPosition = new Vector2(38f, -72f);
-            starRight.rectTransform.sizeDelta = new Vector2(44f, 44f);
+            starRight.rectTransform.anchoredPosition = new Vector2(46f, -74f);
+            starRight.rectTransform.sizeDelta = new Vector2(62f, 50f);
             starRight.preserveAspect = true;
 
             var starMid = AddResourceImage("StarMid", matchStars >= 3 ? goldStarPath : emptyStarPath, ballContainer.transform,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            starMid.rectTransform.anchoredPosition = new Vector2(0f, -80f);
-            starMid.rectTransform.sizeDelta = new Vector2(54f, 54f);
+            starMid.rectTransform.anchoredPosition = new Vector2(0f, -84f);
+            starMid.rectTransform.sizeDelta = new Vector2(74f, 60f);
             starMid.preserveAspect = true;
             starMid.transform.SetAsLastSibling();
 
             // 4. Match Info Below Ball
-            var matchTitle = AddText($"MATCH {_selectedFixtureIndex + 1}", _safeArea, 22, Ink,
+            var matchTitle = AddText($"MATCH {_selectedFixtureIndex + 1}", frame, 22, Ink,
                 new Vector2(0.1f, 0.365f), new Vector2(0.9f, 0.415f));
             matchTitle.alignment = TextAnchor.MiddleCenter;
             matchTitle.fontStyle = FontStyle.Bold;
 
-            var vsText = AddText($"vs. {fixture.teamName.ToUpperInvariant()}", _safeArea, 17, Ink,
+            var vsText = AddText($"vs. {fixture.teamName.ToUpperInvariant()}", frame, 17, Ink,
                 new Vector2(0.1f, 0.320f), new Vector2(0.9f, 0.365f));
             vsText.alignment = TextAnchor.MiddleCenter;
             vsText.fontStyle = FontStyle.Bold;
@@ -1426,7 +1452,7 @@ namespace DiceSoccer
                 isCompleted ? "1 - 0" : "");
             if (!string.IsNullOrEmpty(savedScore))
             {
-                var scoreLabel = AddText(savedScore, _safeArea, 20, Ink,
+                var scoreLabel = AddText(savedScore, frame, 20, Ink,
                     new Vector2(0.2f, 0.270f), new Vector2(0.8f, 0.320f));
                 scoreLabel.alignment = TextAnchor.MiddleCenter;
                 scoreLabel.fontStyle = FontStyle.Bold;
@@ -1434,7 +1460,7 @@ namespace DiceSoccer
 
             // 5. Action Buttons: MANAGE and PLAY! side-by-side on grass
             AddSpriteButton("ManageBtn", "Original/sprites/EnemyLineupSS1/ManageButton",
-                "Original/sprites/EnemyLineupSS1/ManageButtonPressed", _safeArea,
+                "Original/sprites/EnemyLineupSS1/ManageButtonPressed", frame,
                 new Vector2(0.32f, 0.20f), new Vector2(0.28f, 0.085f), ShowManage);
 
             var playNormal = locked
@@ -1444,14 +1470,17 @@ namespace DiceSoccer
                 ? "Original/sprites/MatchSelectionSS2/ManagePlayButtonDisabled"
                 : "Original/sprites/MatchSelectionSS1/ManagePlayButtonPressed";
             var capturedMatchIdx = _selectedFixtureIndex;
-            var playBtn = AddSpriteButton("PlayBtn", playNormal, playPressed, _safeArea,
+            var playBtn = AddSpriteButton("PlayBtn", playNormal, playPressed, frame,
                 new Vector2(0.68f, 0.20f), new Vector2(0.28f, 0.085f),
                 locked ? null : () => StartFixture(capturedMatchIdx));
             playBtn.interactable = !locked;
 
-            // 6. Bottom yellow bar & competition tabs
+            // 6. Bottom yellow bar & competition tabs (fixed 77px height docked to bottom of _safeArea)
             var footerBar = AddResourceImage("FixtureFooter", "Original/images/FooterBG", _safeArea,
-                new Vector2(0f, 0f), new Vector2(1f, 0.08f));
+                new Vector2(0f, 0f), new Vector2(1f, 0f));
+            footerBar.rectTransform.pivot = new Vector2(0.5f, 0f);
+            footerBar.rectTransform.anchoredPosition = Vector2.zero;
+            footerBar.rectTransform.sizeDelta = new Vector2(0f, 77f);
             footerBar.preserveAspect = false;
             footerBar.raycastTarget = false;
 
@@ -1463,7 +1492,7 @@ namespace DiceSoccer
                     availableComps.Add(comp);
             }
 
-            var tabWidth = 0.22f;
+            var tabWidth = 0.26f;
             for (var i = 0; i < availableComps.Count; i++)
             {
                 var comp = availableComps[i];
@@ -1471,9 +1500,14 @@ namespace DiceSoccer
                 var isSel = cName == _competitionName;
                 var isAvailable = IsCompetitionAvailable(cName);
                 var tabPath = $"Original/sprites/MatchSelectionSS1/Campaign{cName}Tab" + (isSel ? "Selected" : string.Empty);
-                var xCenter = 0.15f + i * 0.24f;
-                var tabBtn = AddSpriteButton($"Tab_{cName}", tabPath, tabPath, _safeArea,
-                    new Vector2(xCenter, 0.045f), new Vector2(tabWidth, 0.08f),
+                float xCenter = availableComps.Count switch
+                {
+                    1 => 0.50f,
+                    2 => 0.35f + i * 0.30f,
+                    _ => 0.20f + i * 0.30f
+                };
+                var tabBtn = AddSpriteButton($"Tab_{cName}", tabPath, tabPath, footerBar.transform,
+                    new Vector2(xCenter, 0.65f), new Vector2(tabWidth, 1.12f),
                     () =>
                     {
                         if (isAvailable)
@@ -1510,8 +1544,8 @@ namespace DiceSoccer
 
         private void ShowLockedTournamentModal(string compName)
         {
-            if (_overlayContainer == null) return;
-            var modal = AddPanel("LockedTournamentModal", _overlayContainer,
+            var container = _overlayContainer != null ? _overlayContainer : (_safeArea != null ? _safeArea : _canvas.transform);
+            var modal = AddPanel("LockedTournamentModal", container,
                 new Color(0f, 0f, 0f, 0.78f), new Vector2(0.5f, 0.5f), Vector2.one);
             modal.raycastTarget = true;
 
@@ -1527,7 +1561,7 @@ namespace DiceSoccer
             lockIcon.rectTransform.sizeDelta = new Vector2(65f, 80f);
             lockIcon.preserveAspect = true;
 
-            var title = AddText("TOURNAMENT LOCKED", box.transform, 20, Gold,
+            var title = AddText("TOURNAMENT LOCKED", box.transform, 20, Ink,
                 new Vector2(0.05f, 0.52f), new Vector2(0.95f, 0.64f));
             title.fontStyle = FontStyle.Bold;
             title.alignment = TextAnchor.MiddleCenter;
@@ -1536,7 +1570,7 @@ namespace DiceSoccer
                 ? _catalog.Data.seasons[_seasonIndex].name : "current";
 
             var msg = AddText($"Complete all fixtures in the\n{seasonName} League\nto unlock this tournament!",
-                box.transform, 14, Paper,
+                box.transform, 14, Ink,
                 new Vector2(0.08f, 0.28f), new Vector2(0.92f, 0.50f));
             msg.alignment = TextAnchor.MiddleCenter;
 
@@ -1544,13 +1578,89 @@ namespace DiceSoccer
                 new Vector2(0.5f, 0.12f), new Vector2(0.48f, 0.15f), () => Destroy(modal.gameObject));
         }
 
+        private GameObject CreateTrophyCup(int tier, Transform parent, Vector2 anchor, float scale = 0.45f)
+        {
+            var root = new GameObject($"TrophyCup_Tier{tier}", typeof(RectTransform));
+            root.transform.SetParent(parent, false);
+            var rect = root.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = anchor;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(352f * scale, 780f * scale);
+            rect.anchoredPosition = Vector2.zero;
+
+            int t = Mathf.Clamp(tier, 1, 6);
+            string colorSuffix = t switch
+            {
+                1 or 2 => "Bronze",
+                3 or 5 => "Silver",
+                _ => "Gold"
+            };
+            string pipType = (t == 1 || t == 3 || t == 4) ? "Dots" : "Stars";
+
+            // 1. Radiant Curved Ribbons behind cup & die
+            string[] curveNames =
+            {
+                $"TrophyLowerLeftCurve{colorSuffix}",
+                $"TrophyLowerRightCurve{colorSuffix}",
+                $"TrophyTopLeftCurve{colorSuffix}",
+                $"TrophyTopRightCurve{colorSuffix}"
+            };
+            foreach (var cn in curveNames)
+            {
+                var cImg = AddResourceImage(cn, $"Original/sprites/MultiplayerSS3/{cn}", root.transform,
+                    Vector2.zero, Vector2.one);
+                cImg.preserveAspect = true;
+                cImg.raycastTarget = false;
+            }
+
+            // 2. Trophy Base (wooden pedestal + silver nameplate)
+            var baseImg = AddResourceImage("TrophyBase", "Original/sprites/MultiplayerSS3/TrophyBase", root.transform,
+                Vector2.zero, Vector2.one);
+            baseImg.preserveAspect = true;
+            baseImg.raycastTarget = false;
+
+            // 3. Trophy Tier Cup Cradle
+            var cupImg = AddResourceImage($"TrophyCupTier{t}", $"Original/sprites/MultiplayerSS3/TrophyTier{t}Trophy", root.transform,
+                Vector2.zero, Vector2.one);
+            cupImg.preserveAspect = true;
+            cupImg.raycastTarget = false;
+
+            // 4. Trophy Stars around stem
+            var starsImg = AddResourceImage($"TrophyStarsTier{t}", $"Original/sprites/MultiplayerSS3/TrophyTier{t}Stars", root.transform,
+                Vector2.zero, Vector2.one);
+            starsImg.preserveAspect = true;
+            starsImg.raycastTarget = false;
+
+            // 5. Crest Plaque centered on lower wooden front panel (below silver nameplate)
+            var plaque = AddResourceImage("TrophyPlaque", "Original/sprites/MultiplayerSS3/TrophyCrestPlaque", root.transform,
+                new Vector2(0.517f, 0.080f), new Vector2(0.517f, 0.080f));
+            plaque.rectTransform.sizeDelta = new Vector2(82f * scale, 86f * scale);
+            plaque.preserveAspect = true;
+            plaque.raycastTarget = false;
+
+            var plaqueCrest = AddResourceImage("PlaqueCrest", $"Original/images/CustomCrest{_currentCrestId}", plaque.transform,
+                new Vector2(0.16f, 0.16f), new Vector2(0.84f, 0.84f));
+            plaqueCrest.preserveAspect = true;
+            plaqueCrest.raycastTarget = false;
+
+            // 6. Giant 3D Die resting atop cradle + matching pips/stars
+            var diceImg = AddResourceImage("TrophyDice", "Original/sprites/MultiplayerSS3/TrophyDice", root.transform,
+                Vector2.zero, Vector2.one);
+            diceImg.preserveAspect = true;
+            diceImg.raycastTarget = false;
+
+            var pipsImg = AddResourceImage($"TrophyDice{pipType}{colorSuffix}",
+                $"Original/sprites/MultiplayerSS3/TrophyDice{pipType}{colorSuffix}", root.transform,
+                Vector2.zero, Vector2.one);
+            pipsImg.preserveAspect = true;
+            pipsImg.raycastTarget = false;
+
+            return root;
+        }
+
         private void ShowTournamentVictoryModal(string compName)
         {
-            if (_overlayContainer == null)
-            {
-                ShowLeagueFixtures();
-                return;
-            }
+            var container = _overlayContainer != null ? _overlayContainer : (_safeArea != null ? _safeArea : _canvas.transform);
 
             AudioManager.Instance.PlayMedalCeremonyLong();
             AudioManager.Instance.PlayEffect("KidsCheering", 1f, 1f);
@@ -1562,8 +1672,8 @@ namespace DiceSoccer
             PlayerPrefs.SetInt($"diceSoccer.season.{_seasonIndex}.{compName}.trophyWon", 1);
             SaveCareerState();
 
-            var modal = AddPanel("TournamentVictoryModal", _overlayContainer,
-                new Color(0f, 0f, 0f, 0.85f), new Vector2(0.5f, 0.5f), Vector2.one);
+            var modal = AddPanel("TournamentVictoryModal", container,
+                new Color(0f, 0f, 0f, 0.88f), new Vector2(0.5f, 0.5f), Vector2.one);
             modal.raycastTarget = true;
 
             for (var i = 0; i < 30; i++)
@@ -1586,32 +1696,30 @@ namespace DiceSoccer
 
             StartCoroutine(PopInBounceAnimation(box.rectTransform));
 
-            int tier = Mathf.Clamp(_seasonIndex + 1, 1, 6);
-            var trophy = AddResourceImage("Trophy", $"Original/sprites/MultiplayerSS3/TrophyTier{tier}Trophy", box.transform,
-                new Vector2(0.5f, 0.68f), new Vector2(0.5f, 0.68f));
-            trophy.rectTransform.sizeDelta = new Vector2(160f, 220f);
-            trophy.preserveAspect = true;
-
-            var title = AddText($"{compName.ToUpperInvariant()} CHAMPIONS!", box.transform, 22, Gold,
-                new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.97f));
+            var title = AddText($"{compName.ToUpperInvariant()}\nCHAMPIONS!", box.transform, 22, Ink,
+                new Vector2(0.06f, 0.775f), new Vector2(0.94f, 0.895f));
             title.fontStyle = FontStyle.Bold;
             title.alignment = TextAnchor.MiddleCenter;
+
+            // Complete Championship Trophy (Curves + Base + Cradle + Stars + Giant Die + Pips + Team Plaque)
+            int cupTier = Mathf.Clamp(_seasonIndex + 1, 1, 6);
+            CreateTrophyCup(cupTier, box.transform, new Vector2(0.5f, 0.56f), 0.285f);
 
             var seasonName = (_catalog?.Data?.seasons != null && _seasonIndex < _catalog.Data.seasons.Length)
                 ? _catalog.Data.seasons[_seasonIndex].name : "";
 
             var desc = AddText($"Congratulations!\nYour team has conquered the\n{seasonName} {compName} Tournament!",
-                box.transform, 16, Paper,
-                new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.49f));
+                box.transform, 14, new Color32(50, 45, 40, 255),
+                new Vector2(0.08f, 0.23f), new Vector2(0.92f, 0.345f));
             desc.alignment = TextAnchor.MiddleCenter;
 
-            var prizeText = AddText($"+{cupPrize:N0} CASH BONUS", box.transform, 20, Gold,
-                new Vector2(0.08f, 0.24f), new Vector2(0.92f, 0.33f));
+            var prizeText = AddText($"+{cupPrize:N0} CASH BONUS", box.transform, 19, new Color32(195, 35, 20, 255),
+                new Vector2(0.08f, 0.15f), new Vector2(0.92f, 0.225f));
             prizeText.fontStyle = FontStyle.Bold;
             prizeText.alignment = TextAnchor.MiddleCenter;
 
             AddSpriteButton("ContinueBtn", "Original/images/ContinueButton", "Original/images/ContinueButtonPressed", box.transform,
-                new Vector2(0.5f, 0.08f), new Vector2(0.55f, 0.11f), () =>
+                new Vector2(0.5f, 0.085f), new Vector2(0.52f, 0.10f), () =>
                 {
                     Destroy(modal.gameObject);
                     ShowLeagueFixtures();
@@ -1620,17 +1728,13 @@ namespace DiceSoccer
 
         private void ShowSeasonPromotedModal(int newSeasonIndex)
         {
-            if (_overlayContainer == null)
-            {
-                ShowLeagueFixtures();
-                return;
-            }
+            var container = _overlayContainer != null ? _overlayContainer : (_safeArea != null ? _safeArea : _canvas.transform);
 
             AudioManager.Instance.PlayMedalCeremonyLong();
             AudioManager.Instance.PlayEffect("KidsCheering", 1f, 1f);
             TriggerHaptic();
 
-            var modal = AddPanel("SeasonPromotedModal", _overlayContainer,
+            var modal = AddPanel("SeasonPromotedModal", container,
                 new Color(0f, 0f, 0f, 0.85f), new Vector2(0.5f, 0.5f), Vector2.one);
             modal.raycastTarget = true;
 
@@ -1651,22 +1755,22 @@ namespace DiceSoccer
                 _ => "Original/sprites/SeasonCrest/Season4Crest"
             };
             var crest = AddResourceImage("NewSeasonCrest", crestPath, box.transform,
-                new Vector2(0.5f, 0.68f), new Vector2(0.5f, 0.68f));
+                new Vector2(0.5f, 0.58f), new Vector2(0.5f, 0.58f));
             crest.rectTransform.sizeDelta = new Vector2(170f, 170f);
             crest.preserveAspect = true;
 
-            var title = AddText("PROMOTED!", box.transform, 24, Gold,
-                new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.97f));
+            var title = AddText("PROMOTED!", box.transform, 24, Ink,
+                new Vector2(0.06f, 0.77f), new Vector2(0.94f, 0.89f));
             title.fontStyle = FontStyle.Bold;
             title.alignment = TextAnchor.MiddleCenter;
 
             var desc = AddText($"WELCOME TO\n{season.name.ToUpperInvariant()}!\n\nNew competitions, stronger rivals,\nand elite players are now available!",
-                box.transform, 16, Paper,
-                new Vector2(0.08f, 0.28f), new Vector2(0.92f, 0.49f));
+                box.transform, 15, new Color32(50, 45, 40, 255),
+                new Vector2(0.08f, 0.22f), new Vector2(0.92f, 0.44f));
             desc.alignment = TextAnchor.MiddleCenter;
 
             AddSpriteButton("PlayNowBtn", "Original/images/ContinueButton", "Original/images/ContinueButtonPressed", box.transform,
-                new Vector2(0.5f, 0.10f), new Vector2(0.55f, 0.11f), () =>
+                new Vector2(0.5f, 0.08f), new Vector2(0.52f, 0.10f), () =>
                 {
                     Destroy(modal.gameObject);
                     ShowLeagueFixtures();
@@ -1747,6 +1851,8 @@ namespace DiceSoccer
             bool canPromote = MatchSimulation.CanPromoteToSeason(_seasonIndex, earnedStars);
             bool isFinalSeason = _seasonIndex >= _catalog.Data.seasons.Length - 1;
 
+            var frame = CreateCenteredReferenceFrame("SeasonCompletionFrame");
+
             string crestPath = _seasonIndex switch
             {
                 0 => "Original/sprites/SeasonCrest/Season0Crest",
@@ -1755,19 +1861,19 @@ namespace DiceSoccer
                 3 => "Original/sprites/SeasonCrest/Season3Crest",
                 _ => "Original/sprites/SeasonCrest/Season4Crest"
             };
-            var crest = AddResourceImage("SeasonCrest", crestPath, _safeArea,
+            var crest = AddResourceImage("SeasonCrest", crestPath, frame,
                 new Vector2(0.5f, 0.70f), new Vector2(0.5f, 0.70f));
             crest.rectTransform.sizeDelta = new Vector2(170f, 170f);
             crest.preserveAspect = true;
 
             var title = AddText($"{season.name.ToUpperInvariant()} LEAGUE COMPLETE",
-                _safeArea, 22, Gold,
+                frame, 22, Gold,
                 new Vector2(0.05f, 0.53f), new Vector2(0.95f, 0.60f));
             title.fontStyle = FontStyle.Bold;
             title.alignment = TextAnchor.MiddleCenter;
 
             var starText = AddText($"★ {earnedStars} / {maxStars} STARS EARNED",
-                _safeArea, 20, Paper,
+                frame, 20, Paper,
                 new Vector2(0.05f, 0.46f), new Vector2(0.95f, 0.52f));
             starText.fontStyle = FontStyle.Bold;
             starText.alignment = TextAnchor.MiddleCenter;
@@ -1775,39 +1881,51 @@ namespace DiceSoccer
             if (isFinalSeason)
             {
                 var finalMsg = AddText("CONGRATULATIONS!\nYou have conquered the highest league!",
-                    _safeArea, 16, Gold,
+                    frame, 16, Gold,
                     new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.44f));
                 finalMsg.fontStyle = FontStyle.Bold;
                 finalMsg.alignment = TextAnchor.MiddleCenter;
 
-                AddButton("BACK TO SEASONS", _safeArea, Grass,
+                AddButton("BACK TO SEASONS", frame, Grass,
                     new Vector2(0.5f, 0.25f), new Vector2(0.72f, 0.08f), ShowLeagueSelect);
             }
             else if (canPromote)
             {
                 var nextSeason = _catalog.Data.seasons[_seasonIndex + 1];
                 var promoMsg = AddText($"PROMOTION EARNED!\nYou have qualified for {nextSeason.name}!",
-                    _safeArea, 16, Gold,
+                    frame, 16, Gold,
                     new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.44f));
                 promoMsg.fontStyle = FontStyle.Bold;
                 promoMsg.alignment = TextAnchor.MiddleCenter;
 
-                AddButton($"UNLOCK {nextSeason.name.ToUpperInvariant()}", _safeArea, Grass,
+                AddButton($"UNLOCK {nextSeason.name.ToUpperInvariant()}", frame, Grass,
                     new Vector2(0.5f, 0.25f), new Vector2(0.75f, 0.085f), AdvanceCareer);
             }
             else
             {
                 var lockMsg = AddText($"PROMOTION REQUIRES {threshold} STARS\nEarn {threshold - earnedStars} more stars to unlock {_catalog.Data.seasons[_seasonIndex + 1].name}!",
-                    _safeArea, 15, new Color32(235, 90, 75, 255),
+                    frame, 15, new Color32(235, 90, 75, 255),
                     new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.44f));
                 lockMsg.alignment = TextAnchor.MiddleCenter;
 
-                AddButton("REPLAY FIXTURES", _safeArea, Grass,
+                AddButton("REPLAY FIXTURES", frame, Grass,
                     new Vector2(0.5f, 0.25f), new Vector2(0.72f, 0.08f), ShowLeagueFixtures);
             }
 
-            AddButton("BACK TO FIXTURES", _safeArea, new Color32(68, 79, 84, 255),
+            AddButton("BACK TO FIXTURES", frame, new Color32(68, 79, 84, 255),
                 new Vector2(0.5f, 0.15f), new Vector2(0.65f, 0.065f), ShowLeagueFixtures);
+        }
+
+        private int CountUnusedBenchPlayers()
+        {
+            if (_ownedPlayerIds == null || _lineupIds == null) return 0;
+            int count = 0;
+            for (int i = 0; i < _ownedPlayerIds.Count; i++)
+            {
+                if (Array.IndexOf(_lineupIds, _ownedPlayerIds[i]) < 0)
+                    count++;
+            }
+            return count;
         }
 
         private void StartCurrentFixture()
@@ -1824,6 +1942,8 @@ namespace DiceSoccer
             _isKickoffPlayed = false;
             _lastSubstitutedSlot = -1;
             _remainingSubs = 3;
+            _homeShirleyUsed = false;
+            _awayShirleyUsed = false;
             var homeLineup = _catalog.ResolveLineup(_lineupIds);
             _match = new MatchSimulation(
                 homeLineup,
@@ -1833,16 +1953,124 @@ namespace DiceSoccer
                 _equippedEntourageIds.ToArray(),
                 _currentFixture.entourageLineup,
                 0,
-                _currentFixture.possessionBonus);
+                _currentFixture.possessionBonus,
+                CountUnusedBenchPlayers(),
+                0);
 
             if (_seasonIndex == 0 && _selectedFixtureIndex == 0 && PlayerPrefs.GetInt("diceSoccer.tutorial.11", 0) == 0)
             {
-                ShowTutorialPopup(11, () => ShowMatchScreen(homeLineup));
+                ShowTutorialPopup(11, () => ShowLoadingWithTip(() => ShowMatchScreen(homeLineup)));
             }
             else
             {
-                ShowMatchScreen(homeLineup);
+                ShowLoadingWithTip(() => ShowMatchScreen(homeLineup));
             }
+        }
+
+        private void ShowLoadingWithTip(Action onComplete)
+        {
+            if (Application.isBatchMode)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+            StartCoroutine(RunLoadingWithTipRoutine(onComplete));
+        }
+
+        private IEnumerator RunLoadingWithTipRoutine(Action onComplete)
+        {
+            BuildLoadingTipScreen(null);
+            float elapsed = 0f;
+            const float minDuration = 1.05f;
+            bool tapped = false;
+            var tapSkipGo = new GameObject("LoadingSkipBtn", typeof(RectTransform), typeof(Button));
+            tapSkipGo.transform.SetParent(_safeArea, false);
+            var skipRect = tapSkipGo.GetComponent<RectTransform>();
+            skipRect.anchorMin = Vector2.zero;
+            skipRect.anchorMax = Vector2.one;
+            skipRect.offsetMin = skipRect.offsetMax = Vector2.zero;
+            var skipBtn = tapSkipGo.GetComponent<Button>();
+            skipBtn.transition = Selectable.Transition.None;
+            skipBtn.onClick.AddListener(() => { if (elapsed > 0.2f) tapped = true; });
+
+            var willyBody = _safeArea.Find("LoadingFrame/WillyBody")?.GetComponent<Image>();
+            PlayerBodySprites.EnsureLoadingAtlasSliced(out var bodyFrames, out _, out _);
+
+            while (elapsed < minDuration && !tapped)
+            {
+                elapsed += Time.deltaTime;
+                if (willyBody != null && bodyFrames != null && bodyFrames.Length > 0)
+                {
+                    int idx = (int)(elapsed * 15f) % bodyFrames.Length;
+                    willyBody.sprite = bodyFrames[idx];
+                }
+                yield return null;
+            }
+            onComplete?.Invoke();
+        }
+
+        /// <summary>
+        /// Renders the 2012 iOS Willy-juggling loading screen + speech bubble TIP overlay.
+        /// Publicly callable for UI screenshot verification as well as match transitions.
+        /// </summary>
+        public void BuildLoadingTipScreen(string forcedTip = null)
+        {
+            _catalog ??= GameCatalog.Load();
+            ClearCanvas();
+            AddStretchPanel("LoadingBG", _canvas.transform, new Color32(28, 120, 42, 255));
+            _safeArea.SetAsLastSibling();
+            var frame = CreateCenteredReferenceFrame("LoadingFrame");
+            var bg = AddResourceImage("PitchBG", "Original/images/GreenField", frame,
+                Vector2.zero, Vector2.one);
+            bg.preserveAspect = false;
+            bg.raycastTarget = false;
+
+            PlayerBodySprites.EnsureLoadingAtlasSliced(out var bodyFrames, out var headSprite, out var bubbleSprite);
+
+            var bodyGo = new GameObject("WillyBody", typeof(RectTransform), typeof(Image));
+            bodyGo.transform.SetParent(frame, false);
+            var bodyRect = bodyGo.GetComponent<RectTransform>();
+            bodyRect.anchorMin = bodyRect.anchorMax = new Vector2(0.66f, 0.44f);
+            bodyRect.sizeDelta = new Vector2(150f, 150f);
+            var bodyImg = bodyGo.GetComponent<Image>();
+            bodyImg.sprite = (bodyFrames != null && bodyFrames.Length > 0) ? bodyFrames[0] : null;
+            bodyImg.preserveAspect = true;
+            bodyImg.raycastTarget = false;
+
+            var headGo = new GameObject("WillyHead", typeof(RectTransform), typeof(Image));
+            headGo.transform.SetParent(bodyGo.transform, false);
+            var headRect = headGo.GetComponent<RectTransform>();
+            headRect.anchorMin = headRect.anchorMax = new Vector2(0.5f, 0.5f);
+            headRect.anchoredPosition = new Vector2(2f, 54f);
+            headRect.sizeDelta = new Vector2(96f, 96f);
+            var headImg = headGo.GetComponent<Image>();
+            headImg.sprite = headSprite;
+            headImg.preserveAspect = true;
+            headImg.raycastTarget = false;
+
+            var bubbleGo = new GameObject("TipBubble", typeof(RectTransform), typeof(Image));
+            bubbleGo.transform.SetParent(frame, false);
+            var bRect = bubbleGo.GetComponent<RectTransform>();
+            bRect.anchorMin = bRect.anchorMax = new Vector2(0.42f, 0.72f);
+            bRect.sizeDelta = new Vector2(400f, 240f);
+            var bImg = bubbleGo.GetComponent<Image>();
+            bImg.sprite = bubbleSprite;
+            bImg.preserveAspect = true;
+            bImg.raycastTarget = false;
+
+            string[] tips = _catalog?.Data?.tips;
+            string tipBody = !string.IsNullOrEmpty(forcedTip)
+                ? forcedTip
+                : (tips != null && tips.Length > 0 ? tips[UnityEngine.Random.Range(0, tips.Length)] : "Tap the field or shake to roll!");
+            var tipText = AddText("TIP: " + tipBody, bubbleGo.transform, 15, Ink,
+                new Vector2(0.11f, 0.24f), new Vector2(0.91f, 0.88f));
+            tipText.fontStyle = FontStyle.Bold;
+            tipText.alignment = TextAnchor.MiddleCenter;
+
+            var loadingLbl = AddText("LOADING...", frame, 24, Paper,
+                new Vector2(0.15f, 0.16f), new Vector2(0.85f, 0.25f));
+            loadingLbl.fontStyle = FontStyle.Bold;
+            loadingLbl.alignment = TextAnchor.MiddleCenter;
         }
 
         private void ShowMatchScreen(PlayerData[] homeLineup)
@@ -1851,11 +2079,11 @@ namespace DiceSoccer
             ClearCanvas();
 
             // Solid black letterbox background behind safe area
-            var bgObj = AddPanel("MatchLetterboxBG", _canvas.transform, Color.black, Vector2.zero, Vector2.one);
+            var bgObj = AddStretchPanel("MatchLetterboxBG", _canvas.transform, Color.black);
             bgObj.raycastTarget = false;
             _safeArea.SetAsLastSibling();
 
-            // 1. Pitch Field (fills full 640x960 safe area from top to bottom):
+            // 1. Pitch Field (fills full safe area edge-to-edge):
             var fieldGo = new GameObject("FieldContainer", typeof(RectTransform), typeof(RectMask2D));
             fieldGo.transform.SetParent(_safeArea, false);
             var fieldRect = fieldGo.GetComponent<RectTransform>();
@@ -1864,43 +2092,14 @@ namespace DiceSoccer
             fieldRect.offsetMin = fieldRect.offsetMax = Vector2.zero;
             _field = fieldRect;
 
-            // Pitch Root for horizontal camera panning:
+            // Pitch Root for horizontal camera panning (built in 1920x960 local coordinates, scaled dynamically by UpdateMatchFieldScale):
             var pitchRootGo = new GameObject("FieldPitchRoot", typeof(RectTransform));
             pitchRootGo.transform.SetParent(_field, false);
             _fieldPitchRoot = pitchRootGo.GetComponent<RectTransform>();
             _fieldPitchRoot.anchorMin = new Vector2(0.5f, 0.5f);
             _fieldPitchRoot.anchorMax = new Vector2(0.5f, 0.5f);
-            bool isFsMatch = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0) == 1;
-            float fieldPitchHeight = 960f;
-            if (isFsMatch)
-            {
-                float screenCanvasH = 960f;
-                var activeCam = (_canvas != null && _canvas.worldCamera != null) ? _canvas.worldCamera : Camera.main;
-                if (activeCam != null && activeCam.targetTexture != null)
-                {
-                    screenCanvasH = ReferenceWidth * ((float)activeCam.targetTexture.height / Mathf.Max(1, activeCam.targetTexture.width));
-                }
-                else if (Screen.width > 0 && Screen.height > 0)
-                {
-                    screenCanvasH = ReferenceWidth * ((float)Screen.height / Screen.width);
-                }
-                if (_safeArea != null && _safeArea.rect.height > screenCanvasH)
-                    screenCanvasH = _safeArea.rect.height;
-                if (_canvas != null)
-                {
-                    var cRect = _canvas.GetComponent<RectTransform>();
-                    if (cRect != null && cRect.rect.height > screenCanvasH)
-                        screenCanvasH = cRect.rect.height;
-                }
-                fieldPitchHeight = Mathf.Max(960f, screenCanvasH);
-            }
-            else if (_safeArea != null && _safeArea.rect.height > 960f)
-            {
-                fieldPitchHeight = _safeArea.rect.height;
-            }
-            float pitchScale = fieldPitchHeight / 960f;
-            _fieldPitchRoot.sizeDelta = new Vector2(1920f * pitchScale, fieldPitchHeight);
-            _fieldPitchRoot.anchoredPosition = new Vector2(GetPitchOffsetForLocation(_match.Location) * pitchScale, 0f);
+            _fieldPitchRoot.sizeDelta = new Vector2(1920f, 960f);
+            _fieldPitchRoot.anchoredPosition = new Vector2(GetPitchOffsetForLocation(_match.Location), 0f);
 
             // Left half of pitch (goal on left, center circle on right):
             var leftFieldGo = new GameObject("FieldLeft", typeof(RectTransform), typeof(Image));
@@ -1908,7 +2107,7 @@ namespace DiceSoccer
             var leftRect = leftFieldGo.GetComponent<RectTransform>();
             leftRect.anchorMin = leftRect.anchorMax = new Vector2(0.5f, 0.5f);
             leftRect.pivot = new Vector2(1f, 0.5f);
-            leftRect.sizeDelta = new Vector2(fieldPitchHeight, fieldPitchHeight);
+            leftRect.sizeDelta = new Vector2(960f, 960f);
             leftRect.anchoredPosition = Vector2.zero;
             var leftImg = leftFieldGo.GetComponent<Image>();
             leftImg.sprite = GetUiSprite("Original/sprites/Season0Field2(1.1)/Field");
@@ -1921,7 +2120,7 @@ namespace DiceSoccer
             var rightRect = rightFieldGo.GetComponent<RectTransform>();
             rightRect.anchorMin = rightRect.anchorMax = new Vector2(0.5f, 0.5f);
             rightRect.pivot = new Vector2(1f, 0.5f);
-            rightRect.sizeDelta = new Vector2(fieldPitchHeight, fieldPitchHeight);
+            rightRect.sizeDelta = new Vector2(960f, 960f);
             rightRect.anchoredPosition = Vector2.zero;
             rightRect.localScale = new Vector3(-1f, 1f, 1f);
             var rightImg = rightFieldGo.GetComponent<Image>();
@@ -1930,17 +2129,19 @@ namespace DiceSoccer
             rightImg.raycastTarget = false;
 
             // Authentic Season Field Objects & Scenery (Seasons 0 to 4):
-            CreateSeasonFieldObjects(_seasonIndex, _fieldPitchRoot, pitchScale);
+            CreateSeasonFieldObjects(_seasonIndex, _fieldPitchRoot, 1f);
 
             // Sky clouds floating gently above field:
             var matchClouds = AddResourceImage("PitchSkyClouds",
                 "Original/sprites/StartScreenSS/StartScreenClouds",
                 _fieldPitchRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            matchClouds.rectTransform.anchoredPosition = new Vector2(0f, 380f * pitchScale);
-            matchClouds.rectTransform.sizeDelta = new Vector2(800f * pitchScale, 180f * pitchScale);
+            matchClouds.rectTransform.anchoredPosition = new Vector2(0f, 380f);
+            matchClouds.rectTransform.sizeDelta = new Vector2(800f, 180f);
             matchClouds.color = new Color(1f, 1f, 1f, 0.55f);
             matchClouds.raycastTarget = false;
             StartCoroutine(AnimateCloudsDrift(matchClouds.rectTransform, 10f));
+
+            UpdateMatchFieldScale();
 
             // 2. Play Area Container (Fixed 640x960 reference box centered in pitch, preserving 1:1 tactical layout in all aspect ratios)
             var playRootGo = new GameObject("MatchPlayRoot", typeof(RectTransform));
@@ -1979,17 +2180,17 @@ namespace DiceSoccer
             // Dice on Field:
             CreateFieldDice(_matchPlayRoot);
 
-            // Duel Totals on sides of dice (matching media_1792421110113_45d0305f.png):
+            // Duel Totals at bottom-left & bottom-right beside bottom dice (matching original 2012 iOS layout):
             _homeTotalText = AddText("", _matchPlayRoot, 50, new Color32(50, 45, 40, 255),
-                new Vector2(0.14f, 0.50f), new Vector2(0.14f, 0.50f));
-            _homeTotalText.rectTransform.sizeDelta = new Vector2(90f, 70f);
+                new Vector2(0.135f, 0.24f), new Vector2(0.135f, 0.24f));
+            _homeTotalText.rectTransform.sizeDelta = new Vector2(100f, 76f);
             _homeTotalText.fontStyle = FontStyle.Bold;
             _homeTotalText.alignment = TextAnchor.MiddleCenter;
             _homeTotalText.enabled = false;
 
             _awayTotalText = AddText("", _matchPlayRoot, 50, new Color32(50, 45, 40, 255),
-                new Vector2(0.86f, 0.50f), new Vector2(0.86f, 0.50f));
-            _awayTotalText.rectTransform.sizeDelta = new Vector2(90f, 70f);
+                new Vector2(0.865f, 0.24f), new Vector2(0.865f, 0.24f));
+            _awayTotalText.rectTransform.sizeDelta = new Vector2(100f, 76f);
             _awayTotalText.fontStyle = FontStyle.Bold;
             _awayTotalText.alignment = TextAnchor.MiddleCenter;
             _awayTotalText.enabled = false;
@@ -2148,20 +2349,25 @@ namespace DiceSoccer
             pauseBtn.spriteState = pauseSpriteState;
 
             // Speed toggle button docked directly right of pause button:
-            var speedPanel = AddPanel("MatchSpeedBtn", scoreboard.transform,
-                (_matchSpeed > 1f) ? new Color32(40, 130, 60, 240) : new Color32(35, 55, 75, 240),
-                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
-            var speedRect = speedPanel.rectTransform;
+            var speedGo = new GameObject("MatchSpeedBtn", typeof(RectTransform), typeof(Image));
+            speedGo.transform.SetParent(scoreboard.transform, false);
+            var speedRect = speedGo.GetComponent<RectTransform>();
+            speedRect.anchorMin = new Vector2(0.5f, 1f);
+            speedRect.anchorMax = new Vector2(0.5f, 1f);
             speedRect.anchoredPosition = new Vector2(68f, -124f);
             speedRect.sizeDelta = new Vector2(58f, 52f);
-            var speedOutline = speedPanel.gameObject.AddComponent<Outline>();
+            var speedPanel = speedGo.GetComponent<Image>();
+            speedPanel.color = (_matchSpeed > 1f) ? new Color32(40, 130, 60, 240) : new Color32(35, 55, 75, 240);
+            speedPanel.raycastTarget = true;
+
+            var speedOutline = speedGo.AddComponent<Outline>();
             speedOutline.effectColor = new Color(0, 0, 0, 0.7f);
             speedOutline.effectDistance = new Vector2(2f, -2f);
 
-            var speedBtn = speedPanel.gameObject.AddComponent<Button>();
+            var speedBtn = speedGo.AddComponent<Button>();
             speedBtn.targetGraphic = speedPanel;
 
-            var speedText = AddText($"{_matchSpeed:0}X", speedPanel.transform, 18, (_matchSpeed > 1f) ? Gold : Paper,
+            var speedText = AddText($"{_matchSpeed:0}X", speedGo.transform, 18, (_matchSpeed > 1f) ? Gold : Paper,
                 Vector2.zero, Vector2.one);
             speedText.fontStyle = FontStyle.Bold;
             speedText.alignment = TextAnchor.MiddleCenter;
@@ -2200,11 +2406,12 @@ namespace DiceSoccer
             clockShadow.effectColor = new Color32(40, 110, 140, 180);
             clockShadow.effectDistance = new Vector2(1.5f, -1.5f);
 
-            // Substitution button state tracker (interactive via pause menu):
-            var subBtnGo = new GameObject("SubButtonTracker", typeof(RectTransform), typeof(Button));
-            subBtnGo.transform.SetParent(_safeArea, false);
-            subBtnGo.SetActive(false);
-            _substitutionButton = subBtnGo.GetComponent<Button>();
+            // Authentic In-Match Entourage Slots under Left (Home) and Right (Away) scoreboard crests:
+            BuildScoreboardEntourageSlots(scoreboard.transform, _match.HomeEntourages, true);
+            BuildScoreboardEntourageSlots(scoreboard.transform, _match.AwayEntourages, false);
+
+            // Interactive On-Field Substitution Trigger Button (bottom-left of safe area):
+            BuildInMatchSubstitutionTrigger();
 
             // Overlay container for animations (Kickoff, Goal, Save, etc.):
             var overlayGo = new GameObject("OverlayContainer", typeof(RectTransform), typeof(RectMask2D));
@@ -2229,18 +2436,20 @@ namespace DiceSoccer
             }
         }
 
-        private static Color32 GetCardBorderColor(int playerTypeOrId)
+        private static Color32 GetCardBorderColor(int playerId)
         {
-            // ARMv7 0x5a0b6 .. 0x5a130:
-            // r2 <= 0x20 (32): 0x00fca757 -> (252, 167, 87) Bronze/Gold
-            // r2 <= 0x30 (48): 0x003737fc -> (252, 55, 55) Red/Ruby
-            // r2 <= 0x40 (64): 0x002dccfc -> (252, 204, 45) Yellow/Gold
-            // r2 <= 0x50 (80): 0x00c9c9c9 -> (201, 201, 201) Silver
-            // r2 > 80:         0x00ffffff -> (255, 255, 255) Platinum/White
-            if (playerTypeOrId <= 32) return new Color32(252, 167, 87, 255);
-            if (playerTypeOrId <= 48) return new Color32(252, 55, 55, 255);
-            if (playerTypeOrId <= 64) return new Color32(252, 204, 45, 255);
-            if (playerTypeOrId <= 80) return new Color32(201, 201, 201, 255);
+            // Original IPA v1.2.5 Thumb-2 (0x5b358 .. 0x5b7dc) little-endian ccColor3B {r, g, b}:
+            // 1..16:  0x0000e9aa -> (170, 233, 0)   Green
+            // 17..32: 0x00fca757 -> (87, 167, 252)  Blue
+            // 33..48: 0x003737fc -> (252, 55, 55)   Red
+            // 49..64: 0x002dccfc -> (252, 204, 45)  Yellow/Gold
+            // 65..80: 0x00c9c9c9 -> (201, 201, 201) Silver
+            // >80:    0x00ffffff -> (255, 255, 255) Platinum/White
+            if (playerId <= 16) return new Color32(170, 233, 0, 255);
+            if (playerId <= 32) return new Color32(87, 167, 252, 255);
+            if (playerId <= 48) return new Color32(252, 55, 55, 255);
+            if (playerId <= 64) return new Color32(252, 204, 45, 255);
+            if (playerId <= 80) return new Color32(201, 201, 201, 255);
             return new Color32(255, 255, 255, 255);
         }
 
@@ -2276,10 +2485,33 @@ namespace DiceSoccer
             return $"Original/sprites/Card6/DiceNumber{clamped:00}";
         }
 
+        private static int ResolveAbilitySpriteId(int abilityId)
+        {
+            return abilityId switch
+            {
+                29 or 30 => 28,
+                50 or 55 => 46,
+                52 => 42,
+                53 or 67 or 68 => 33,
+                54 or 66 or 74 or 75 => 39,
+                56 or 58 => 41,
+                57 => 22,
+                59 => 27,
+                61 or 62 or 63 => 51,
+                69 or 71 => 34,
+                70 => 19,
+                72 or 73 => 37,
+                76 or 78 or 79 or 81 => 43,
+                80 => 47,
+                _ => abilityId
+            };
+        }
+
         private static string GetSuperpowerIconPath(int superpowerId)
         {
             if (superpowerId <= 0) return null;
-            var path = $"Original/sprites/Card3/DiceFaceAbility{superpowerId}";
+            int spriteId = ResolveAbilitySpriteId(superpowerId);
+            var path = $"Original/sprites/Card3/DiceFaceAbility{spriteId}";
             return TryGetUiSprite(path) != null ? path : null;
         }
 
@@ -2349,18 +2581,27 @@ namespace DiceSoccer
 
         private GameObject CreatePlayerCardFront(PlayerData player, Transform parent,
             Vector2 anchorMin, Vector2 anchorMax, bool isHire = false, bool isInteractive = true,
-            UnityEngine.Events.UnityAction onClick = null, bool isLocked = false)
+            UnityEngine.Events.UnityAction onClick = null, bool isLocked = false, Vector2? sizeDelta = null)
         {
             var root = new GameObject($"CardFront_{player.id}", typeof(RectTransform));
             root.transform.SetParent(parent, false);
             var rect = root.GetComponent<RectTransform>();
-            rect.anchorMin = anchorMin;
-            rect.anchorMax = anchorMax;
-            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            if (sizeDelta.HasValue)
+            {
+                rect.anchorMin = rect.anchorMax = anchorMin;
+                rect.sizeDelta = sizeDelta.Value;
+                rect.anchoredPosition = Vector2.zero;
+            }
+            else
+            {
+                rect.anchorMin = anchorMin;
+                rect.anchorMax = anchorMax;
+                rect.offsetMin = rect.offsetMax = Vector2.zero;
+            }
 
             var border = AddResourceImage("Border", "Original/sprites/PlayerCardBG/CardBorder", root.transform,
                 Vector2.zero, Vector2.one);
-            border.color = isLocked ? new Color32(160, 165, 170, 255) : Color.white;
+            border.color = isLocked ? new Color32(160, 165, 170, 255) : GetCardBorderColor(player.id);
             border.preserveAspect = false;
 
             var field = AddResourceImage("Field", "Original/sprites/PlayerCardBG/CardField", border.transform,
@@ -2369,7 +2610,7 @@ namespace DiceSoccer
 
             // Number badge (Top Left)
             var numBase = AddResourceImage("NumberBase", "Original/sprites/Card3/PlayerNumberBase", field.transform,
-                new Vector2(0.04f, 0.79f), new Vector2(0.24f, 0.96f));
+                new Vector2(0.03f, 0.80f), new Vector2(0.21f, 0.96f));
             numBase.color = GetPositionColor(player.position);
             numBase.preserveAspect = true;
 
@@ -2396,15 +2637,15 @@ namespace DiceSoccer
             // Position badge (Top Right)
             var posPath = $"Original/sprites/Card6/{player.position}Type";
             var posImg = AddResourceImage("PositionType", posPath, field.transform,
-                new Vector2(0.76f, 0.81f), new Vector2(0.96f, 0.95f));
+                new Vector2(0.79f, 0.80f), new Vector2(0.97f, 0.96f));
             posImg.preserveAspect = true;
 
-            // Name Tag Banner (Top Center between number & position)
-            var nameBox = new GameObject("NameBox", typeof(RectTransform), typeof(Image));
+            // Name Tag Banner (Top Center between number & position - non-overlapping and masked)
+            var nameBox = new GameObject("NameBox", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
             nameBox.transform.SetParent(field.transform, false);
             var nameBoxRect = nameBox.GetComponent<RectTransform>();
-            nameBoxRect.anchorMin = new Vector2(0.23f, 0.82f);
-            nameBoxRect.anchorMax = new Vector2(0.77f, 0.94f);
+            nameBoxRect.anchorMin = new Vector2(0.225f, 0.812f);
+            nameBoxRect.anchorMax = new Vector2(0.775f, 0.945f);
             nameBoxRect.offsetMin = nameBoxRect.offsetMax = Vector2.zero;
             var nameBoxImg = nameBox.GetComponent<Image>();
             nameBoxImg.color = new Color32(245, 246, 248, 255);
@@ -2412,15 +2653,23 @@ namespace DiceSoccer
             nameOutline.effectColor = new Color32(50, 50, 50, 255);
             nameOutline.effectDistance = new Vector2(1, -1);
 
-            var nameText = AddText(player.name.ToUpperInvariant(), nameBox.transform, 14, Ink,
+            string rawName = (player.name ?? "").ToUpperInvariant().Trim();
+            if (rawName.Length > 8 && rawName.Contains(" "))
+            {
+                int spaceIdx = rawName.IndexOf(' ');
+                rawName = rawName.Substring(0, spaceIdx) + "\n" + rawName.Substring(spaceIdx + 1);
+            }
+
+            var nameText = AddText(rawName, nameBox.transform, 10, Ink,
                 new Vector2(0.04f, 0.05f), new Vector2(0.96f, 0.95f));
             nameText.alignment = TextAnchor.MiddleCenter;
             nameText.fontStyle = FontStyle.Bold;
             nameText.horizontalOverflow = HorizontalWrapMode.Wrap;
             nameText.verticalOverflow = VerticalWrapMode.Truncate;
             nameText.resizeTextForBestFit = true;
-            nameText.resizeTextMinSize = 8;
-            nameText.resizeTextMaxSize = 18;
+            nameText.resizeTextMinSize = 6;
+            nameText.resizeTextMaxSize = 11;
+            nameText.lineSpacing = 0.85f;
 
             // Player figure & shadow standing on the grass (proportional to card size)
             var figPath = GetPlayerFigurePath(player.id);
@@ -2634,8 +2883,10 @@ namespace DiceSoccer
                 new Color(0f, 0f, 0f, 0.88f), new Vector2(0.5f, 0.5f), Vector2.one);
             modalBackdrop.raycastTarget = true;
 
+            var modalFrame = CreateCenteredReferenceFrame("CardModalFrame", modalBackdrop.transform);
+
             var cardContainer = new GameObject("CardContainer", typeof(RectTransform));
-            cardContainer.transform.SetParent(modalBackdrop.transform, false);
+            cardContainer.transform.SetParent(modalFrame, false);
             var containerRect = cardContainer.GetComponent<RectTransform>();
             containerRect.anchorMin = new Vector2(0.5f, 0.56f);
             containerRect.anchorMax = new Vector2(0.5f, 0.56f);
@@ -2663,7 +2914,7 @@ namespace DiceSoccer
                 true, flipAction);
             backObj.SetActive(false);
 
-            AddText("TAP CARD TO FLIP", modalBackdrop.transform, 14, Gold,
+            AddText("TAP CARD TO FLIP", modalFrame, 14, Gold,
                 new Vector2(0.1f, 0.25f), new Vector2(0.9f, 0.29f));
 
             if (onAction != null && !string.IsNullOrEmpty(actionLabel))
@@ -2671,7 +2922,7 @@ namespace DiceSoccer
                 if (actionLabel.Contains("HIRE") || isHire)
                 {
                     AddSpriteButton("HireBtn", "Original/images/BuyButton", "Original/images/BuyButtonPressed",
-                        modalBackdrop.transform, new Vector2(0.5f, 0.18f), new Vector2(0.48f, 0.075f), () =>
+                        modalFrame, new Vector2(0.5f, 0.18f), new Vector2(0.48f, 0.075f), () =>
                         {
                             Destroy(modalBackdrop.gameObject);
                             onAction.Invoke();
@@ -2681,7 +2932,7 @@ namespace DiceSoccer
                 {
                     AddSpriteButton("AssignBtn", "Original/sprites/EnemyLineupSS1/AssignPlayerButton",
                         "Original/sprites/EnemyLineupSS1/AssignPlayerButtonPressed",
-                        modalBackdrop.transform, new Vector2(0.5f, 0.18f), new Vector2(0.48f, 0.075f), () =>
+                        modalFrame, new Vector2(0.5f, 0.18f), new Vector2(0.48f, 0.075f), () =>
                         {
                             Destroy(modalBackdrop.gameObject);
                             onAction.Invoke();
@@ -2690,7 +2941,7 @@ namespace DiceSoccer
             }
 
             AddSpriteButton("CloseBtn", "Original/sprites/KitSelectionSS/DoneButton",
-                "Original/sprites/KitSelectionSS/DoneButtonPressed", modalBackdrop.transform,
+                "Original/sprites/KitSelectionSS/DoneButtonPressed", modalFrame,
                 new Vector2(0.5f, 0.09f), new Vector2(0.36f, 0.065f), () =>
                 {
                     Destroy(modalBackdrop.gameObject);
@@ -2843,10 +3094,20 @@ namespace DiceSoccer
             AddMenuBackdrop();
             AddMenuHeader($"SUBSTITUTE PLAYER ({_remainingSubs} LEFT)",
                 () => ShowMatchScreen(_catalog.ResolveLineup(_lineupIds)));
+
+            var topInfo = new GameObject("TopInfo", typeof(RectTransform)).GetComponent<RectTransform>();
+            topInfo.SetParent(_safeArea, false);
+            topInfo.anchorMin = new Vector2(0f, 1f);
+            topInfo.anchorMax = new Vector2(1f, 1f);
+            topInfo.pivot = new Vector2(0.5f, 1f);
+            topInfo.anchoredPosition = new Vector2(0f, -82f);
+            topInfo.sizeDelta = new Vector2(0f, 52f);
             AddText("Choose the position to change.",
-                _safeArea, 15, Ink, new Vector2(0.05f, 0.83f), new Vector2(0.95f, 0.88f));
+                topInfo, 15, Ink, new Vector2(0.05f, 0.05f), new Vector2(0.95f, 0.95f));
+
             var content = CreateScrollList("Substitution positions", _safeArea,
-                new Vector2(0.04f, 0.15f), new Vector2(0.96f, 0.81f), 7 * 96f);
+                new Vector2(0.04f, 0f), new Vector2(0.96f, 1f), 7 * 96f,
+                new Vector2(0f, 102f), new Vector2(0f, -142f));
             var lineup = _catalog.ResolveLineup(_lineupIds);
             for (var slot = 0; slot < lineup.Length; slot++)
             {
@@ -2861,8 +3122,10 @@ namespace DiceSoccer
                     () => ShowCardModal(player),
                     false, SlotName(slot));
             }
-            AddButton("CANCEL", _safeArea, new Color32(68, 79, 84, 255),
-                new Vector2(0.5f, 0.08f), new Vector2(0.65f, 0.06f),
+
+            var bottomBar = CreateBottomBar("SubSlotsBottomBar", 96f);
+            AddButton("CANCEL", bottomBar, new Color32(68, 79, 84, 255),
+                new Vector2(0.5f, 0.5f), new Vector2(0.65f, 0.60f),
                 () => ShowMatchScreen(_catalog.ResolveLineup(_lineupIds)));
         }
 
@@ -2871,8 +3134,16 @@ namespace DiceSoccer
             ClearCanvas();
             AddMenuBackdrop();
             AddMenuHeader($"BENCH — {SlotName(slot)}", ShowSubstitutionSlots);
+
+            var topInfo = new GameObject("TopInfo", typeof(RectTransform)).GetComponent<RectTransform>();
+            topInfo.SetParent(_safeArea, false);
+            topInfo.anchorMin = new Vector2(0f, 1f);
+            topInfo.anchorMax = new Vector2(1f, 1f);
+            topInfo.pivot = new Vector2(0.5f, 1f);
+            topInfo.anchoredPosition = new Vector2(0f, -82f);
+            topInfo.sizeDelta = new Vector2(0f, 60f);
             AddText("Select a role-eligible player to replace the current player.",
-                _safeArea, 14, Ink, new Vector2(0.04f, 0.82f), new Vector2(0.96f, 0.89f));
+                topInfo, 14, Ink, new Vector2(0.04f, 0.05f), new Vector2(0.96f, 0.95f));
 
             var bench = new List<PlayerData>();
             foreach (var playerId in _ownedPlayerIds)
@@ -2887,13 +3158,15 @@ namespace DiceSoccer
 
             if (bench.Count == 0)
             {
+                var emptyFrame = CreateCenteredReferenceFrame("EmptyBenchFrame");
                 AddText("No eligible player is available on the bench.",
-                    _safeArea, 16, Paper, new Vector2(0.08f, 0.48f), new Vector2(0.92f, 0.58f));
+                    emptyFrame, 16, Paper, new Vector2(0.08f, 0.48f), new Vector2(0.92f, 0.58f));
             }
             else
             {
                 var content = CreateScrollList("Bench players", _safeArea,
-                    new Vector2(0.04f, 0.15f), new Vector2(0.96f, 0.8f), bench.Count * 96f);
+                    new Vector2(0.04f, 0f), new Vector2(0.96f, 1f), bench.Count * 96f,
+                    new Vector2(0f, 102f), new Vector2(0f, -148f));
                 for (var index = 0; index < bench.Count; index++)
                 {
                     var player = bench[index];
@@ -2909,8 +3182,9 @@ namespace DiceSoccer
                 }
             }
 
-            AddButton("CANCEL", _safeArea, new Color32(68, 79, 84, 255),
-                new Vector2(0.5f, 0.08f), new Vector2(0.65f, 0.06f),
+            var bottomBar = CreateBottomBar("SubBenchBottomBar", 96f);
+            AddButton("CANCEL", bottomBar, new Color32(68, 79, 84, 255),
+                new Vector2(0.5f, 0.5f), new Vector2(0.65f, 0.60f),
                 ShowSubstitutionSlots);
         }
 
@@ -2920,11 +3194,344 @@ namespace DiceSoccer
             _match.SubstituteHomePlayer(slot, replacement);
             _lineupIds[slot] = playerId;
             _remainingSubs = Mathf.Max(0, _remainingSubs - 1);
+            _match.SetHomeBenchCount(CountUnusedBenchPlayers());
             PlayerPrefs.SetString(LineupPreferenceKey, string.Join(",", _lineupIds));
             PlayerPrefs.Save();
             _lastSubstitutedSlot = slot;
             AudioManager.Instance.PlayTransform();
             ShowMatchScreen(_catalog.ResolveLineup(_lineupIds));
+        }
+
+        private void BuildScoreboardEntourageSlots(Transform scoreboardTransform, int[] entourageIds, bool isHome)
+        {
+            var slots = isHome ? _homeEntourageIcons : _awayEntourageIcons;
+            Array.Clear(slots, 0, slots.Length);
+            if (entourageIds == null || entourageIds.Length == 0) return;
+
+            for (int i = 0; i < Mathf.Min(2, entourageIds.Length); i++)
+            {
+                int eid = entourageIds[i];
+                if (eid <= 0) continue;
+
+                float x = isHome ? (-265f + i * 62f) : (265f - i * 62f);
+                var ringGo = new GameObject($"{(isHome ? "Home" : "Away")}Entourage{i + 1}", typeof(RectTransform), typeof(Image), typeof(Button));
+                ringGo.transform.SetParent(scoreboardTransform, false);
+                var rRect = ringGo.GetComponent<RectTransform>();
+                rRect.anchorMin = rRect.anchorMax = new Vector2(0.5f, 1f);
+                rRect.pivot = new Vector2(0.5f, 0.5f);
+                rRect.anchoredPosition = new Vector2(x, -178f);
+                rRect.sizeDelta = new Vector2(56f, 56f);
+
+                var bgRing = ringGo.GetComponent<Image>();
+                bgRing.sprite = GetUiSprite("Original/sprites/PlayerBody3/EntourageActiveState1");
+                bgRing.color = new Color(1f, 1f, 1f, 0.92f);
+                bgRing.preserveAspect = true;
+                bgRing.raycastTarget = true;
+
+                var iconImg = AddResourceImage("Icon", $"Original/images/EntourageAbility{eid:00}", ringGo.transform,
+                    new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+                iconImg.rectTransform.sizeDelta = new Vector2(46f, 46f);
+                iconImg.preserveAspect = true;
+                iconImg.raycastTarget = false;
+                slots[i] = iconImg;
+
+                int capturedId = eid;
+                bool capturedHome = isHome;
+                float capturedX = x;
+                var btn = ringGo.GetComponent<Button>();
+                btn.targetGraphic = bgRing;
+                btn.onClick.AddListener(() =>
+                {
+                    AudioManager.Instance.PlayTap();
+                    ShowEntourageInfoBar(capturedId, capturedHome, capturedX);
+                });
+            }
+        }
+
+        private void ShowEntourageInfoBar(int entourageId, bool isHome, float originX)
+        {
+            if (_overlayContainer == null) return;
+            var existing = _overlayContainer.Find("EntourageInfoDismiss");
+            if (existing != null) Destroy(existing.gameObject);
+
+            var ent = _catalog?.GetEntourage(entourageId);
+            if (ent == null) return;
+
+            var dismissGo = AddStretchPanel("EntourageInfoDismiss", _overlayContainer, new Color(0f, 0f, 0f, 0.35f));
+            dismissGo.raycastTarget = true;
+            var dismissBtn = dismissGo.gameObject.AddComponent<Button>();
+            dismissBtn.transition = Selectable.Transition.None;
+            dismissBtn.onClick.AddListener(() => Destroy(dismissGo.gameObject));
+
+            var bar = AddResourceImage("EntourageInfoBar", "Original/sprites/GoalAnimationSS4/EntourageInfoBar",
+                dismissGo.transform, new Vector2(0.5f, 0.72f), new Vector2(0.5f, 0.72f));
+            bar.rectTransform.sizeDelta = new Vector2(470f, 200f);
+            bar.preserveAspect = true;
+            bar.raycastTarget = false;
+
+            var icon = AddResourceImage("EntIcon", $"Original/images/EntourageAbility{entourageId:00}", bar.transform,
+                new Vector2(0.16f, 0.50f), new Vector2(0.16f, 0.50f));
+            icon.rectTransform.sizeDelta = new Vector2(78f, 78f);
+            icon.preserveAspect = true;
+
+            var title = AddText($"{ent.name.ToUpperInvariant()} ({(isHome ? "YOURS" : "RIVAL")})", bar.transform, 16, Gold,
+                new Vector2(0.28f, 0.62f), new Vector2(0.95f, 0.88f));
+            title.fontStyle = FontStyle.Bold;
+            title.alignment = TextAnchor.MiddleLeft;
+
+            string desc = !string.IsNullOrEmpty(ent.inGameDescription) ? ent.inGameDescription : ent.abilityDescription;
+            var descTxt = AddText(desc ?? "", bar.transform, 13, Paper,
+                new Vector2(0.28f, 0.14f), new Vector2(0.94f, 0.62f));
+            descTxt.alignment = TextAnchor.UpperLeft;
+        }
+
+        private IEnumerator PulseEntourageIcon(bool isHome, int entourageId)
+        {
+            if (_match == null) yield break;
+            var arr = isHome ? _match.HomeEntourages : _match.AwayEntourages;
+            var icons = isHome ? _homeEntourageIcons : _awayEntourageIcons;
+            if (arr == null) yield break;
+
+            Image targetIcon = null;
+            for (int i = 0; i < Mathf.Min(2, arr.Length); i++)
+            {
+                if (arr[i] == entourageId) { targetIcon = icons[i]; break; }
+            }
+            if (targetIcon == null || targetIcon.transform.parent == null) yield break;
+
+            var ringImg = targetIcon.transform.parent.GetComponent<Image>();
+            var t = targetIcon.transform.parent;
+            for (int f = 1; f <= 7; f++)
+            {
+                if (t == null) yield break;
+                float s = 1f + 0.22f * Mathf.Sin(f / 7f * Mathf.PI);
+                t.localScale = new Vector3(s, s, 1f);
+                if (ringImg != null)
+                    ringImg.sprite = GetUiSprite($"Original/sprites/PlayerBody3/EntourageTriggerState{f}");
+                yield return new WaitForSeconds(0.055f);
+            }
+            for (int f = 1; f <= 4; f++)
+            {
+                if (ringImg != null)
+                    ringImg.sprite = GetUiSprite($"Original/sprites/PlayerBody3/EntourageTriggerShine{f}");
+                yield return new WaitForSeconds(0.045f);
+            }
+            if (t != null) t.localScale = Vector3.one;
+            if (ringImg != null) ringImg.sprite = GetUiSprite("Original/sprites/PlayerBody3/EntourageActiveState1");
+        }
+
+        private void BuildInMatchSubstitutionTrigger()
+        {
+            bool hasBench = CountUnusedBenchPlayers() > 0;
+            bool canSub = !_isLocalMultiplayer && _remainingSubs > 0 && hasBench;
+
+            var subGo = new GameObject("SubTriggerBtn", typeof(RectTransform), typeof(Image), typeof(Button));
+            subGo.transform.SetParent(_safeArea, false);
+            var sRect = subGo.GetComponent<RectTransform>();
+            sRect.anchorMin = sRect.anchorMax = new Vector2(0f, 0f);
+            sRect.pivot = new Vector2(0.5f, 0.5f);
+            sRect.anchoredPosition = new Vector2(54f, 52f);
+            sRect.sizeDelta = new Vector2(68f, 68f);
+
+            var bgImg = subGo.GetComponent<Image>();
+            bgImg.sprite = GetUiSprite("Original/images/SubstitutionCountBG");
+            bgImg.color = canSub ? Color.white : new Color(0.75f, 0.75f, 0.75f, 0.55f);
+            bgImg.preserveAspect = true;
+            bgImg.raycastTarget = true;
+
+            _subRemainingText = AddText(_remainingSubs.ToString(), subGo.transform, 24, Ink,
+                new Vector2(0.15f, 0.30f), new Vector2(0.85f, 0.90f));
+            _subRemainingText.fontStyle = FontStyle.Bold;
+            _subRemainingText.alignment = TextAnchor.MiddleCenter;
+
+            var subLabel = AddText("SUB", subGo.transform, 11, Ink,
+                new Vector2(0.10f, 0.08f), new Vector2(0.90f, 0.36f));
+            subLabel.fontStyle = FontStyle.Bold;
+            subLabel.alignment = TextAnchor.MiddleCenter;
+
+            var btn = subGo.GetComponent<Button>();
+            btn.targetGraphic = bgImg;
+            btn.interactable = canSub;
+            btn.onClick.AddListener(() =>
+            {
+                if (_match == null || !_match.CanBeginEncounter || _remainingSubs <= 0 || _inEncounterAnimation) return;
+                AudioManager.Instance.PlayTap();
+                ShowInMatchSubstitutionBar();
+            });
+            _substitutionButton = btn;
+        }
+
+        private void ShowInMatchSubstitutionBar()
+        {
+            if (_overlayContainer == null || _match == null || _remainingSubs <= 0) return;
+            if (_subDrawerGo != null) Destroy(_subDrawerGo.gameObject);
+
+            var scrim = AddStretchPanel("SubDrawerScrim", _overlayContainer, new Color(0f, 0f, 0f, 0.62f));
+            scrim.raycastTarget = true;
+            _subDrawerGo = scrim.rectTransform;
+
+            var bar = AddResourceImage("SubstitutionBar", "Original/sprites/GoalAnimationSS4/SubstitutionBar",
+                scrim.transform, new Vector2(0.5f, 0.50f), new Vector2(0.5f, 0.50f));
+            bar.rectTransform.sizeDelta = new Vector2(760f, 640f);
+            bar.preserveAspect = false;
+            bar.raycastTarget = true;
+
+            // NOTE: SubstitutionBar.png opaque chalkboard panel spans normalized X=[0.26..0.75] inside texture
+            var titleTxt = AddText($"SUBSTITUTIONS ({_remainingSubs} LEFT)", bar.transform, 14, Paper,
+                new Vector2(0.28f, 0.87f), new Vector2(0.72f, 0.94f));
+            titleTxt.fontStyle = FontStyle.Bold;
+            titleTxt.alignment = TextAnchor.MiddleCenter;
+
+            var lineup = _catalog.ResolveLineup(_lineupIds);
+            int selectedSlot = -1;
+            int selectedBenchId = -1;
+
+            var benchPanel = new GameObject("SubBenchList", typeof(RectTransform)).GetComponent<RectTransform>();
+            benchPanel.SetParent(bar.transform, false);
+            benchPanel.anchorMin = new Vector2(0.28f, 0.19f);
+            benchPanel.anchorMax = new Vector2(0.72f, 0.49f);
+            benchPanel.offsetMin = benchPanel.offsetMax = Vector2.zero;
+
+            var slotBoxes = new Image[7];
+            Button tickBtn = null;
+
+            void RebuildBenchForSlot(int targetSlot)
+            {
+                for (int c = benchPanel.childCount - 1; c >= 0; c--)
+                    Destroy(benchPanel.GetChild(c).gameObject);
+
+                var eligible = new List<PlayerData>();
+                foreach (var pid in _ownedPlayerIds)
+                {
+                    if (Array.IndexOf(_lineupIds, pid) < 0)
+                    {
+                        var pd = _catalog.GetPlayer(pid);
+                        if (pd != null && IsRoleAllowed(pd, targetSlot))
+                            eligible.Add(pd);
+                    }
+                }
+
+                if (eligible.Count == 0)
+                {
+                    var noTxt = AddText($"NO ELIGIBLE {SlotName(targetSlot)} ON BENCH", benchPanel, 13, Paper, Vector2.zero, Vector2.one);
+                    noTxt.alignment = TextAnchor.MiddleCenter;
+                    return;
+                }
+
+                for (int bi = 0; bi < Mathf.Min(6, eligible.Count); bi++)
+                {
+                    var bp = eligible[bi];
+                    int row = bi / 3;
+                    int col = bi % 3;
+                    float cx = 0.18f + col * 0.32f;
+                    float cy = row == 0 ? 0.72f : 0.28f;
+                    var box = AddResourceImage($"BenchBox{bi}", "Original/sprites/GoalAnimationSS4/SubstitutionBarBox",
+                        benchPanel, new Vector2(cx, cy), new Vector2(cx, cy));
+                    box.rectTransform.sizeDelta = new Vector2(76f, 68f);
+                    box.preserveAspect = true;
+                    box.raycastTarget = true;
+
+                    var bHead = AddResourceImage("Head", PlayerBodySprites.ResolveHeadPath(bp, bi + 1), box.transform,
+                        new Vector2(0.5f, 0.60f), new Vector2(0.5f, 0.60f));
+                    bHead.rectTransform.sizeDelta = new Vector2(44f, 38f);
+                    bHead.preserveAspect = true;
+                    bHead.raycastTarget = false;
+
+                    var bName = AddText(bp.name.Split(' ')[0].ToUpperInvariant(), box.transform, 10, Ink,
+                        new Vector2(0.05f, 0.04f), new Vector2(0.95f, 0.28f));
+                    bName.fontStyle = FontStyle.Bold;
+                    bName.alignment = TextAnchor.MiddleCenter;
+
+                    int capturedPid = bp.id;
+                    var bBtn = box.gameObject.AddComponent<Button>();
+                    bBtn.targetGraphic = box;
+                    bBtn.onClick.AddListener(() =>
+                    {
+                        AudioManager.Instance.PlayTap();
+                        selectedBenchId = capturedPid;
+                        for (int k = 0; k < benchPanel.childCount; k++)
+                        {
+                            var img = benchPanel.GetChild(k).GetComponent<Image>();
+                            if (img != null) img.color = (img == box) ? new Color32(255, 225, 90, 255) : Color.white;
+                        }
+                        if (tickBtn != null) tickBtn.interactable = (selectedSlot >= 0 && selectedBenchId > 0);
+                    });
+                }
+            }
+
+            string[] shortRoles = { "GK", "LB", "CB", "RB", "LW", "CF", "RW" };
+            // 7 Current Lineup Slots cleanly inside opaque drawer width [0.28..0.72]
+            for (int slot = 0; slot < 7; slot++)
+            {
+                int row = slot / 4;
+                int col = slot % 4;
+                float cx = row == 0 ? (0.345f + col * 0.103f) : (0.395f + col * 0.105f);
+                float cy = row == 0 ? 0.77f : 0.63f;
+                var sBox = AddResourceImage($"SlotBox{slot}", "Original/sprites/GoalAnimationSS4/SubstitutionBarBox",
+                    bar.transform, new Vector2(cx, cy), new Vector2(cx, cy));
+                sBox.rectTransform.sizeDelta = new Vector2(66f, 60f);
+                sBox.preserveAspect = true;
+                sBox.raycastTarget = true;
+                slotBoxes[slot] = sBox;
+
+                var p = lineup[slot];
+                var sHead = AddResourceImage("Head", PlayerBodySprites.ResolveHeadPath(p, slot + 1), sBox.transform,
+                    new Vector2(0.5f, 0.60f), new Vector2(0.5f, 0.60f));
+                sHead.rectTransform.sizeDelta = new Vector2(38f, 34f);
+                sHead.preserveAspect = true;
+                sHead.raycastTarget = false;
+
+                var sRole = AddText(shortRoles[slot], sBox.transform, 11, Ink,
+                    new Vector2(0.05f, 0.04f), new Vector2(0.95f, 0.28f));
+                sRole.fontStyle = FontStyle.Bold;
+                sRole.alignment = TextAnchor.MiddleCenter;
+
+                int capSlot = slot;
+                var sBtn = sBox.gameObject.AddComponent<Button>();
+                sBtn.targetGraphic = sBox;
+                sBtn.onClick.AddListener(() =>
+                {
+                    AudioManager.Instance.PlayTap();
+                    selectedSlot = capSlot;
+                    selectedBenchId = -1;
+                    for (int k = 0; k < 7; k++)
+                        if (slotBoxes[k] != null) slotBoxes[k].color = (k == capSlot) ? new Color32(255, 225, 90, 255) : Color.white;
+                    if (tickBtn != null) tickBtn.interactable = false;
+                    RebuildBenchForSlot(capSlot);
+                });
+            }
+
+            // Pre-select slot 1 (LB) so bench options are immediately browsable if eligible
+            selectedSlot = 1;
+            slotBoxes[1].color = new Color32(255, 225, 90, 255);
+            RebuildBenchForSlot(1);
+
+            var instTxt = AddText("TAP SLOT TO REPLACE:", bar.transform, 11, Paper,
+                new Vector2(0.28f, 0.50f), new Vector2(0.72f, 0.55f));
+            instTxt.fontStyle = FontStyle.Bold;
+            instTxt.alignment = TextAnchor.MiddleCenter;
+
+            // Confirm Tick & Cancel Cross at bottom inside drawer
+            tickBtn = AddSpriteButton("ConfirmSub", "Original/sprites/GoalAnimationSS4/SubstitutionBarTick",
+                "Original/sprites/GoalAnimationSS4/SubstitutionBarTickPressed", bar.transform,
+                new Vector2(0.41f, 0.10f), new Vector2(0.14f, 0.11f), () =>
+                {
+                    if (selectedSlot >= 0 && selectedBenchId > 0)
+                    {
+                        Destroy(scrim.gameObject);
+                        _subDrawerGo = null;
+                        CompleteSubstitution(selectedSlot, selectedBenchId);
+                    }
+                });
+            tickBtn.interactable = false;
+
+            AddSpriteButton("CancelSub", "Original/sprites/GoalAnimationSS4/SubstitutionBarCross",
+                "Original/sprites/GoalAnimationSS4/SubstitutionBarCrossPressed", bar.transform,
+                new Vector2(0.59f, 0.10f), new Vector2(0.14f, 0.11f), () =>
+                {
+                    Destroy(scrim.gameObject);
+                    _subDrawerGo = null;
+                });
         }
 
         private void ShowManage()
@@ -2933,48 +3540,42 @@ namespace DiceSoccer
             EnsureLineupLoaded();
             ClearCanvas();
 
-            // Vertical Soccer Pitch Backdrop (GreenField left normal + right mirrored horizontally)
-            var pitchLeft = AddResourceImage("PitchLeft", "Original/images/GreenField", _canvas.transform,
-                new Vector2(0f, 0f), new Vector2(0.5f, 0.92f));
-            pitchLeft.preserveAspect = false;
-            pitchLeft.rectTransform.localScale = Vector3.one;
-            pitchLeft.raycastTarget = false;
-
-            var pitchRight = AddResourceImage("PitchRight", "Original/images/GreenField", _canvas.transform,
-                new Vector2(0.5f, 0f), new Vector2(1f, 0.92f));
-            pitchRight.preserveAspect = false;
-            pitchRight.rectTransform.localScale = new Vector3(-1f, 1f, 1f);
-            pitchRight.raycastTarget = false;
+            // Vertical Soccer Pitch Backdrop (preserves natural pitch circle & grass stripe proportions via EnvelopeParent)
+            AddFullscreenPitchBackdrop();
 
             _safeArea.SetAsLastSibling();
-            AddMenuHeader(null, ShowHome);
+            var header = AddMenuHeader(null, ShowHome);
 
-            // Top-left UpButton next to Back button in header (matching frame_000840.jpg on iPod Touch 4)
+            // Top-left UpButton next to Back button inside header bar
             bool entourageUnlocked = _seasonIndex > 0 || _unlockedEntourageIds.Count > 0 || PlayerPrefs.GetInt("diceSoccer.allUnlocked", 0) == 1;
             AddSpriteButton("HeaderUpBtn",
                 entourageUnlocked ? "Original/sprites/EnemyLineupSS1/UpButton" : "Original/sprites/EnemyLineupSS1/UpButtonDisabled",
                 entourageUnlocked ? "Original/sprites/EnemyLineupSS2/UpButtonPressed" : "Original/sprites/EnemyLineupSS1/UpButtonDisabled",
-                _safeArea, new Vector2(0.20f, 0.96f), new Vector2(0.11f, 0.075f), ShowEntourage);
+                header, new Vector2(0.20f, 0.50f), new Vector2(0.11f, 0.93f), ShowEntourage);
 
             var lineup = _catalog.ResolveLineup(_lineupIds);
+
+            // Formation Container: fixed 640x960 reference box centered on grass pitch.
+            // Preserves authentic 2:3 trading card proportions in all display modes (including Fullscreen)
+            var formRect = CreateCenteredReferenceFrame("FormationRoot");
 
             // 1-3-3 Formation Positions:
             // Top row: 3 Forwards (Left #8 Jerry, Center #6 David inside StrikerStar, Right #7 Justin)
             // Middle row: 3 Defenders (Left #4 Sherman, Center #3 Jo, Right #2 Ernest)
-            // Bottom row: 1 Goalkeeper (Center #1 Willy) - perfectly spaced above authentic bottom bar
+            // Bottom row: 1 Goalkeeper (Center #1 Willy)
             var slotPositions = new Vector2[]
             {
-                new Vector2(0.500f, 0.225f), // Slot 0: GK (#1 Willy The Kid)
-                new Vector2(0.755f, 0.485f), // Slot 1: Right DEF (#2 Ernest Milligan)
-                new Vector2(0.500f, 0.485f), // Slot 2: Center DEF (#3 Jo Lee-Roger)
-                new Vector2(0.245f, 0.485f), // Slot 3: Left DEF (#4 Sherman Tank)
-                new Vector2(0.755f, 0.745f), // Slot 4: Right FWD (#7 Justin Huff)
+                new Vector2(0.500f, 0.235f), // Slot 0: GK (#1 Willy The Kid)
+                new Vector2(0.790f, 0.490f), // Slot 1: Right DEF (#2 Ernest Mulligan)
+                new Vector2(0.500f, 0.490f), // Slot 2: Center DEF (#3 Jo Lee-Roger)
+                new Vector2(0.210f, 0.490f), // Slot 3: Left DEF (#4 Sherman Tank)
+                new Vector2(0.790f, 0.745f), // Slot 4: Right FWD (#7 Justin Huff)
                 new Vector2(0.500f, 0.745f), // Slot 5: Center Striker (#6 David Little, Striker Star)
-                new Vector2(0.245f, 0.745f), // Slot 6: Left FWD (#8 Jerry Hat-trick)
+                new Vector2(0.210f, 0.745f), // Slot 6: Left FWD (#8 Jerry Hat-trick)
             };
 
-            var cardHalfWidth = 0.118f;
-            var cardHalfHeight = 0.118f;
+            const float cardW = 156f;
+            const float cardH = 234f; // Exact 2:3 trading card ratio (156 / 234 = 2 / 3)
 
             for (var slot = 0; slot < lineup.Length; slot++)
             {
@@ -2986,51 +3587,47 @@ namespace DiceSoccer
                 if (slot == 5)
                 {
                     var strikerStar = AddResourceImage("StrikerStar",
-                        "Original/sprites/EnemyLineupSS1/StrikerStar", _safeArea,
-                        new Vector2(center.x - cardHalfWidth - 0.018f, center.y - cardHalfHeight - 0.014f),
-                        new Vector2(center.x + cardHalfWidth + 0.018f, center.y + cardHalfHeight + 0.038f));
+                        "Original/sprites/EnemyLineupSS1/StrikerStar", formRect,
+                        center, center);
+                    strikerStar.rectTransform.sizeDelta = new Vector2(178f, 258f);
                     strikerStar.preserveAspect = false;
                     strikerStar.raycastTarget = false;
                 }
                 else
                 {
                     var slotBorder = AddResourceImage($"SlotBorder_{slot}",
-                        "Original/sprites/PlayerCardBG/CardBorder", _safeArea,
-                        new Vector2(center.x - cardHalfWidth - 0.005f, center.y - cardHalfHeight - 0.005f),
-                        new Vector2(center.x + cardHalfWidth + 0.005f, center.y + cardHalfHeight + 0.005f));
+                        "Original/sprites/PlayerCardBG/CardBorder", formRect,
+                        center, center);
+                    slotBorder.rectTransform.sizeDelta = new Vector2(162f, 240f);
                     slotBorder.color = new Color(1f, 1f, 1f, 0.45f);
                     slotBorder.preserveAspect = false;
                     slotBorder.raycastTarget = false;
                 }
 
-                CreatePlayerCardFront(player, _safeArea,
-                    new Vector2(center.x - cardHalfWidth, center.y - cardHalfHeight),
-                    new Vector2(center.x + cardHalfWidth, center.y + cardHalfHeight),
-                    false, true, () => ShowPlayerPicker(capturedSlot));
+                CreatePlayerCardFront(player, formRect,
+                    center, center,
+                    false, true, () => ShowPlayerPicker(capturedSlot),
+                    false, new Vector2(cardW, cardH));
             }
 
-            // Authentic Bottom Bar on Grass: BenchButton on left, FormationShop + Kit in center, FormationPlayButton on right
-            // Perfectly spaced across 640px width (16px margin, 20px gaps):
-            // Bench (190px) -> Center 111px (0.173f)
-            // Shop  (84px)  -> Center 268px (0.419f)
-            // Kit   (84px)  -> Center 372px (0.581f)
-            // Play  (190px) -> Center 529px (0.827f)
+            // Authentic Bottom Bar on Grass (fixed 108px height docked to bottom)
+            var bottomBar = CreateBottomBar("ManageBottomBar", 108f);
 
             AddSpriteButton("BenchBtn", "Original/sprites/EnemyLineupSS1/BenchButton",
-                "Original/sprites/EnemyLineupSS1/BenchButtonPressed", _safeArea,
-                new Vector2(0.173f, 0.057f), new Vector2(0.297f, 0.097f), () => ShowPlayerPicker(-1));
+                "Original/sprites/EnemyLineupSS1/BenchButtonPressed", bottomBar,
+                new Vector2(0.173f, 0.50f), new Vector2(0.297f, 0.86f), () => ShowPlayerPicker(-1));
 
             AddSpriteButton("ShopBtn", "Original/sprites/EnemyLineupSS1/FormationShopButton",
-                "Original/sprites/EnemyLineupSS1/FormationShopButtonPressed", _safeArea,
-                new Vector2(0.419f, 0.057f), new Vector2(0.131f, 0.083f), ShowShop);
+                "Original/sprites/EnemyLineupSS1/FormationShopButtonPressed", bottomBar,
+                new Vector2(0.419f, 0.50f), new Vector2(0.131f, 0.74f), ShowShop);
 
             AddSpriteButton("KitBtn", "Original/sprites/EnemyLineupSS1/KitButton",
-                "Original/sprites/EnemyLineupSS1/KitButtonPressed", _safeArea,
-                new Vector2(0.581f, 0.057f), new Vector2(0.131f, 0.083f), ShowKitSelection);
+                "Original/sprites/EnemyLineupSS1/KitButtonPressed", bottomBar,
+                new Vector2(0.581f, 0.50f), new Vector2(0.131f, 0.74f), ShowKitSelection);
 
             AddSpriteButton("PlayBtn", "Original/sprites/EnemyLineupSS1/FormationPlayButton",
-                "Original/sprites/EnemyLineupSS1/FormationPlayButtonPressed", _safeArea,
-                new Vector2(0.827f, 0.057f), new Vector2(0.297f, 0.097f), StartCareerMatch);
+                "Original/sprites/EnemyLineupSS1/FormationPlayButtonPressed", bottomBar,
+                new Vector2(0.827f, 0.50f), new Vector2(0.297f, 0.86f), StartCareerMatch);
 
             if (PlayerPrefs.GetInt("diceSoccer.tutorial.6", 0) == 0)
             {
@@ -3049,35 +3646,29 @@ namespace DiceSoccer
             _catalog ??= GameCatalog.Load();
             ClearCanvas();
 
-            var pitchLeft = AddResourceImage("PitchLeft", "Original/images/GreenField", _canvas.transform,
-                new Vector2(0f, 0f), new Vector2(0.5f, 0.92f));
-            pitchLeft.preserveAspect = false;
-            pitchLeft.rectTransform.localScale = Vector3.one;
-            pitchLeft.raycastTarget = false;
-
-            var pitchRight = AddResourceImage("PitchRight", "Original/images/GreenField", _canvas.transform,
-                new Vector2(0.5f, 0f), new Vector2(1f, 0.92f));
-            pitchRight.preserveAspect = false;
-            pitchRight.rectTransform.localScale = new Vector3(-1f, 1f, 1f);
-            pitchRight.raycastTarget = false;
+            AddFullscreenPitchBackdrop();
 
             _safeArea.SetAsLastSibling();
             AddMenuHeader(fixture.teamName, ShowLeagueFixtures);
 
             var opponentLineup = _catalog.ResolveLineup(fixture.lineup);
+
+            // Formation Container: fixed 640x960 reference box centered on grass pitch
+            var formRect = CreateCenteredReferenceFrame("FormationRoot");
+
             var slotPositions = new Vector2[]
             {
-                new Vector2(0.500f, 0.225f),
-                new Vector2(0.755f, 0.485f),
-                new Vector2(0.500f, 0.485f),
-                new Vector2(0.245f, 0.485f),
-                new Vector2(0.755f, 0.745f),
+                new Vector2(0.500f, 0.235f),
+                new Vector2(0.790f, 0.490f),
+                new Vector2(0.500f, 0.490f),
+                new Vector2(0.210f, 0.490f),
+                new Vector2(0.790f, 0.745f),
                 new Vector2(0.500f, 0.745f),
-                new Vector2(0.245f, 0.745f),
+                new Vector2(0.210f, 0.745f),
             };
 
-            var cardHalfWidth = 0.118f;
-            var cardHalfHeight = 0.118f;
+            const float cardW = 156f;
+            const float cardH = 234f;
 
             for (var slot = 0; slot < opponentLineup.Length; slot++)
             {
@@ -3086,36 +3677,38 @@ namespace DiceSoccer
                 if (slot == 5)
                 {
                     var strikerStar = AddResourceImage("StrikerStar",
-                        "Original/sprites/EnemyLineupSS1/StrikerStar", _safeArea,
-                        new Vector2(center.x - cardHalfWidth - 0.018f, center.y - cardHalfHeight - 0.014f),
-                        new Vector2(center.x + cardHalfWidth + 0.018f, center.y + cardHalfHeight + 0.038f));
+                        "Original/sprites/EnemyLineupSS1/StrikerStar", formRect,
+                        center, center);
+                    strikerStar.rectTransform.sizeDelta = new Vector2(178f, 258f);
                     strikerStar.preserveAspect = false;
                     strikerStar.raycastTarget = false;
                 }
                 else
                 {
                     var slotBorder = AddResourceImage($"SlotBorder_{slot}",
-                        "Original/sprites/PlayerCardBG/CardBorder", _safeArea,
-                        new Vector2(center.x - cardHalfWidth - 0.005f, center.y - cardHalfHeight - 0.005f),
-                        new Vector2(center.x + cardHalfWidth + 0.005f, center.y + cardHalfHeight + 0.005f));
+                        "Original/sprites/PlayerCardBG/CardBorder", formRect,
+                        center, center);
+                    slotBorder.rectTransform.sizeDelta = new Vector2(162f, 240f);
                     slotBorder.color = new Color(1f, 1f, 1f, 0.45f);
                     slotBorder.preserveAspect = false;
                     slotBorder.raycastTarget = false;
                 }
 
-                CreatePlayerCardFront(player, _safeArea,
-                    new Vector2(center.x - cardHalfWidth, center.y - cardHalfHeight),
-                    new Vector2(center.x + cardHalfWidth, center.y + cardHalfHeight),
-                    false, true, () => ShowCardModal(player));
+                CreatePlayerCardFront(player, formRect,
+                    center, center,
+                    false, true, () => ShowCardModal(player),
+                    false, new Vector2(cardW, cardH));
             }
 
+            var bottomBar = CreateBottomBar("OpponentBottomBar", 108f);
+
             AddSpriteButton("ManageBtn", "Original/sprites/EnemyLineupSS1/ManageButton",
-                "Original/sprites/EnemyLineupSS1/ManageButtonPressed", _safeArea,
-                new Vector2(0.32f, 0.057f), new Vector2(0.297f, 0.097f), ShowManage);
+                "Original/sprites/EnemyLineupSS1/ManageButtonPressed", bottomBar,
+                new Vector2(0.32f, 0.50f), new Vector2(0.297f, 0.86f), ShowManage);
 
             AddSpriteButton("PlayBtn", "Original/sprites/EnemyLineupSS1/FormationPlayButton",
-                "Original/sprites/EnemyLineupSS1/FormationPlayButtonPressed", _safeArea,
-                new Vector2(0.68f, 0.057f), new Vector2(0.297f, 0.097f), () => StartFixture(_selectedFixtureIndex));
+                "Original/sprites/EnemyLineupSS1/FormationPlayButtonPressed", bottomBar,
+                new Vector2(0.68f, 0.50f), new Vector2(0.297f, 0.86f), () => StartFixture(_selectedFixtureIndex));
 
             if (PlayerPrefs.GetInt("diceSoccer.tutorial.45", 0) == 0)
             {
@@ -3200,14 +3793,16 @@ namespace DiceSoccer
             int totalPages = Mathf.Max(1, Mathf.CeilToInt(candidates.Count / (float)cardsPerPage));
             _deckPage = Mathf.Clamp(_deckPage, 0, totalPages - 1);
 
+            var pickerFrame = CreateCenteredReferenceFrame("PickerFrame");
+
             Vector2[] cardCenters = {
                 new Vector2(0.28f, 0.62f), // Column 1 Top
                 new Vector2(0.28f, 0.28f), // Column 1 Bottom
                 new Vector2(0.72f, 0.62f), // Column 2 Top
                 new Vector2(0.72f, 0.28f)  // Column 2 Bottom
             };
-            float cardHalfW = 0.164f;
-            float cardHalfH = 0.164f;
+            const float pickCardW = 184f;
+            const float pickCardH = 276f; // Exact 2:3 ratio
 
             int startIdx = _deckPage * cardsPerPage;
             for (int i = 0; i < cardsPerPage && (startIdx + i) < candidates.Count; i++)
@@ -3220,10 +3815,8 @@ namespace DiceSoccer
                 bool isHire = !isOwned && !isLocked && player.cost > 0;
 
                 var c = cardCenters[i];
-                var min = new Vector2(c.x - cardHalfW, c.y - cardHalfH);
-                var max = new Vector2(c.x + cardHalfW, c.y + cardHalfH);
 
-                CreatePlayerCardFront(player, _safeArea, min, max,
+                CreatePlayerCardFront(player, pickerFrame, c, c,
                     isHire: isHire, isInteractive: true,
                     onClick: () =>
                     {
@@ -3266,7 +3859,7 @@ namespace DiceSoccer
                             ShowCardModal(capturedPlayer);
                         }
                     },
-                    isLocked: isLocked);
+                    isLocked: isLocked, sizeDelta: new Vector2(pickCardW, pickCardH));
             }
 
             // 3. Navigation Chevrons on sides (matching media_1792421110155_320ad894.png)
@@ -3274,7 +3867,7 @@ namespace DiceSoccer
             var leftArrow = AddSpriteButton("LeftArrow",
                 canPrev ? "Original/images/LeftArrow" : "Original/images/LeftArrowDisabled",
                 canPrev ? "Original/images/LeftArrowSelected" : "Original/images/LeftArrowDisabled",
-                _safeArea, new Vector2(0.06f, 0.48f), new Vector2(0.08f, 0.10f),
+                pickerFrame, new Vector2(0.06f, 0.48f), new Vector2(0.08f, 0.10f),
                 canPrev ? () => { _deckPage--; AudioManager.Instance.PlayTap(); ShowPlayerPicker(slot); } : null);
             leftArrow.interactable = canPrev;
 
@@ -3282,11 +3875,12 @@ namespace DiceSoccer
             var rightArrow = AddSpriteButton("RightArrow",
                 canNext ? "Original/images/RightArrow" : "Original/images/RightArrowDisabled",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
-                _safeArea, new Vector2(0.94f, 0.48f), new Vector2(0.08f, 0.10f),
+                pickerFrame, new Vector2(0.94f, 0.48f), new Vector2(0.08f, 0.10f),
                 canNext ? () => { _deckPage++; AudioManager.Instance.PlayTap(); ShowPlayerPicker(slot); } : null);
             rightArrow.interactable = canNext;
 
             // 4. Authentic Bottom Folder Tabs: FWD (Tab01), MID (Tab02), DEF (Tab03), GK (Tab04)
+            var bottomBar = CreateBottomBar("PickerTabsBar", 108f);
             string[] tabSprites = { "Tab01", "Tab02", "Tab03", "Tab04" };
             float[] tabXs = { 0.14f, 0.38f, 0.62f, 0.86f };
 
@@ -3294,12 +3888,12 @@ namespace DiceSoccer
             {
                 int tabIdx = t;
                 bool isSelected = (activeTab == tabIdx);
-                float tabY = isSelected ? 0.055f : 0.020f; // Active tab is elevated
+                float tabY = isSelected ? 0.49f : 0.18f; // Active tab is elevated inside 108px bottom bar
                 string spritePath = $"Original/images/{tabSprites[t]}";
                 string pressedPath = $"Original/images/{tabSprites[t]}Pressed";
 
-                AddSpriteButton($"Tab_{t}", spritePath, pressedPath, _safeArea,
-                    new Vector2(tabXs[t], tabY), new Vector2(0.22f, 0.10f), () =>
+                AddSpriteButton($"Tab_{t}", spritePath, pressedPath, bottomBar,
+                    new Vector2(tabXs[t], tabY), new Vector2(0.22f, 0.88f), () =>
                     {
                         _deckCategoryFilter = tabIdx;
                         _deckPage = 0;
@@ -3337,21 +3931,21 @@ namespace DiceSoccer
             var canAfford = _careerCash >= candidate.cost;
             var capturedPlayerId = candidate.id;
 
+            var hiringFrame = CreateCenteredReferenceFrame("HiringFrame");
+
             // Centered player card matching authentic 2:3 ratio
-            var cardWidth = 0.52f;
-            var cardHeight = 0.52f;
             var cardCenter = new Vector2(0.5f, 0.56f);
-            CreatePlayerCardFront(candidate, _safeArea,
-                cardCenter - new Vector2(cardWidth * 0.5f, cardHeight * 0.5f),
-                cardCenter + new Vector2(cardWidth * 0.5f, cardHeight * 0.5f),
-                true, true, () => ShowCardModal(candidate));
+            CreatePlayerCardFront(candidate, hiringFrame,
+                cardCenter, cardCenter,
+                true, true, () => ShowCardModal(candidate),
+                false, new Vector2(300f, 450f));
 
             // Left & Right Navigation Chevrons
             var canPrev = _hireCandidateIndex > 0;
             var leftArrow = AddSpriteButton("LeftArrow",
                 canPrev ? "Original/images/LeftArrow" : "Original/images/LeftArrowDisabled",
                 canPrev ? "Original/images/LeftArrowSelected" : "Original/images/LeftArrowDisabled",
-                _safeArea, new Vector2(0.10f, 0.55f), new Vector2(0.10f, 0.12f),
+                hiringFrame, new Vector2(0.10f, 0.55f), new Vector2(0.10f, 0.12f),
                 canPrev ? () => { _hireCandidateIndex--; ShowHiring(); } : null);
             leftArrow.interactable = canPrev;
 
@@ -3359,13 +3953,13 @@ namespace DiceSoccer
             var rightArrow = AddSpriteButton("RightArrow",
                 canNext ? "Original/images/RightArrow" : "Original/images/RightArrowDisabled",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
-                _safeArea, new Vector2(0.90f, 0.55f), new Vector2(0.10f, 0.12f),
+                hiringFrame, new Vector2(0.90f, 0.55f), new Vector2(0.10f, 0.12f),
                 canNext ? () => { _hireCandidateIndex++; ShowHiring(); } : null);
             rightArrow.interactable = canNext;
 
             // Authentic HIRE Button (BuyButton.png)
             var hireBtn = AddSpriteButton("HireBtn", "Original/images/BuyButton",
-                "Original/images/BuyButtonPressed", _safeArea,
+                "Original/images/BuyButtonPressed", hiringFrame,
                 new Vector2(0.50f, 0.21f), new Vector2(0.42f, 0.08f),
                 canAfford ? () => HirePlayer(capturedPlayerId) : null);
             hireBtn.interactable = canAfford;
@@ -3375,15 +3969,18 @@ namespace DiceSoccer
                 if (hireImg != null) hireImg.color = new Color(0.5f, 0.5f, 0.5f, 0.7f);
             }
 
-            // Bottom Footer & Back to Manage
+            // Bottom Footer & Back to Manage (fixed 77px bar anchored to bottom)
             var footerBar = AddResourceImage("HiringFooter", "Original/images/FooterBG", _safeArea,
-                new Vector2(0f, 0f), new Vector2(1f, 0.08f));
+                new Vector2(0f, 0f), new Vector2(1f, 0f));
+            footerBar.rectTransform.pivot = new Vector2(0.5f, 0f);
+            footerBar.rectTransform.anchoredPosition = Vector2.zero;
+            footerBar.rectTransform.sizeDelta = new Vector2(0f, 77f);
             footerBar.preserveAspect = false;
             footerBar.raycastTarget = false;
 
             AddSpriteButton("BackToManage", "Original/sprites/EnemyLineupSS1/ManageButton",
-                "Original/sprites/EnemyLineupSS1/ManageButtonPressed", _safeArea,
-                new Vector2(0.5f, 0.04f), new Vector2(0.30f, 0.07f), ShowManage);
+                "Original/sprites/EnemyLineupSS1/ManageButtonPressed", footerBar.transform,
+                new Vector2(0.5f, 0.50f), new Vector2(0.30f, 0.875f), ShowManage);
         }
 
         private void HirePlayer(int playerId)
@@ -3524,7 +4121,8 @@ namespace DiceSoccer
         }
 
         private static Transform CreateScrollList(string objectName, Transform parent,
-            Vector2 anchorMin, Vector2 anchorMax, float contentHeight)
+            Vector2 anchorMin, Vector2 anchorMax, float contentHeight,
+            Vector2? offsetMin = null, Vector2? offsetMax = null)
         {
             var viewportObject = new GameObject(objectName, typeof(RectTransform), typeof(Image),
                 typeof(Mask), typeof(ScrollRect));
@@ -3532,7 +4130,8 @@ namespace DiceSoccer
             var viewportRect = viewportObject.GetComponent<RectTransform>();
             viewportRect.anchorMin = anchorMin;
             viewportRect.anchorMax = anchorMax;
-            viewportRect.offsetMin = viewportRect.offsetMax = Vector2.zero;
+            viewportRect.offsetMin = offsetMin ?? Vector2.zero;
+            viewportRect.offsetMax = offsetMax ?? Vector2.zero;
             var viewportImage = viewportObject.GetComponent<Image>();
             viewportImage.color = new Color(1f, 1f, 1f, 0.04f);
             viewportObject.GetComponent<Mask>().showMaskGraphic = false;
@@ -3567,18 +4166,22 @@ namespace DiceSoccer
 
             AddMenuHeader(null, ShowHome);
 
-            // Top wood beam trim under header
+            // Top wood beam trim directly under fixed header
             var topBeam = AddResourceImage("TopBeam", "Original/sprites/TrophyRoomBGSS/WoodenShelfBG", _safeArea,
-                new Vector2(0.5f, 0.915f), new Vector2(0.5f, 0.915f));
+                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
+            topBeam.rectTransform.anchoredPosition = new Vector2(0f, -82f);
             topBeam.rectTransform.sizeDelta = new Vector2(800f, 18f);
             topBeam.preserveAspect = false;
             topBeam.raycastTarget = false;
+
+            // Centered 640x960 frame so shelves, boxes, and navigation arrows always align pixel-perfectly
+            var shopFrame = CreateCenteredReferenceFrame("ShopFrame");
 
             // 3 horizontal wooden shelves across screen
             var shelfYs = new[] { 0.67f, 0.46f, 0.25f };
             for (var s = 0; s < shelfYs.Length; s++)
             {
-                var shelf = AddResourceImage($"Shelf_{s}", "Original/sprites/TrophyRoomBGSS/WoodenShelfBG", _safeArea,
+                var shelf = AddResourceImage($"Shelf_{s}", "Original/sprites/TrophyRoomBGSS/WoodenShelfBG", shopFrame,
                     new Vector2(0.5f, shelfYs[s]), new Vector2(0.5f, shelfYs[s]));
                 shelf.rectTransform.sizeDelta = new Vector2(800f, 26f);
                 shelf.preserveAspect = false;
@@ -3587,16 +4190,17 @@ namespace DiceSoccer
 
             // Render current tab products on the 3 shelves
             if (_shopTab == 0)
-                RenderShopCoins();
+                RenderShopCoins(shopFrame);
             else if (_shopTab == 1)
-                RenderShopShirts();
+                RenderShopShirts(shopFrame);
             else
-                RenderShopShorts();
+                RenderShopShorts(shopFrame);
 
-            // Bottom authentic Shop category tabs: Coins (Tab 0), Shirts (Tab 1), Shorts (Tab 2)
+            // Bottom authentic Shop category tabs docked in fixed 106px bottom bar
+            var shopTabBar = CreateBottomBar("ShopTabsBar", 106f);
             var coinsSprite = _shopTab == 0 ? "Original/sprites/ShopSS/CoinsTab" : "Original/sprites/ShopSS/CoinsTabPressed";
-            AddSpriteButton("CoinsTab", coinsSprite, coinsSprite, _safeArea,
-                new Vector2(0.18f, 0.055f), new Vector2(0.31f, 0.095f), () =>
+            AddSpriteButton("CoinsTab", coinsSprite, coinsSprite, shopTabBar,
+                new Vector2(0.18f, 0.50f), new Vector2(0.31f, 0.86f), () =>
                 {
                     _shopTab = 0;
                     _shopPage = 0;
@@ -3605,8 +4209,8 @@ namespace DiceSoccer
                 });
 
             var shirtsSprite = _shopTab == 1 ? "Original/sprites/ShopSS/ShirtTab" : "Original/sprites/ShopSS/ShirtTabPressed";
-            AddSpriteButton("ShirtTab", shirtsSprite, shirtsSprite, _safeArea,
-                new Vector2(0.50f, 0.055f), new Vector2(0.31f, 0.095f), () =>
+            AddSpriteButton("ShirtTab", shirtsSprite, shirtsSprite, shopTabBar,
+                new Vector2(0.50f, 0.50f), new Vector2(0.31f, 0.86f), () =>
                 {
                     _shopTab = 1;
                     _shopPage = 0;
@@ -3615,8 +4219,8 @@ namespace DiceSoccer
                 });
 
             var shortsSprite = _shopTab == 2 ? "Original/sprites/ShopSS/ShortsTab" : "Original/sprites/ShopSS/ShortsTabPressed";
-            AddSpriteButton("ShortsTab", shortsSprite, shortsSprite, _safeArea,
-                new Vector2(0.82f, 0.055f), new Vector2(0.31f, 0.095f), () =>
+            AddSpriteButton("ShortsTab", shortsSprite, shortsSprite, shopTabBar,
+                new Vector2(0.82f, 0.50f), new Vector2(0.31f, 0.86f), () =>
                 {
                     _shopTab = 2;
                     _shopPage = 0;
@@ -3625,7 +4229,7 @@ namespace DiceSoccer
                 });
         }
 
-        private void RenderShopCoins()
+        private void RenderShopCoins(Transform parentFrame)
         {
             var coinPackages = new[]
             {
@@ -3641,7 +4245,7 @@ namespace DiceSoccer
                 var pkg = coinPackages[i];
                 var cardY = cardYs[i];
 
-                var box = AddResourceImage($"ShopBox_{i}", "Original/sprites/ShopSS/ShopBox", _safeArea,
+                var box = AddResourceImage($"ShopBox_{i}", "Original/sprites/ShopSS/ShopBox", parentFrame,
                     new Vector2(0.5f, cardY), new Vector2(0.5f, cardY));
                 box.rectTransform.sizeDelta = new Vector2(300f, 180f);
                 box.preserveAspect = false;
@@ -3722,17 +4326,17 @@ namespace DiceSoccer
 
             // Left / Right arrows on middle shelf
             var leftArrow = AddSpriteButton("LeftArrow", "Original/images/LeftArrowDisabled",
-                "Original/images/LeftArrowDisabled", _safeArea,
+                "Original/images/LeftArrowDisabled", parentFrame,
                 new Vector2(0.09f, 0.555f), new Vector2(0.10f, 0.10f), null);
             leftArrow.interactable = false;
 
             var rightArrow = AddSpriteButton("RightArrow", "Original/images/RightArrowSelected",
-                "Original/images/RightArrowSelected", _safeArea,
+                "Original/images/RightArrowSelected", parentFrame,
                 new Vector2(0.91f, 0.555f), new Vector2(0.10f, 0.10f), null);
             rightArrow.interactable = false;
         }
 
-        private void RenderShopShirts()
+        private void RenderShopShirts(Transform parentFrame)
         {
             var shirts = _catalog.Data.shirts ?? Array.Empty<ShirtData>();
             const int perPage = 3;
@@ -3748,7 +4352,7 @@ namespace DiceSoccer
                 var shirt = shirts[startIdx + i];
                 var cardY = cardYs[i];
 
-                var box = AddResourceImage($"ShopBox_Shirt_{i}", "Original/sprites/ShopSS/ShopBox", _safeArea,
+                var box = AddResourceImage($"ShopBox_Shirt_{i}", "Original/sprites/ShopSS/ShopBox", parentFrame,
                     new Vector2(0.5f, cardY), new Vector2(0.5f, cardY));
                 box.rectTransform.sizeDelta = new Vector2(300f, 180f);
                 box.preserveAspect = false;
@@ -3815,7 +4419,7 @@ namespace DiceSoccer
             var leftArrow = AddSpriteButton("LeftArrow",
                 canPrev ? "Original/images/LeftArrow" : "Original/images/LeftArrowDisabled",
                 canPrev ? "Original/images/LeftArrowSelected" : "Original/images/LeftArrowDisabled",
-                _safeArea, new Vector2(0.09f, 0.555f), new Vector2(0.10f, 0.10f),
+                parentFrame, new Vector2(0.09f, 0.555f), new Vector2(0.10f, 0.10f),
                 canPrev ? () => { _shopPage--; ShowShop(); } : null);
             leftArrow.interactable = canPrev;
 
@@ -3823,12 +4427,12 @@ namespace DiceSoccer
             var rightArrow = AddSpriteButton("RightArrow",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
-                _safeArea, new Vector2(0.91f, 0.555f), new Vector2(0.10f, 0.10f),
+                parentFrame, new Vector2(0.91f, 0.555f), new Vector2(0.10f, 0.10f),
                 canNext ? () => { _shopPage++; ShowShop(); } : null);
             rightArrow.interactable = canNext;
         }
 
-        private void RenderShopShorts()
+        private void RenderShopShorts(Transform parentFrame)
         {
             var colours = _catalog.Data.colours ?? Array.Empty<ColourData>();
             const int perPage = 3;
@@ -3844,7 +4448,7 @@ namespace DiceSoccer
                 var col = colours[startIdx + i];
                 var cardY = cardYs[i];
 
-                var box = AddResourceImage($"ShopBox_Shorts_{i}", "Original/sprites/ShopSS/ShopBox", _safeArea,
+                var box = AddResourceImage($"ShopBox_Shorts_{i}", "Original/sprites/ShopSS/ShopBox", parentFrame,
                     new Vector2(0.5f, cardY), new Vector2(0.5f, cardY));
                 box.rectTransform.sizeDelta = new Vector2(300f, 180f);
                 box.preserveAspect = false;
@@ -3889,7 +4493,7 @@ namespace DiceSoccer
             var leftArrow = AddSpriteButton("LeftArrow",
                 canPrev ? "Original/images/LeftArrow" : "Original/images/LeftArrowDisabled",
                 canPrev ? "Original/images/LeftArrowSelected" : "Original/images/LeftArrowDisabled",
-                _safeArea, new Vector2(0.09f, 0.555f), new Vector2(0.10f, 0.10f),
+                parentFrame, new Vector2(0.09f, 0.555f), new Vector2(0.10f, 0.10f),
                 canPrev ? () => { _shopPage--; ShowShop(); } : null);
             leftArrow.interactable = canPrev;
 
@@ -3897,7 +4501,7 @@ namespace DiceSoccer
             var rightArrow = AddSpriteButton("RightArrow",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
                 canNext ? "Original/images/RightArrowSelected" : "Original/images/RightArrowDisabled",
-                _safeArea, new Vector2(0.91f, 0.555f), new Vector2(0.10f, 0.10f),
+                parentFrame, new Vector2(0.91f, 0.555f), new Vector2(0.10f, 0.10f),
                 canNext ? () => { _shopPage++; ShowShop(); } : null);
             rightArrow.interactable = canNext;
         }
@@ -3907,22 +4511,25 @@ namespace DiceSoccer
             _catalog ??= GameCatalog.Load();
             ClearCanvas();
 
-            // Background fills safe area (Green lockers)
+            // Background (aspect-fill via EnvelopeParent keeps mannequin unstretched in all aspect ratios)
             var bg = AddResourceImage("KitBG", "Original/images/KitSelectionBG", _safeArea,
                 Vector2.zero, Vector2.one);
             bg.preserveAspect = false;
+            var fitter = bg.gameObject.AddComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            fitter.aspectRatio = ReferenceWidth / ReferenceHeight;
 
-            // Header: Back button, cash, crest (matching media_1792421110173_15334404.png)
-            AddMenuHeader(null, () =>
+            // Header: Back button, cash, crest
+            var header = AddMenuHeader(null, () =>
             {
                 SaveCareerState();
                 AudioManager.Instance.PlayTap();
                 ShowManage();
             });
 
-            // Tap crest on header to cycle crest (0.85f to 0.97f)
-            AddButton("", _safeArea, Color.clear,
-                new Vector2(0.91f, 0.96f), new Vector2(0.12f, 0.08f), () =>
+            // Tap crest on header to cycle crest (0.85f to 0.97f inside fixed header)
+            AddButton("", header, Color.clear,
+                new Vector2(0.91f, 0.50f), new Vector2(0.12f, 1.0f), () =>
                 {
                     _currentCrestId = (_currentCrestId % 3) + 1;
                     SaveCareerState();
@@ -3931,10 +4538,10 @@ namespace DiceSoccer
                 });
 
             // ==========================================
-            // CENTER: Character Kit Preview (matching media_1792421110173_15334404.png)
+            // CENTER: Character Kit Preview (parented to KitBG so shirt/shorts stay locked to mannequin!)
             // ==========================================
             var kitBox = new GameObject("CenterKitPreview", typeof(RectTransform));
-            kitBox.transform.SetParent(_safeArea, false);
+            kitBox.transform.SetParent(bg.transform, false);
             var kitRect = kitBox.GetComponent<RectTransform>();
             kitRect.anchorMin = new Vector2(185f / 640f, (960f - 527f - 350f) / 960f);
             kitRect.anchorMax = new Vector2((185f + 260f) / 640f, (960f - 527f) / 960f);
@@ -3969,11 +4576,11 @@ namespace DiceSoccer
             }
 
             // ==========================================
-            // Top Pair of Silver Arrows: Cycle Shirt Presets (chest level: y = 0.38f)
+            // Top Pair of Silver Arrows: Cycle Shirt Presets (chest level inside KitBG)
             // ==========================================
             var allShirts = _catalog.Data.shirts ?? Array.Empty<ShirtData>();
-            AddSpriteButton("ShirtLeft", "Original/images/LeftArrowDisabled", "Original/images/LeftArrowSelected", _safeArea,
-                new Vector2(0.26f, 0.38f), new Vector2(0.10f, 0.10f), () =>
+            AddSpriteButton("ShirtLeft", "Original/images/LeftArrowDisabled", "Original/images/LeftArrowSelected", bg.transform,
+                new Vector2(0.26f, 0.38f), new Vector2(0.08f, 0.08f), () =>
                 {
                     if (allShirts.Length > 0)
                     {
@@ -3984,8 +4591,8 @@ namespace DiceSoccer
                     }
                 });
 
-            AddSpriteButton("ShirtRight", "Original/images/RightArrowDisabled", "Original/images/RightArrowSelected", _safeArea,
-                new Vector2(0.74f, 0.38f), new Vector2(0.10f, 0.10f), () =>
+            AddSpriteButton("ShirtRight", "Original/images/RightArrowDisabled", "Original/images/RightArrowSelected", bg.transform,
+                new Vector2(0.74f, 0.38f), new Vector2(0.08f, 0.08f), () =>
                 {
                     if (allShirts.Length > 0)
                     {
@@ -3997,11 +4604,11 @@ namespace DiceSoccer
                 });
 
             // ==========================================
-            // Bottom Pair of Silver Arrows: Cycle Shorts Colors (hip/shorts level: y = 0.22f)
+            // Bottom Pair of Silver Arrows: Cycle Shorts Colors (hip/shorts level inside KitBG)
             // ==========================================
             var allColours = _catalog.Data.colours ?? Array.Empty<ColourData>();
-            AddSpriteButton("ShortsLeft", "Original/images/LeftArrowDisabled", "Original/images/LeftArrowSelected", _safeArea,
-                new Vector2(0.26f, 0.22f), new Vector2(0.10f, 0.10f), () =>
+            AddSpriteButton("ShortsLeft", "Original/images/LeftArrowDisabled", "Original/images/LeftArrowSelected", bg.transform,
+                new Vector2(0.26f, 0.22f), new Vector2(0.08f, 0.08f), () =>
                 {
                     if (allColours.Length > 0)
                     {
@@ -4015,8 +4622,8 @@ namespace DiceSoccer
                     }
                 });
 
-            AddSpriteButton("ShortsRight", "Original/images/RightArrowDisabled", "Original/images/RightArrowSelected", _safeArea,
-                new Vector2(0.74f, 0.22f), new Vector2(0.10f, 0.10f), () =>
+            AddSpriteButton("ShortsRight", "Original/images/RightArrowDisabled", "Original/images/RightArrowSelected", bg.transform,
+                new Vector2(0.74f, 0.22f), new Vector2(0.08f, 0.08f), () =>
                 {
                     if (allColours.Length > 0)
                     {
@@ -4031,11 +4638,12 @@ namespace DiceSoccer
                 });
 
             // ==========================================
-            // Bottom Right: Authentic Done Button (DoneButton.png)
+            // Bottom Right: Authentic Done Button docked cleanly at bottom bar
             // ==========================================
+            var kitBottomBar = CreateBottomBar("KitBottomBar", 120f);
             AddSpriteButton("DoneBtn", "Original/sprites/KitSelectionSS/DoneButton",
-                "Original/sprites/KitSelectionSS/DoneButtonPressed", _safeArea,
-                new Vector2(0.78f, 0.08f), new Vector2(0.24f, 0.065f), () =>
+                "Original/sprites/KitSelectionSS/DoneButtonPressed", kitBottomBar,
+                new Vector2(0.78f, 0.56f), new Vector2(0.24f, 0.52f), () =>
                 {
                     SaveCareerState();
                     AudioManager.Instance.PlayTap();
@@ -4060,7 +4668,7 @@ namespace DiceSoccer
             _catalog ??= GameCatalog.Load();
             ClearCanvas();
             AddMenuBackdrop(true);
-            AddMenuHeader($"TROPHIES  {_unlockedAchievementIds.Count}/72", ShowHome);
+            var header = AddMenuHeader($"TROPHIES  {_unlockedAchievementIds.Count}/72", ShowHome);
 
             if (PlayerPrefs.GetInt("diceSoccer.tutorial.4", 0) == 0)
                 ShowTutorialPopup(4);
@@ -4072,10 +4680,12 @@ namespace DiceSoccer
             var maxPages = Mathf.CeilToInt(totalTrophies / (float)perPage);
             _trophyPage = Mathf.Clamp(_trophyPage, 0, maxPages - 1);
 
+            var frame = CreateCenteredReferenceFrame("TrophyRoomFrame");
+
             var shelfYs = new[] { 0.70f, 0.48f, 0.26f };
             foreach (var sy in shelfYs)
             {
-                var shelf = AddResourceImage("Shelf", "Original/sprites/TrophyRoomBGSS/WoodenShelfBG", _safeArea,
+                var shelf = AddResourceImage("Shelf", "Original/sprites/TrophyRoomBGSS/WoodenShelfBG", frame,
                     new Vector2(0.02f, sy - 0.08f), new Vector2(0.98f, sy - 0.05f));
                 shelf.preserveAspect = false;
                 shelf.raycastTarget = false;
@@ -4097,7 +4707,7 @@ namespace DiceSoccer
 
                     var baseSprite = unlocked ? "Original/sprites/TrophyBG/TrophyBG" : "Original/sprites/TrophyBG/TrophyBGLocked";
                     var capturedId = trophyId;
-                    var slotBtn = AddSpriteButton($"TrophySlot_{capturedId}", baseSprite, baseSprite, _safeArea,
+                    var slotBtn = AddSpriteButton($"TrophySlot_{capturedId}", baseSprite, baseSprite, frame,
                         new Vector2(posX, posY), new Vector2(0.20f, 0.14f), () =>
                         {
                             AudioManager.Instance.PlayTap();
@@ -4117,7 +4727,7 @@ namespace DiceSoccer
             const float navY = 0.12f;
             if (_trophyPage > 0)
             {
-                AddSpriteButton("LeftArrow", "Original/images/LeftArrow", "Original/images/LeftArrowSelected", _safeArea,
+                AddSpriteButton("LeftArrow", "Original/images/LeftArrow", "Original/images/LeftArrowSelected", frame,
                     new Vector2(0.14f, navY), new Vector2(0.12f, 0.055f), () =>
                     {
                         _trophyPage--;
@@ -4126,12 +4736,12 @@ namespace DiceSoccer
                     });
             }
 
-            AddText($"PAGE {_trophyPage + 1} OF {maxPages}", _safeArea, 16, Paper,
+            AddText($"PAGE {_trophyPage + 1} OF {maxPages}", frame, 16, Paper,
                 new Vector2(0.3f, navY - 0.025f), new Vector2(0.7f, navY + 0.025f));
 
             if (_trophyPage < maxPages - 1)
             {
-                AddSpriteButton("RightArrow", "Original/images/RightArrow", "Original/images/RightArrowSelected", _safeArea,
+                AddSpriteButton("RightArrow", "Original/images/RightArrow", "Original/images/RightArrowSelected", frame,
                     new Vector2(0.86f, navY), new Vector2(0.12f, 0.055f), () =>
                     {
                         _trophyPage++;
@@ -4140,8 +4750,8 @@ namespace DiceSoccer
                     });
             }
 
-            AddSpriteButton("Refresh", "Original/sprites/TrophyRoomBGSS/RefreshButton", "Original/sprites/TrophyRoomBGSS/RefreshButtonPressed", _safeArea,
-                new Vector2(0.92f, 0.96f), new Vector2(0.08f, 0.055f), () =>
+            AddSpriteButton("Refresh", "Original/sprites/TrophyRoomBGSS/RefreshButton", "Original/sprites/TrophyRoomBGSS/RefreshButtonPressed", header,
+                new Vector2(0.805f, 0.50f), new Vector2(0.08f, 0.72f), () =>
                 {
                     CheckAchievements(false, false);
                     AudioManager.Instance.PlayMedalCeremony();
@@ -4215,15 +4825,24 @@ namespace DiceSoccer
             if (PlayerPrefs.GetInt("diceSoccer.tutorial.49", 0) == 0)
                 ShowTutorialPopup(49);
 
-            AddText("EQUIPPED STAFF (MAX 2)", _safeArea, 15, Paper,
-                new Vector2(0.05f, 0.86f), new Vector2(0.95f, 0.90f));
+            var topControls = new GameObject("EntourageTopControls", typeof(RectTransform)).GetComponent<RectTransform>();
+            topControls.SetParent(_safeArea, false);
+            topControls.anchorMin = new Vector2(0f, 1f);
+            topControls.anchorMax = new Vector2(1f, 1f);
+            topControls.pivot = new Vector2(0.5f, 1f);
+            topControls.anchoredPosition = new Vector2(0f, -82f);
+            topControls.sizeDelta = new Vector2(0f, 120f);
+
+            var topTitle = AddText("EQUIPPED STAFF (MAX 2)", topControls, 15, Ink,
+                new Vector2(0.05f, 0.65f), new Vector2(0.95f, 0.98f));
+            topTitle.fontStyle = FontStyle.Bold;
 
             var slot1Name = _equippedEntourageIds.Count > 0 ? (_catalog.GetEntourage(_equippedEntourageIds[0])?.name ?? "STAFF 1") : "[EMPTY SLOT 1]";
             var slot2Name = _equippedEntourageIds.Count > 1 ? (_catalog.GetEntourage(_equippedEntourageIds[1])?.name ?? "STAFF 2") : "[EMPTY SLOT 2]";
 
             var s1Color = _equippedEntourageIds.Count > 0 ? Grass : (Color)new Color32(60, 65, 70, 255);
-            AddButton(slot1Name, _safeArea, s1Color,
-                new Vector2(0.28f, 0.81f), new Vector2(0.46f, 0.055f), () =>
+            AddButton(slot1Name, topControls, s1Color,
+                new Vector2(0.265f, 0.34f), new Vector2(0.43f, 0.46f), () =>
                 {
                     if (_equippedEntourageIds.Count > 0)
                     {
@@ -4235,8 +4854,8 @@ namespace DiceSoccer
                 });
 
             var s2Color = _equippedEntourageIds.Count > 1 ? Grass : (Color)new Color32(60, 65, 70, 255);
-            AddButton(slot2Name, _safeArea, s2Color,
-                new Vector2(0.72f, 0.81f), new Vector2(0.46f, 0.055f), () =>
+            AddButton(slot2Name, topControls, s2Color,
+                new Vector2(0.735f, 0.34f), new Vector2(0.43f, 0.46f), () =>
                 {
                     if (_equippedEntourageIds.Count > 1)
                     {
@@ -4249,7 +4868,8 @@ namespace DiceSoccer
 
             var staffList = _catalog.Data.entourage ?? Array.Empty<EntourageData>();
             var content = CreateScrollList("EntourageList", _safeArea,
-                new Vector2(0.04f, 0.10f), new Vector2(0.96f, 0.76f), staffList.Length * 115f);
+                new Vector2(0.04f, 0f), new Vector2(0.96f, 1f), staffList.Length * 115f,
+                new Vector2(0f, 94f), new Vector2(0f, -210f));
 
             for (var i = 0; i < staffList.Length; i++)
             {
@@ -4267,13 +4887,14 @@ namespace DiceSoccer
                 fig.preserveAspect = true;
 
                 var roleTag = ent.position == "OFF" ? "[OFFICIAL]" : ent.position == "WAG" ? "[WAG]" : "[SPECIALIST]";
-                var tagColor = ent.position == "OFF" ? new Color32(0, 100, 255, 255) : ent.position == "WAG" ? new Color32(255, 50, 150, 255) : Gold;
+                var tagColor = ent.position == "OFF" ? new Color32(0, 80, 200, 255) : ent.position == "WAG" ? new Color32(195, 25, 115, 255) : new Color32(145, 70, 0, 255);
 
-                AddText($"{roleTag} {ent.name.ToUpperInvariant()}", card.transform, 14, tagColor,
+                var entName = AddText($"{roleTag} {ent.name.ToUpperInvariant()}", card.transform, 14, tagColor,
                     new Vector2(0.24f, 0.65f), new Vector2(0.72f, 0.95f));
+                entName.fontStyle = FontStyle.Bold;
 
-                AddText($"{ent.abilityName}: {ent.inGameDescription}", card.transform, 12, Paper,
-                    new Vector2(0.24f, 0.15f), new Vector2(0.72f, 0.65f));
+                AddText($"{ent.abilityName}: {ent.inGameDescription}", card.transform, 12, Ink,
+                    new Vector2(0.24f, 0.12f), new Vector2(0.72f, 0.65f));
 
                 var isEquipped = _equippedEntourageIds.Contains(ent.id);
                 var isHired = _unlockedEntourageIds.Contains(ent.id);
@@ -4323,8 +4944,9 @@ namespace DiceSoccer
                 }
             }
 
-            AddButton("BACK TO PLAYERS", _safeArea, new Color32(68, 79, 84, 255),
-                new Vector2(0.5f, 0.045f), new Vector2(0.6f, 0.055f), ShowManage);
+            var bottomBar = CreateBottomBar("EntourageBottomBar", 88f);
+            AddButton("BACK TO PLAYERS", bottomBar, new Color32(68, 79, 84, 255),
+                new Vector2(0.5f, 0.5f), new Vector2(0.6f, 0.62f), ShowManage);
         }
 
         private static string GetEntourageFigurePath(int id)
@@ -4738,8 +5360,8 @@ namespace DiceSoccer
 
             if (_homeTotalText != null && _awayTotalText != null)
             {
-                Vector2 hTotPos = new Vector2(0.14f, 0.50f);
-                Vector2 aTotPos = new Vector2(0.86f, 0.50f);
+                Vector2 hTotPos = new Vector2(0.135f, 0.24f);
+                Vector2 aTotPos = new Vector2(0.865f, 0.24f);
 
                 _homeTotalText.rectTransform.anchorMin = _homeTotalText.rectTransform.anchorMax = hTotPos;
                 _awayTotalText.rectTransform.anchorMin = _awayTotalText.rectTransform.anchorMax = aTotPos;
@@ -4865,6 +5487,21 @@ namespace DiceSoccer
                     if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
                 }
             }
+
+            // Pulse HUD Entourage icons triggered during roll/aura phase (#1,#2,#4,#5,#6,#15,#19,#20,#21)
+            if (_match.LastHomeTriggeredEntourages.Count > 0)
+            {
+                foreach (var eid in _match.LastHomeTriggeredEntourages)
+                    StartCoroutine(PulseEntourageIcon(true, eid));
+            }
+            if (_match.LastAwayTriggeredEntourages.Count > 0)
+            {
+                foreach (var eid in _match.LastAwayTriggeredEntourages)
+                    StartCoroutine(PulseEntourageIcon(false, eid));
+            }
+
+            bool homeProduced2x = false;
+            bool awayProduced2x = false;
 
             foreach (var (side, activeAbility, triggeringSlot, triggeringPlayer) in allAbilities)
             {
@@ -5258,6 +5895,11 @@ namespace DiceSoccer
                         int boost = originalVal * (multiplier - 1);
                         myFaces[chosenDie] *= multiplier;
                         myBoosted[chosenDie] = true;
+                        if (multiplier == 2)
+                        {
+                            if (isHome) homeProduced2x = true;
+                            else awayProduced2x = true;
+                        }
                         UpdateSideDieVisual(side, chosenDie, myFaces[chosenDie]);
 
                         AdjustSideTotal(side, boost);
@@ -5578,6 +6220,11 @@ namespace DiceSoccer
                 yield return new WaitForSeconds(0.35f);
             }
 
+            // Conditional & Post-Powerup Entourages (#3, #7, #8, #9, #10, #17, #18, #20)
+            yield return StartCoroutine(ResolvePostRollEntouragesRoutine(
+                homeFaces, awayFaces, originalHomeFaces, originalAwayFaces,
+                activeHome, activeAway, homeImmune, awayImmune, homeProduced2x, awayProduced2x));
+
             // Captain Tie-Breaker Notification
             if (_match.LastHomeTotal == _match.LastAwayTotal && (_match.HomeWinOnTie || _match.AwayWinOnTie))
             {
@@ -5659,12 +6306,17 @@ namespace DiceSoccer
                 Image striker = homeScored ? _homePlayers[5] : _awayPlayers[5];
                 Image goalie = homeScored ? _awayPlayers[0] : _homePlayers[0];
 
-                // Striker anticipation wind-up & shot lunge:
+                // Striker anticipation wind-up & shot lunge + Kick01..07 sprite frames:
                 float kickDir = homeScored ? 32f : -32f;
+                var strikerRig = striker != null ? striker.GetComponent<LayeredPlayerRig>() : null;
                 if (striker != null)
                 {
+                    strikerRig?.SetKickFrame(1);
                     striker.rectTransform.anchoredPosition = new Vector2(-kickDir * 0.35f, 0f);
-                    yield return new WaitForSeconds(0.09f);
+                    yield return new WaitForSeconds(0.05f);
+                    strikerRig?.SetKickFrame(3);
+                    yield return new WaitForSeconds(0.04f);
+                    strikerRig?.SetKickFrame(5);
                     striker.rectTransform.anchoredPosition = new Vector2(kickDir, 0f);
                     AudioManager.Instance.PlayKick();
                 }
@@ -5672,7 +6324,9 @@ namespace DiceSoccer
                 // Animate ball shooting into the goal net with arc and rapid spin (0.42s flight)
                 var ballStart = _ballMarker != null ? _ballMarker.rectTransform.anchorMin : (homeScored ? new Vector2(0.335f, 0.40f) : new Vector2(0.665f, 0.40f));
                 var ballTarget = homeScored ? new Vector2(0.80f, 0.50f) : new Vector2(0.20f, 0.50f);
+                if (strikerRig != null) strikerRig.SetKickFrame(7);
                 yield return StartCoroutine(SmoothPassBall(ballStart, ballTarget, 0.42f, true));
+                strikerRig?.SetIdlePose();
 
                 // Goalkeeper reacts defeated / beaten dive
                 if (goalie != null)
@@ -5706,10 +6360,15 @@ namespace DiceSoccer
                 Image goalie = homeShooting ? _awayPlayers[0] : _homePlayers[0];
 
                 float kickDir = homeShooting ? 25f : -25f;
+                var strikerRig = striker != null ? striker.GetComponent<LayeredPlayerRig>() : null;
                 if (striker != null)
                 {
+                    strikerRig?.SetKickFrame(2);
                     striker.rectTransform.anchoredPosition = new Vector2(-kickDir * 0.3f, 0f);
-                    yield return new WaitForSeconds(0.08f);
+                    yield return new WaitForSeconds(0.04f);
+                    strikerRig?.SetKickFrame(4);
+                    yield return new WaitForSeconds(0.04f);
+                    strikerRig?.SetKickFrame(6);
                     striker.rectTransform.anchoredPosition = new Vector2(kickDir, 0f);
                     AudioManager.Instance.PlayKick();
                 }
@@ -5726,7 +6385,9 @@ namespace DiceSoccer
                     goalie.rectTransform.localEulerAngles = new Vector3(0f, 0f, homeShooting ? 12f : -12f);
                 }
 
+                if (strikerRig != null) strikerRig.SetKickFrame(7);
                 yield return StartCoroutine(SmoothPassBall(ballStart, ballTarget, 0.38f, false));
+                strikerRig?.SetIdlePose();
 
                 AudioManager.Instance.PlayTap();
                 if (striker != null) striker.rectTransform.anchoredPosition = Vector2.zero;
@@ -5935,6 +6596,283 @@ namespace DiceSoccer
             }
         }
 
+        private IEnumerator ResolvePostRollEntouragesRoutine(
+            int[] homeFaces,
+            int[] awayFaces,
+            int[] origHomeFaces,
+            int[] origAwayFaces,
+            int[] activeHomeSlots,
+            int[] activeAwaySlots,
+            bool[] homeImmune,
+            bool[] awayImmune,
+            bool homeProduced2x,
+            bool awayProduced2x)
+        {
+            if (_match == null) yield break;
+
+            for (int side = 0; side < 2; side++)
+            {
+                bool isHome = side == 0;
+                int oppSide = isHome ? 1 : 0;
+                int[] entourages = isHome ? _match.HomeEntourages : _match.AwayEntourages;
+                if (entourages == null || entourages.Length == 0) continue;
+
+                int[] myFaces = isHome ? homeFaces : awayFaces;
+                int[] oppFaces = isHome ? awayFaces : homeFaces;
+                int[] myOrig = isHome ? origHomeFaces : origAwayFaces;
+                int[] oppOrig = isHome ? origAwayFaces : origHomeFaces;
+                int[] mySlots = isHome ? activeHomeSlots : activeAwaySlots;
+                int[] oppSlots = isHome ? activeAwaySlots : activeHomeSlots;
+                bool[] oppImmune = isHome ? awayImmune : homeImmune;
+                bool produced2x = isHome ? homeProduced2x : awayProduced2x;
+                bool isHuman = isHome || _isLocalMultiplayer;
+
+                void ApplyDieChange(int targetSide, int dieIdx, int newVal)
+                {
+                    var arr = targetSide == 0 ? homeFaces : awayFaces;
+                    var imgs = targetSide == 0 ? _homeDice : _awayDice;
+                    if (dieIdx < 0 || dieIdx >= arr.Length) return;
+                    int diff = newVal - arr[dieIdx];
+                    arr[dieIdx] = newVal;
+                    if (imgs != null && dieIdx < imgs.Length && imgs[dieIdx] != null)
+                        SetDieFace(imgs[dieIdx], newVal);
+                    if (targetSide == 0)
+                    {
+                        _match.AdjustHomeTotal(diff);
+                        if (_homeTotalText != null) _homeTotalText.text = _match.LastHomeTotal.ToString();
+                    }
+                    else
+                    {
+                        _match.AdjustAwayTotal(diff);
+                        if (_awayTotalText != null) _awayTotalText.text = _match.LastAwayTotal.ToString();
+                    }
+                }
+
+                void ShowEntourageBanner(int eid, string message)
+                {
+                    StartCoroutine(PulseEntourageIcon(isHome, eid));
+                    AudioManager.Instance.PlayPowerup(1);
+                    if (_buffBeltGo != null && _buffBeltText != null && _buffBeltMedal != null)
+                    {
+                        _buffBeltGo.SetActive(true);
+                        _buffBeltMedal.sprite = GetUiSprite($"Original/images/EntourageAbility{eid:00}");
+                        _buffBeltText.text = message;
+                    }
+                }
+
+                foreach (int eid in entourages)
+                {
+                    int myTot = isHome ? _match.LastHomeTotal : _match.LastAwayTotal;
+                    int oppTot = isHome ? _match.LastAwayTotal : _match.LastHomeTotal;
+
+                    if (eid == 3 && myTot < 5 && myFaces.Length > 0) // Miguel Panini: Re-roll any die when total < 5
+                    {
+                        int chosen = 0;
+                        int minV = int.MaxValue;
+                        for (int d = 0; d < myFaces.Length; d++)
+                            if (myFaces[d] < minV) { minV = myFaces[d]; chosen = d; }
+                        if (isHuman && myFaces.Length > 1)
+                        {
+                            int[] elig = new int[myFaces.Length];
+                            for (int e = 0; e < elig.Length; e++) elig[e] = e;
+                            yield return StartCoroutine(SelectBuffTarget(side, elig, chosen, c => chosen = c));
+                        }
+                        int slotIdx = chosen < mySlots.Length ? mySlots[chosen] : 0;
+                        int rolled = _match.RollSingleDieForSlot(isHome, slotIdx);
+                        ApplyDieChange(side, chosen, rolled);
+                        ShowEntourageBanner(3, $"MIGUEL PANINI RE-ROLLS -> {rolled}!");
+                        yield return new WaitForSeconds(0.60f);
+                    }
+                    else if (eid == 7 && (oppTot - myTot) > 5 && myFaces.Length > 0) // Dicey Dave: Double 1 die when losing roll by >5
+                    {
+                        int chosen = 0;
+                        int maxV = -1;
+                        for (int d = 0; d < myFaces.Length; d++)
+                            if (myFaces[d] > maxV) { maxV = myFaces[d]; chosen = d; }
+                        if (isHuman && myFaces.Length > 1)
+                        {
+                            int[] elig = new int[myFaces.Length];
+                            for (int e = 0; e < elig.Length; e++) elig[e] = e;
+                            yield return StartCoroutine(SelectBuffTarget(side, elig, chosen, c => chosen = c));
+                        }
+                        ApplyDieChange(side, chosen, myFaces[chosen] * 2);
+                        ShowEntourageBanner(7, "DICEY DAVE DOUBLES A DIE!");
+                        yield return new WaitForSeconds(0.60f);
+                    }
+                    else if (eid == 8 && _match.SecondsRemaining < 420 && !(isHome ? _homeShirleyUsed : _awayShirleyUsed))
+                    {
+                        if (isHome) _homeShirleyUsed = true;
+                        else _awayShirleyUsed = true;
+
+                        int deltaSec = 0;
+                        int myScore = isHome ? _match.HomeScore : _match.AwayScore;
+                        int oppScore = isHome ? _match.AwayScore : _match.HomeScore;
+                        if (isHuman && !Application.isBatchMode)
+                        {
+                            yield return StartCoroutine(ShowManipulateTimeOverlay(choice => deltaSec = choice));
+                        }
+                        else
+                        {
+                            deltaSec = (myScore <= oppScore) ? 300 : -300;
+                        }
+                        _match.AdjustMatchClock(deltaSec);
+                        if (_matchClock != null) _matchClock.text = _match.ClockText();
+                        ShowEntourageBanner(8, deltaSec > 0 ? "SHIRLEY TWEETY ADDS +5 MIN!" : "SHIRLEY TWEETY SUBTRACTS 5 MIN!");
+                        yield return new WaitForSeconds(0.60f);
+                    }
+                    else if (eid == 9 && oppTot > 20 && myFaces.Length > 0 && oppFaces.Length > 0) // Jeff Blather: Swap powerups of 3 dice
+                    {
+                        int count = Mathf.Min(3, Mathf.Min(myFaces.Length, oppFaces.Length));
+                        bool anySwapped = false;
+                        for (int d = 0; d < count; d++)
+                        {
+                            int myMod = myFaces[d] - (d < myOrig.Length ? myOrig[d] : myFaces[d]);
+                            int oppMod = oppFaces[d] - (d < oppOrig.Length ? oppOrig[d] : oppFaces[d]);
+                            if (myMod == oppMod || (d < oppImmune.Length && oppImmune[d])) continue;
+                            int newMy = Mathf.Max(1, myFaces[d] - myMod + oppMod);
+                            int newOpp = Mathf.Max(1, oppFaces[d] - oppMod + myMod);
+                            ApplyDieChange(side, d, newMy);
+                            ApplyDieChange(oppSide, d, newOpp);
+                            anySwapped = true;
+                        }
+                        if (anySwapped)
+                        {
+                            ShowEntourageBanner(9, "JEFF BLATHER SWAPS POWERUPS!");
+                            yield return new WaitForSeconds(0.65f);
+                        }
+                    }
+                    else if (eid == 10 && oppTot > myTot && oppFaces.Length > 0) // Lionel Scrimmage: Flip + and - for one die
+                    {
+                        int bestOppIdx = -1;
+                        int bestDelta = 0;
+                        for (int d = 0; d < oppFaces.Length; d++)
+                        {
+                            if (d < oppImmune.Length && oppImmune[d]) continue;
+                            int delta = oppFaces[d] - (d < oppOrig.Length ? oppOrig[d] : oppFaces[d]);
+                            if (delta > bestDelta) { bestDelta = delta; bestOppIdx = d; }
+                        }
+                        if (bestOppIdx >= 0 && bestDelta > 0)
+                        {
+                            int flipped = Mathf.Max(1, (bestOppIdx < oppOrig.Length ? oppOrig[bestOppIdx] : oppFaces[bestOppIdx]) - bestDelta);
+                            ApplyDieChange(oppSide, bestOppIdx, flipped);
+                            ShowEntourageBanner(10, "LIONEL SCRIMMAGE FLIPS POWERUP!");
+                            yield return new WaitForSeconds(0.60f);
+                        }
+                        else
+                        {
+                            int bestOwnIdx = -1;
+                            int bestNeg = 0;
+                            for (int d = 0; d < myFaces.Length; d++)
+                            {
+                                int delta = (d < myOrig.Length ? myOrig[d] : myFaces[d]) - myFaces[d];
+                                if (delta > bestNeg) { bestNeg = delta; bestOwnIdx = d; }
+                            }
+                            if (bestOwnIdx >= 0 && bestNeg > 0)
+                            {
+                                int flippedOwn = (bestOwnIdx < myOrig.Length ? myOrig[bestOwnIdx] : myFaces[bestOwnIdx]) + bestNeg;
+                                ApplyDieChange(side, bestOwnIdx, flippedOwn);
+                                ShowEntourageBanner(10, "LIONEL SCRIMMAGE FLIPS DEBUFF!");
+                                yield return new WaitForSeconds(0.60f);
+                            }
+                        }
+                    }
+                    else if (eid == 17 && produced2x && oppFaces.Length > 0) // Parshall LeBlynde: Reduce an enemy die by half
+                    {
+                        int targetOpp = 0;
+                        int maxV = -1;
+                        for (int d = 0; d < oppFaces.Length; d++)
+                        {
+                            if (d < oppImmune.Length && oppImmune[d]) continue;
+                            if (oppFaces[d] > maxV) { maxV = oppFaces[d]; targetOpp = d; }
+                        }
+                        if (maxV > 0 && !(targetOpp < oppImmune.Length && oppImmune[targetOpp]))
+                        {
+                            if (isHuman && oppFaces.Length > 1)
+                            {
+                                int[] elig = new int[oppFaces.Length];
+                                for (int e = 0; e < elig.Length; e++) elig[e] = e;
+                                yield return StartCoroutine(SelectBuffTarget(oppSide, elig, targetOpp, c => targetOpp = c));
+                            }
+                            ApplyDieChange(oppSide, targetOpp, Mathf.Max(1, oppFaces[targetOpp] / 2));
+                            ShowEntourageBanner(17, "PARSHALL HALVES ENEMY DIE!");
+                            yield return new WaitForSeconds(0.60f);
+                        }
+                    }
+                    else if (eid == 18 && myTot < 10 && oppFaces.Length > 0) // The Special One: Anchor 3 enemy dice (strip powerups)
+                    {
+                        int count = Mathf.Min(3, oppFaces.Length);
+                        bool anyAnchored = false;
+                        for (int d = 0; d < count; d++)
+                        {
+                            if (d < oppImmune.Length && oppImmune[d]) continue;
+                            int origVal = d < oppOrig.Length ? oppOrig[d] : oppFaces[d];
+                            if (oppFaces[d] > origVal)
+                            {
+                                ApplyDieChange(oppSide, d, origVal);
+                                anyAnchored = true;
+                            }
+                        }
+                        if (anyAnchored)
+                        {
+                            ShowEntourageBanner(18, "THE SPECIAL ONE ANCHORS DICE!");
+                            yield return new WaitForSeconds(0.60f);
+                        }
+                    }
+                    else if (eid == 20) // Pierre Bear Stare: Check any die buffed > 7 after powerups
+                    {
+                        for (int d = 0; d < oppFaces.Length && d < oppSlots.Length; d++)
+                        {
+                            int origVal = d < oppOrig.Length ? oppOrig[d] : oppFaces[d];
+                            if (oppFaces[d] > 7 && origVal <= 7)
+                            {
+                                bool oppIsHome = oppSide == 0;
+                                int card = _match.IssueYellowCard(oppIsHome, oppSlots[d]);
+                                var rigs = oppIsHome ? _homePlayers : _awayPlayers;
+                                if (rigs != null && oppSlots[d] < rigs.Length && rigs[oppSlots[d]] != null)
+                                    rigs[oppSlots[d]].GetComponent<LayeredPlayerRig>()?.SetCardState(_match.HasYellowCard(oppIsHome, oppSlots[d]), _match.HasRedCard(oppIsHome, oppSlots[d]));
+                                if (card == 2) ApplyDieChange(oppSide, d, 0);
+                                ShowEntourageBanner(20, card == 2 ? "SECOND YELLOW! RED CARD!" : "PIERRE BEAR ISSUES YELLOW CARD!");
+                                yield return new WaitForSeconds(0.60f);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private IEnumerator ShowManipulateTimeOverlay(Action<int> onChosen)
+        {
+            if (_overlayContainer == null)
+            {
+                onChosen?.Invoke(300);
+                yield break;
+            }
+            var scrim = AddStretchPanel("TimeManipScrim", _overlayContainer, new Color(0f, 0f, 0f, 0.72f));
+            scrim.raycastTarget = true;
+
+            AddText("SHIRLEY TWEETY\nMANIPULATE MATCH CLOCK", scrim.transform, 18, Gold,
+                new Vector2(0.08f, 0.64f), new Vector2(0.92f, 0.78f));
+
+            int picked = 0;
+            AddSpriteButton("Add5Min", "Original/sprites/GoalAnimationSS4/Add5Min",
+                "Original/sprites/GoalAnimationSS4/Add5MinPressed", scrim.transform,
+                new Vector2(0.32f, 0.44f), new Vector2(0.38f, 0.24f), () => picked = 300);
+
+            AddSpriteButton("Minus5Min", "Original/sprites/GoalAnimationSS4/Minus5Min",
+                "Original/sprites/GoalAnimationSS4/Minus5MinPressed", scrim.transform,
+                new Vector2(0.68f, 0.44f), new Vector2(0.38f, 0.24f), () => picked = -300);
+
+            float waitElapsed = 0f;
+            while (picked == 0 && waitElapsed < 15f)
+            {
+                waitElapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (picked == 0) picked = 300;
+            Destroy(scrim.gameObject);
+            onChosen?.Invoke(picked);
+        }
+
         private IEnumerator PlayGoalAnimation(bool homeScored)
         {
             if (_overlayContainer == null) yield break;
@@ -5943,10 +6881,9 @@ namespace DiceSoccer
             AudioManager.Instance.PlayWhistle();
             TriggerHaptic();
 
-            // Bring header scoreboard to front so it remains visible on top of sunburst rays (matching media_1792577925152_01871c83.png)
+            // Bring header scoreboard to front so it remains visible on top of sunburst rays
             if (_matchScoreboard != null) _matchScoreboard.transform.SetAsLastSibling();
 
-            // Rotating sunburst background rays (covering whole screen behind scoreboard, matching media_1792577925152_01871c83.png)
             var sunburst = AddResourceImage("GoalSunburst",
                 "Original/sprites/GoalAnimationSS4/GoalSunburstPattern", _overlayContainer,
                 new Vector2(0.5f, 0.52f), new Vector2(0.5f, 0.52f));
@@ -5954,22 +6891,20 @@ namespace DiceSoccer
             sunburst.preserveAspect = false;
             sunburst.raycastTarget = false;
 
-            // Giant Comic "GOAL!" with explosion and flaming ball
             var banner = AddResourceImage("GoalBanner",
                 "Original/sprites/Prompt1/Goal", _overlayContainer,
-                new Vector2(0.5f, 0.54f), new Vector2(0.5f, 0.54f));
-            banner.rectTransform.sizeDelta = new Vector2(580f, 475f);
+                new Vector2(0.5f, 0.58f), new Vector2(0.5f, 0.58f));
+            banner.rectTransform.sizeDelta = new Vector2(560f, 450f);
             banner.preserveAspect = true;
 
-            // Multicolored Confetti raining down across the field (vibrant authentic confetti colors)
             Color32[] confettiColors = new Color32[]
             {
-                new Color32(235, 45, 45, 255), // Red
-                new Color32(40, 120, 245, 255), // Blue
-                new Color32(255, 60, 180, 255), // Pink/Magenta
-                new Color32(255, 220, 20, 255), // Yellow
-                new Color32(45, 200, 75, 255),  // Green
-                new Color32(160, 50, 230, 255)  // Purple
+                new Color32(235, 45, 45, 255),
+                new Color32(40, 120, 245, 255),
+                new Color32(255, 60, 180, 255),
+                new Color32(255, 220, 20, 255),
+                new Color32(45, 200, 75, 255),
+                new Color32(160, 50, 230, 255)
             };
             var confettiList = new List<Image>();
             for (var i = 0; i < 35; i++)
@@ -5986,12 +6921,73 @@ namespace DiceSoccer
                 confettiList.Add(cImg);
             }
 
-            // Authentic Streaker running across the bottom grass (media_1792577925152_01871c83.png)
-            var streakerImg = AddResourceImage("StreakerRunner",
-                "Original/sprites/GoalAnimationSS4/Streaker01", _overlayContainer,
-                new Vector2(-0.15f, 0.17f), new Vector2(-0.15f, 0.17f));
-            streakerImg.rectTransform.sizeDelta = new Vector2(120f, 175f);
-            streakerImg.preserveAspect = true;
+            var celebration = _match != null ? _match.LastGoalCelebration : GoalCelebrationType.Streaker;
+            var animObjects = new List<GameObject>();
+            Image streakerImg = null;
+            RectTransform goalCharRect = null;
+            var penguinRigs = new List<(RectTransform root, Image leftFin, Image rightFin, float baseY)>();
+
+            if (celebration == GoalCelebrationType.Streaker)
+            {
+                streakerImg = AddResourceImage("StreakerRunner",
+                    "Original/sprites/GoalAnimationSS4/Streaker01", _overlayContainer,
+                    new Vector2(-0.15f, 0.17f), new Vector2(-0.15f, 0.17f));
+                streakerImg.rectTransform.sizeDelta = new Vector2(120f, 175f);
+                streakerImg.preserveAspect = true;
+                animObjects.Add(streakerImg.gameObject);
+            }
+            else if (celebration == GoalCelebrationType.Player)
+            {
+                PlayerData[] scorerTeam = homeScored ? _match?.HomeTeam : _match?.AwayTeam;
+                PlayerData scorer = (scorerTeam != null && scorerTeam.Length > 5 && scorerTeam[5] != null) ? scorerTeam[5] : null;
+                MatchKitAppearance kit = homeScored
+                    ? MatchKitAppearance.FromIds(_catalog, _currentShirtId, _currentShirtColorId, _currentSleeveColorId, _currentPatternStyle, _currentPatternColorId, _currentPantsId)
+                    : MatchKitAppearance.FromFixture(_catalog, _currentFixture);
+                Color32 skinCol = PlayerBodySprites.GetSkinColor(scorer != null ? scorer.skinColour : 1);
+
+                var charGo = new GameObject("GoalCharacterRig", typeof(RectTransform));
+                charGo.transform.SetParent(_overlayContainer, false);
+                goalCharRect = charGo.GetComponent<RectTransform>();
+                goalCharRect.anchorMin = goalCharRect.anchorMax = new Vector2(0.5f, 0.24f);
+                goalCharRect.sizeDelta = new Vector2(150f, 200f);
+                goalCharRect.localScale = new Vector3(homeScored ? -1.45f : 1.45f, 1.45f, 1f);
+                animObjects.Add(charGo);
+
+                const string gs = "Original/sprites/GoalAnimationSS4/";
+                Vector2 gSize = new Vector2(124f, 162f) * 0.85f;
+                PlayerBodySprites.CreateLayer("Shirt", charGo.transform, gs + "GoalCharacterShirtColour", kit.ShirtColor, Vector2.zero, gSize);
+                PlayerBodySprites.CreateLayer("Sleeve", charGo.transform, gs + "GoalCharacterSleeveColour", kit.SleeveColor, Vector2.zero, gSize);
+                if (kit.PatternStyle > 0 && kit.PatternStyle <= 7)
+                    PlayerBodySprites.CreateLayer("Design", charGo.transform, $"{gs}GoalCharacterShirtDesign{kit.PatternStyle}", kit.PatternColor, Vector2.zero, gSize);
+                PlayerBodySprites.CreateLayer("Shoes", charGo.transform, gs + "GoalCharacterShoesColour", kit.SleeveColor, Vector2.zero, gSize);
+                PlayerBodySprites.CreateLayer("Shorts", charGo.transform, gs + "GoalCharacterShortsColour", kit.PantsColor, Vector2.zero, gSize);
+                PlayerBodySprites.CreateLayer("Skin", charGo.transform, gs + "GoalCharacterSkinOutline", skinCol, Vector2.zero, gSize);
+                var head = PlayerBodySprites.CreateLayer("Head", charGo.transform, PlayerBodySprites.ResolveHeadPath(scorer, 6), Color.white, new Vector2(6f, 62f), new Vector2(78f, 62f));
+                if (head.sprite != null) head.rectTransform.sizeDelta = head.sprite.rect.size * 0.85f;
+            }
+            else if (celebration == GoalCelebrationType.Penguin)
+            {
+                const string gs = "Original/sprites/GoalAnimationSS4/";
+                float[] xs = { 0.50f, 0.27f, 0.73f };
+                float[] scales = { 0.80f, 0.54f, 0.54f };
+                float[] ys = { 0.23f, 0.20f, 0.20f };
+                for (int pIdx = 0; pIdx < 3; pIdx++)
+                {
+                    var pgGo = new GameObject($"GoalPenguin{pIdx}", typeof(RectTransform));
+                    pgGo.transform.SetParent(_overlayContainer, false);
+                    var pRect = pgGo.GetComponent<RectTransform>();
+                    pRect.anchorMin = pRect.anchorMax = new Vector2(xs[pIdx], ys[pIdx]);
+                    pRect.sizeDelta = new Vector2(220f, 180f);
+                    pRect.localScale = new Vector3(scales[pIdx], scales[pIdx], 1f);
+                    animObjects.Add(pgGo);
+
+                    Vector2 pSize = new Vector2(336f, 250f);
+                    PlayerBodySprites.CreateLayer("Body", pgGo.transform, gs + "PenguinBody", Color.white, Vector2.zero, pSize);
+                    var lf = PlayerBodySprites.CreateLayer("LeftFin", pgGo.transform, gs + "PenguinLeftFin1", Color.white, Vector2.zero, pSize);
+                    var rf = PlayerBodySprites.CreateLayer("RightFin", pgGo.transform, gs + "PenguinRightFin1", Color.white, Vector2.zero, pSize);
+                    penguinRigs.Add((pRect, lf, rf, ys[pIdx]));
+                }
+            }
 
             var elapsed = 0f;
             const float totalDuration = 1.6f;
@@ -6003,19 +6999,16 @@ namespace DiceSoccer
                 if (sunburst != null)
                     sunburst.rectTransform.Rotate(0f, 0f, 45f * Time.deltaTime);
 
-                // Comic "GOAL!" elastic punch entrance & breathing
                 if (banner != null)
                 {
                     if (progress < 0.18f)
                     {
-                        float p = progress / 0.18f;
-                        float scale = Mathf.Lerp(0f, 1.25f, p);
+                        float scale = Mathf.Lerp(0f, 1.25f, progress / 0.18f);
                         banner.rectTransform.localScale = new Vector3(scale, scale, 1f);
                     }
                     else if (progress < 0.28f)
                     {
-                        float p = (progress - 0.18f) / 0.10f;
-                        float scale = Mathf.Lerp(1.25f, 1.0f, p);
+                        float scale = Mathf.Lerp(1.25f, 1.0f, (progress - 0.18f) / 0.10f);
                         banner.rectTransform.localScale = new Vector3(scale, scale, 1f);
                     }
                     else
@@ -6025,18 +7018,43 @@ namespace DiceSoccer
                     }
                 }
 
-                // Streaker running across screen from left to right with joyful bounce
                 if (streakerImg != null)
                 {
                     var runX = Mathf.Lerp(-0.15f, 1.15f, progress);
                     var bob = Mathf.Abs(Mathf.Sin(elapsed * 12f)) * 0.025f;
                     streakerImg.rectTransform.anchorMin = streakerImg.rectTransform.anchorMax = new Vector2(runX, 0.17f + bob);
-
                     int frame = ((int)(elapsed * 18f) % 12) + 1;
                     streakerImg.sprite = GetUiSprite($"Original/sprites/GoalAnimationSS4/Streaker{frame:00}");
                 }
 
-                // Confetti drifting and spinning
+                if (goalCharRect != null)
+                {
+                    float slideX = homeScored ? Mathf.Lerp(0.18f, 0.56f, Mathf.SmoothStep(0f, 1f, progress))
+                                              : Mathf.Lerp(0.82f, 0.44f, Mathf.SmoothStep(0f, 1f, progress));
+                    float hop = Mathf.Abs(Mathf.Sin(elapsed * 10f)) * 0.055f;
+                    goalCharRect.anchorMin = goalCharRect.anchorMax = new Vector2(slideX, 0.22f + hop);
+                    goalCharRect.localEulerAngles = new Vector3(0f, 0f, Mathf.Sin(elapsed * 10f) * 7f);
+                }
+
+                if (penguinRigs.Count > 0)
+                {
+                    int finFrame = ((int)(elapsed / 0.08f) % 9) + 1;
+                    var ls = PlayerBodySprites.LoadSprite($"Original/sprites/GoalAnimationSS4/PenguinLeftFin{finFrame}");
+                    var rs = PlayerBodySprites.LoadSprite($"Original/sprites/GoalAnimationSS4/PenguinRightFin{finFrame}");
+                    for (int p = 0; p < penguinRigs.Count; p++)
+                    {
+                        var (pRect, lf, rf, bY) = penguinRigs[p];
+                        if (lf != null && ls != null) lf.sprite = ls;
+                        if (rf != null && rs != null) rf.sprite = rs;
+                        if (pRect != null)
+                        {
+                            float waddle = Mathf.Abs(Mathf.Sin(elapsed * 11f + p * 1.1f)) * 0.035f;
+                            pRect.anchorMin = pRect.anchorMax = new Vector2(pRect.anchorMin.x, bY + waddle);
+                            pRect.localEulerAngles = new Vector3(0f, 0f, Mathf.Sin(elapsed * 9f + p) * 6f);
+                        }
+                    }
+                }
+
                 for (var i = 0; i < confettiList.Count; i++)
                 {
                     var c = confettiList[i];
@@ -6051,7 +7069,7 @@ namespace DiceSoccer
                 yield return null;
             }
 
-            if (streakerImg != null) Destroy(streakerImg.gameObject);
+            foreach (var go in animObjects) if (go != null) Destroy(go);
             foreach (var c in confettiList) if (c != null) Destroy(c.gameObject);
             if (banner != null) Destroy(banner.gameObject);
             if (sunburst != null) Destroy(sunburst.gameObject);
@@ -6274,7 +7292,7 @@ namespace DiceSoccer
 
         private void ShowGameOverModal()
         {
-            if (_overlayContainer == null) return;
+            var container = _overlayContainer != null ? _overlayContainer : (_safeArea != null ? _safeArea : _canvas.transform);
             Time.timeScale = 1.0f;
 
             if (_isLocalMultiplayer)
@@ -6293,7 +7311,7 @@ namespace DiceSoccer
                     AudioManager.Instance.PlayEffect("ChildrenAaaah", 1f, 0.9f);
                 }
 
-                var mpBackdrop = AddPanel("GameOverBackdrop", _overlayContainer,
+                var mpBackdrop = AddPanel("GameOverBackdrop", container,
                     new Color(0f, 0f, 0f, 0.88f), new Vector2(0.5f, 0.5f), Vector2.one);
                 mpBackdrop.raycastTarget = true;
 
@@ -6391,7 +7409,7 @@ namespace DiceSoccer
             if (_lastPayout > 0)
                 AudioManager.Instance.PlayCash();
 
-            var backdrop = AddPanel("GameOverBackdrop", _overlayContainer,
+            var backdrop = AddPanel("GameOverBackdrop", container,
                 new Color(0f, 0f, 0f, 0.82f), new Vector2(0.5f, 0.5f), Vector2.one);
             backdrop.raycastTarget = true;
 
@@ -7100,15 +8118,15 @@ namespace DiceSoccer
                 _careerCash += extra;
                 _lastPayout += extra;
             }
-            if (_equippedEntourageIds.Contains(13)) // Sylvester Punter: +15k on win, -15k on loss
+            if (_equippedEntourageIds.Contains(13)) // Sylvester Punter: +15k on win, -15k if you don't win or abandon
             {
                 if (won) { _careerCash += 15000; _lastPayout += 15000; }
-                else if (!drew) { _careerCash = Mathf.Max(0, _careerCash - 15000); _lastPayout -= 15000; }
+                else { _careerCash = Mathf.Max(0, _careerCash - 15000); _lastPayout -= 15000; }
             }
-            if (_equippedEntourageIds.Contains(14)) // Hilly Will: +50k on win, -50k on loss
+            if (_equippedEntourageIds.Contains(14)) // Hilly Will: +50k on win, -50k if you don't win or abandon
             {
                 if (won) { _careerCash += 50000; _lastPayout += 50000; }
-                else if (!drew) { _careerCash = Mathf.Max(0, _careerCash - 50000); _lastPayout -= 50000; }
+                else { _careerCash = Mathf.Max(0, _careerCash - 50000); _lastPayout -= 50000; }
             }
 
             _careerCash += _lastPayout;
@@ -7323,31 +8341,32 @@ namespace DiceSoccer
 
         private void ShowAchievementUnlockedModal(AchievementData ach)
         {
-            if (_overlayContainer == null) return;
+            var container = _overlayContainer != null ? _overlayContainer : (_safeArea != null ? _safeArea : _canvas.transform);
             var modal = new GameObject("AchievementUnlockedModal", typeof(RectTransform), typeof(Image));
-            modal.transform.SetParent(_overlayContainer, false);
+            modal.transform.SetParent(container, false);
             var modalRect = modal.GetComponent<RectTransform>();
             modalRect.anchorMin = Vector2.zero;
             modalRect.anchorMax = Vector2.one;
-            modal.GetComponent<Image>().color = new Color(0, 0, 0, 0.75f);
+            modal.GetComponent<Image>().color = new Color(0, 0, 0, 0.80f);
 
             var box = AddResourceImage("Box", "Original/sprites/AchievementsSS4/LongDialogBox", modal.transform,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            box.rectTransform.sizeDelta = new Vector2(560f, 420f);
+            box.rectTransform.sizeDelta = new Vector2(420f, 520f);
             box.preserveAspect = false;
 
             var trophyId = Mathf.Clamp(ach.id, 1, 72);
             var trophy = AddResourceImage("Trophy", $"Original/images/Trophy{trophyId:00}", box.transform,
-                new Vector2(0.5f, 0.72f), new Vector2(0.5f, 0.72f));
-            trophy.rectTransform.sizeDelta = new Vector2(110f, 130f);
+                new Vector2(0.5f, 0.58f), new Vector2(0.5f, 0.58f));
+            trophy.rectTransform.sizeDelta = new Vector2(150f, 150f);
             trophy.preserveAspect = true;
 
-            AddText("ACHIEVEMENT UNLOCKED!", box.transform, 22, Gold,
-                new Vector2(0.05f, 0.86f), new Vector2(0.95f, 0.96f));
+            var title = AddText("ACHIEVEMENT UNLOCKED!", box.transform, 21, Ink,
+                new Vector2(0.06f, 0.78f), new Vector2(0.94f, 0.89f));
+            title.fontStyle = FontStyle.Bold;
 
             var desc = string.IsNullOrEmpty(ach.unlockedDescription) ? ach.lockedDescription : ach.unlockedDescription;
-            AddText(desc, box.transform, 16, Paper,
-                new Vector2(0.08f, 0.38f), new Vector2(0.92f, 0.54f));
+            AddText(desc, box.transform, 15, Ink,
+                new Vector2(0.08f, 0.30f), new Vector2(0.92f, 0.44f));
 
             var rewardText = "";
             if (ach.goldReward > 0) rewardText += $"+{ach.goldReward:N0} Cash  ";
@@ -7355,12 +8374,12 @@ namespace DiceSoccer
             if (ach.pantsReward > 0) rewardText += $"Unlocked Pants #{ach.pantsReward}";
             if (!string.IsNullOrEmpty(rewardText))
             {
-                AddText($"Reward: {rewardText}", box.transform, 14, Grass,
-                    new Vector2(0.08f, 0.26f), new Vector2(0.92f, 0.36f));
+                AddText($"Reward: {rewardText}", box.transform, 14, new Color32(42, 138, 36, 255),
+                    new Vector2(0.08f, 0.21f), new Vector2(0.92f, 0.29f)).fontStyle = FontStyle.Bold;
             }
 
-            AddButton("DONE", box.transform, Gold,
-                new Vector2(0.5f, 0.12f), new Vector2(0.44f, 0.12f), () => Destroy(modal));
+            AddSpriteButton("DoneBtn", "Original/images/DoneButton", "Original/images/DoneButtonPressed", box.transform,
+                new Vector2(0.5f, 0.09f), new Vector2(0.48f, 0.10f), () => Destroy(modal));
         }
 
         private Image[] CreateDiceRowBelt(Transform parent, bool home)
@@ -7716,39 +8735,7 @@ namespace DiceSoccer
             if (ab == null)
                 return GetUiSprite("Original/sprites/Buff6/DisplayBuffTimes");
 
-            int spriteId = ab.id;
-            switch (ab.id)
-            {
-                case 29:
-                case 30: spriteId = 28; break;
-                case 50:
-                case 55: spriteId = 46; break;
-                case 52: spriteId = 42; break;
-                case 53:
-                case 67:
-                case 68: spriteId = 33; break;
-                case 54:
-                case 66:
-                case 74:
-                case 75: spriteId = 39; break;
-                case 56:
-                case 58: spriteId = 41; break;
-                case 57: spriteId = 22; break;
-                case 59: spriteId = 27; break;
-                case 61:
-                case 62:
-                case 63: spriteId = 51; break;
-                case 69:
-                case 71: spriteId = 34; break;
-                case 70: spriteId = 19; break;
-                case 72:
-                case 73: spriteId = 37; break;
-                case 76:
-                case 78:
-                case 79:
-                case 81: spriteId = 43; break;
-                case 80: spriteId = 47; break;
-            }
+            int spriteId = ResolveAbilitySpriteId(ab.id);
 
             var medalSprite = TryGetUiSprite($"Original/sprites/Buff6/BuffMedal{spriteId}");
             if (medalSprite != null) return medalSprite;
@@ -7825,8 +8812,8 @@ namespace DiceSoccer
             _inEncounterAnimation = true;
             if (_shakePrompt != null) _shakePrompt.gameObject.SetActive(false);
 
-            float pitchScale = (_fieldPitchRoot != null && _fieldPitchRoot.sizeDelta.y > 960f)
-                ? _fieldPitchRoot.sizeDelta.y / 960f : 1f;
+            float pitchScale = (_fieldPitchRoot != null && _fieldPitchRoot.localScale.y > 0f)
+                ? _fieldPitchRoot.localScale.y : 1f;
             var startPitchX = GetPitchOffsetForLocation(fromLoc) * pitchScale;
             var targetPitchX = GetPitchOffsetForLocation(toLoc) * pitchScale;
 
@@ -8012,6 +8999,9 @@ namespace DiceSoccer
 
                         float lean = (item.isHome ? -1f : 1f) * (isHomeAdvancing ? stepTilt : -stepTilt);
                         p.rectTransform.localEulerAngles = new Vector3(0f, 0f, lean);
+
+                        var rig = p.GetComponent<LayeredPlayerRig>();
+                        if (rig != null) rig.SetRunFrame((int)(elapsed * 20f));
                     }
                 }
 
@@ -8051,8 +9041,8 @@ namespace DiceSoccer
 
         private IEnumerator SmoothShiftFieldAndBall(int fromLoc, int toLoc, int possession)
         {
-            float pitchScale = (_fieldPitchRoot != null && _fieldPitchRoot.sizeDelta.y > 960f)
-                ? _fieldPitchRoot.sizeDelta.y / 960f : 1f;
+            float pitchScale = (_fieldPitchRoot != null && _fieldPitchRoot.localScale.y > 0f)
+                ? _fieldPitchRoot.localScale.y : 1f;
             var startPitchX = GetPitchOffsetForLocation(fromLoc) * pitchScale;
             var targetPitchX = GetPitchOffsetForLocation(toLoc) * pitchScale;
             var startBallPos = _ballMarker != null ? _ballMarker.rectTransform.anchorMin : GetBallPosition(fromLoc, possession);
@@ -8095,6 +9085,7 @@ namespace DiceSoccer
                         {
                             _homePlayers[i].rectTransform.anchoredPosition = new Vector2(0f, bounce);
                             _homePlayers[i].rectTransform.localEulerAngles = new Vector3(0f, 0f, -tilt);
+                            _homePlayers[i].GetComponent<LayeredPlayerRig>()?.SetRunFrame((int)(elapsed * 20f));
                         }
                 }
                 if (_awayPlayers != null)
@@ -8104,6 +9095,7 @@ namespace DiceSoccer
                         {
                             _awayPlayers[i].rectTransform.anchoredPosition = new Vector2(0f, bounce);
                             _awayPlayers[i].rectTransform.localEulerAngles = new Vector3(0f, 0f, tilt);
+                            _awayPlayers[i].GetComponent<LayeredPlayerRig>()?.SetRunFrame((int)(elapsed * 20f));
                         }
                 }
 
@@ -8127,6 +9119,7 @@ namespace DiceSoccer
                     {
                         _homePlayers[i].rectTransform.anchoredPosition = Vector2.zero;
                         _homePlayers[i].rectTransform.localEulerAngles = Vector3.zero;
+                        _homePlayers[i].GetComponent<LayeredPlayerRig>()?.SetIdlePose();
                     }
             if (_awayPlayers != null)
                 for (int i = 0; i < _awayPlayers.Length; i++)
@@ -8134,6 +9127,7 @@ namespace DiceSoccer
                     {
                         _awayPlayers[i].rectTransform.anchoredPosition = Vector2.zero;
                         _awayPlayers[i].rectTransform.localEulerAngles = Vector3.zero;
+                        _awayPlayers[i].GetComponent<LayeredPlayerRig>()?.SetIdlePose();
                     }
 
             if (_ballShadow != null) _ballShadow.transform.SetAsLastSibling();
@@ -8352,42 +9346,31 @@ namespace DiceSoccer
         {
             var players = new Image[lineup.Length];
             var scales = new float[lineup.Length];
+            var kit = home
+                ? MatchKitAppearance.FromIds(_catalog, _currentShirtId, _currentShirtColorId, _currentSleeveColorId, _currentPatternStyle, _currentPatternColorId, _currentPantsId)
+                : MatchKitAppearance.FromFixture(_catalog, _currentFixture);
 
             for (var slot = 0; slot < lineup.Length; slot++)
             {
                 var pData = lineup[slot];
-                var resourcePath = GetPlayerFigurePath(pData);
-                var pId = pData != null ? pData.id : (slot + 1);
 
                 var playerGo = new GameObject($"{(home ? "Home" : "Away")}Player{slot + 1}", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
                 playerGo.transform.SetParent(parent, false);
                 var player = playerGo.GetComponent<Image>();
-                player.sprite = GetUiSprite(resourcePath);
-                // Pin pivot to boot soles (y=330 in 200x340 sprite => normalized 0.032f)
+                // Assign root sprite transparently so root Image satisfies non-null sprite checks while LayeredPlayerRig renders body/kit parts
+                player.sprite = GetUiSprite("Original/sprites/PlayerBody3/Shadow");
+                // Pin pivot to boot soles
                 player.rectTransform.pivot = new Vector2(0.5f, 0.032f);
                 player.rectTransform.sizeDelta = new Vector2(140f, 238f);
-                player.color = Color.white;
+                player.color = Color.clear;
                 player.raycastTarget = false;
                 player.preserveAspect = true;
 
-                // Calibrate visual height so junior squad members stand uniformly alongside adult figures
-                float vScale = GetPlayerFigureVisualScale(pId);
+                float vScale = 1.0f;
                 scales[slot] = vScale;
                 player.rectTransform.localScale = new Vector3((home ? -1f : 1f) * vScale, vScale, 1f);
 
-                // Add shadow under player feet (1:1 overlay with 200x340 sprite)
-                var shadowGo = new GameObject("Shadow", typeof(RectTransform), typeof(Image));
-                shadowGo.transform.SetParent(player.transform, false);
-                var shadowRect = shadowGo.GetComponent<RectTransform>();
-                shadowRect.anchorMin = Vector2.zero;
-                shadowRect.anchorMax = Vector2.one;
-                shadowRect.offsetMin = shadowRect.offsetMax = Vector2.zero;
-                var shadowImg = shadowGo.GetComponent<Image>();
-                shadowImg.sprite = GetUiSprite("Original/sprites/PlayerFullFigureSS/PlayerFullFigureShadow");
-                shadowImg.color = new Color(1f, 1f, 1f, 0.85f);
-                shadowImg.preserveAspect = true;
-                shadowImg.raycastTarget = false;
-                shadowGo.transform.SetAsFirstSibling();
+                LayeredPlayerRig.Attach(playerGo, pData, kit, isGoalkeeper: slot == 0, fallbackSlot: slot + 1);
 
                 players[slot] = player;
             }
@@ -8424,12 +9407,18 @@ namespace DiceSoccer
                 var cg = p.GetComponent<CanvasGroup>();
                 if (cg != null) cg.alpha = 1f;
                 float y = activeHome.Length == 1 ? 0.38f : ys[i];
-                float x = activeHome.Length == 1 ? (loc == 2 ? 0.28f : 0.33f) : 0.27f;
+                float x = activeHome.Length == 1 ? (loc == 2 ? 0.30f : 0.34f) : 0.29f;
                 p.rectTransform.anchorMin = p.rectTransform.anchorMax = new Vector2(x, y);
                 p.rectTransform.anchoredPosition = Vector2.zero;
                 p.rectTransform.localEulerAngles = Vector3.zero;
                 float currentScale = (_homePlayerScales != null && slot < _homePlayerScales.Length) ? _homePlayerScales[slot] : 1f;
                 p.rectTransform.localScale = new Vector3(-currentScale, currentScale, 1f);
+                var rig = p.GetComponent<LayeredPlayerRig>();
+                if (rig != null)
+                {
+                    rig.SetIdlePose();
+                    rig.SetCardState(_match.HasYellowCard(true, slot), _match.HasRedCard(true, slot));
+                }
             }
 
             // Position active Away players (face left towards opponent/goal)
@@ -8441,12 +9430,18 @@ namespace DiceSoccer
                 var cg = p.GetComponent<CanvasGroup>();
                 if (cg != null) cg.alpha = 1f;
                 float y = activeAway.Length == 1 ? 0.38f : ys[i];
-                float x = activeAway.Length == 1 ? (loc == 2 ? 0.67f : 0.72f) : 0.73f;
+                float x = activeAway.Length == 1 ? (loc == 2 ? 0.66f : 0.70f) : 0.71f;
                 p.rectTransform.anchorMin = p.rectTransform.anchorMax = new Vector2(x, y);
                 p.rectTransform.anchoredPosition = Vector2.zero;
                 p.rectTransform.localEulerAngles = Vector3.zero;
                 float currentScale = (_awayPlayerScales != null && slot < _awayPlayerScales.Length) ? _awayPlayerScales[slot] : 1f;
                 p.rectTransform.localScale = new Vector3(currentScale, currentScale, 1f);
+                var rig = p.GetComponent<LayeredPlayerRig>();
+                if (rig != null)
+                {
+                    rig.SetIdlePose();
+                    rig.SetCardState(_match.HasYellowCard(false, slot), _match.HasRedCard(false, slot));
+                }
             }
 
             if (_shakePrompt != null)
@@ -8513,7 +9508,7 @@ namespace DiceSoccer
             for (var i = _canvas.transform.childCount - 1; i >= 0; i--)
             {
                 var child = _canvas.transform.GetChild(i);
-                if (child != _safeArea)
+                if (child != _safeArea && child.name != "CanvasBackground")
                 {
                     if (Application.isPlaying)
                         Destroy(child.gameObject);
@@ -8554,20 +9549,37 @@ namespace DiceSoccer
             float screenW = Screen.width;
             float screenH = Screen.height;
 
+            var activeCam = (_canvas != null && _canvas.worldCamera != null) ? _canvas.worldCamera : Camera.main;
+            if (activeCam != null && activeCam.targetTexture != null)
+            {
+                screenW = activeCam.targetTexture.width;
+                screenH = activeCam.targetTexture.height;
+            }
+
+            const float targetAspect = ReferenceWidth / ReferenceHeight; // 640 / 960 = 2/3 = 0.666667f
+            float currentAspect = screenW / Mathf.Max(1f, screenH);
+
+            if (_canvas != null)
+            {
+                var scaler = _canvas.GetComponent<CanvasScaler>();
+                if (scaler != null)
+                {
+                    // On screens wider than 2:3 (tablets/landscape), match height so reference frame never shrinks below 640x960
+                    scaler.matchWidthOrHeight = currentAspect > targetAspect ? 1f : 0f;
+                }
+            }
+
             bool fullScreen = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0) == 1;
 
             if (fullScreen)
             {
-                // True full screen: fills 100% of the display edge-to-edge
+                // True full screen: fills 100% of the display edge-to-edge while centered frames preserve 2:3 proportions
                 _safeArea.anchorMin = Vector2.zero;
                 _safeArea.anchorMax = Vector2.one;
             }
             else
             {
                 // Strict authentic 2:3 aspect ratio letterboxing
-                const float targetAspect = ReferenceWidth / ReferenceHeight; // 640 / 960 = 2/3 = 0.666667f
-                float currentAspect = screenW / screenH;
-
                 if (currentAspect < targetAspect)
                 {
                     // Screen is taller than 2:3 (modern phones) -> top/bottom letterbox bars
@@ -8578,7 +9590,7 @@ namespace DiceSoccer
                 }
                 else
                 {
-                    // Screen is wider than 2:3 (tablets) -> left/right pillarbox bars
+                    // Screen is wider than 2:3 (tablets / batchmode) -> left/right pillarbox bars
                     float viewportWidthFraction = targetAspect / currentAspect;
                     float marginX = (1f - viewportWidthFraction) * 0.5f;
                     _safeArea.anchorMin = new Vector2(marginX, 0f);
@@ -8591,40 +9603,155 @@ namespace DiceSoccer
             _lastSafeArea = area;
             _lastScreenWidth = Screen.width;
             _lastScreenHeight = Screen.height;
+
+            UpdateMatchFieldScale();
+        }
+
+        private float GetMatchPitchScale()
+        {
+            bool fullScreen = PlayerPrefs.GetInt("diceSoccer.fullscreen", 0) == 1;
+            if (!fullScreen)
+                return 1f;
+
+            float canvasW = ReferenceWidth;
+            float canvasH = ReferenceHeight;
+            var activeCam = (_canvas != null && _canvas.worldCamera != null) ? _canvas.worldCamera : Camera.main;
+            const float targetAspect = ReferenceWidth / ReferenceHeight;
+
+            if (activeCam != null && activeCam.targetTexture != null)
+            {
+                float aspect = (float)activeCam.targetTexture.width / Mathf.Max(1, activeCam.targetTexture.height);
+                if (aspect <= targetAspect)
+                    canvasH = ReferenceWidth / aspect;
+                else
+                    canvasW = ReferenceHeight * aspect;
+            }
+            else if (Screen.width > 0 && Screen.height > 0)
+            {
+                float aspect = (float)Screen.width / Screen.height;
+                if (aspect <= targetAspect)
+                    canvasH = ReferenceWidth / aspect;
+                else
+                    canvasW = ReferenceHeight * aspect;
+            }
+
+            if (_safeArea != null)
+            {
+                if (_safeArea.rect.width > canvasW) canvasW = _safeArea.rect.width;
+                if (_safeArea.rect.height > canvasH) canvasH = _safeArea.rect.height;
+            }
+
+            return Mathf.Max(1f, canvasH / ReferenceHeight, canvasW / ReferenceWidth);
+        }
+
+        private void UpdateMatchFieldScale()
+        {
+            if (_fieldPitchRoot == null)
+                return;
+
+            float pitchScale = GetMatchPitchScale();
+            _fieldPitchRoot.localScale = new Vector3(pitchScale, pitchScale, 1f);
+            if (_match != null)
+            {
+                _fieldPitchRoot.anchoredPosition = new Vector2(GetPitchOffsetForLocation(_match.Location) * pitchScale, 0f);
+            }
+        }
+
+        private RectTransform CreateCenteredReferenceFrame(string objectName = "ContentFrame", Transform parent = null)
+        {
+            var go = new GameObject(objectName, typeof(RectTransform));
+            go.transform.SetParent(parent != null ? parent : _safeArea, false);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(ReferenceWidth, ReferenceHeight);
+            return rect;
+        }
+
+        private RectTransform CreateBottomBar(string objectName, float height)
+        {
+            var go = new GameObject(objectName, typeof(RectTransform));
+            go.transform.SetParent(_safeArea, false);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0f);
+            rect.anchorMax = new Vector2(0.5f, 0f);
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(ReferenceWidth, height);
+            return rect;
+        }
+
+        private void AddFullscreenPitchBackdrop()
+        {
+            var backdrop = new GameObject("PitchBackdrop", typeof(RectTransform), typeof(AspectRatioFitter));
+            backdrop.transform.SetParent(_canvas.transform, false);
+            var rect = backdrop.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+
+            var fitter = backdrop.GetComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            fitter.aspectRatio = ReferenceWidth / ReferenceHeight;
+
+            var pitchLeft = AddResourceImage("PitchLeft", "Original/images/GreenField", backdrop.transform,
+                new Vector2(0f, 0f), new Vector2(0.5f, 1f));
+            pitchLeft.preserveAspect = false;
+            pitchLeft.rectTransform.localScale = Vector3.one;
+            pitchLeft.raycastTarget = false;
+
+            var pitchRight = AddResourceImage("PitchRight", "Original/images/GreenField", backdrop.transform,
+                new Vector2(0.5f, 0f), new Vector2(1f, 1f));
+            pitchRight.preserveAspect = false;
+            pitchRight.rectTransform.localScale = new Vector3(-1f, 1f, 1f);
+            pitchRight.raycastTarget = false;
         }
 
         private void AddMenuBackdrop(bool showClouds = false)
         {
-            AddStretchImage("MenuBackground",
+            var bg = AddStretchImage("MenuBackground",
                 "Original/sprites/StartScreenSS/StartScreenBG", _canvas.transform);
+            bg.raycastTarget = false;
+            var fitter = bg.gameObject.AddComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            fitter.aspectRatio = ReferenceWidth / ReferenceHeight;
+
             _safeArea.SetAsLastSibling();
             if (!showClouds)
                 return;
 
             var clouds = AddResourceImage("MenuClouds",
                 "Original/sprites/StartScreenSS/StartScreenClouds",
-                _safeArea, new Vector2(0f, 0.7f), new Vector2(1f, 0.94f));
+                _safeArea, new Vector2(0f, 1f), new Vector2(1f, 1f));
+            clouds.rectTransform.pivot = new Vector2(0.5f, 1f);
+            clouds.rectTransform.anchoredPosition = new Vector2(0f, -58f);
+            clouds.rectTransform.sizeDelta = new Vector2(0f, 230f);
             clouds.raycastTarget = false;
             StartCoroutine(AnimateCloudsDrift(clouds.rectTransform, 14f));
         }
 
-        private void AddMenuHeader(string title, UnityEngine.Events.UnityAction backAction)
+        private RectTransform AddMenuHeader(string title, UnityEngine.Events.UnityAction backAction)
         {
             var header = AddResourceImage("MenuHeader", "Original/images/MenuHeader",
-                _safeArea, new Vector2(0f, 0.92f), Vector2.one);
+                _safeArea, new Vector2(0f, 1f), new Vector2(1f, 1f));
+            header.rectTransform.pivot = new Vector2(0.5f, 1f);
+            header.rectTransform.anchoredPosition = Vector2.zero;
+            header.rectTransform.sizeDelta = new Vector2(0f, 77f);
             header.preserveAspect = false;
             header.raycastTarget = false;
 
             if (backAction != null)
                 AddSpriteButton("Back", "Original/images/MenuHeaderBackButton",
-                    "Original/images/MenuHeaderBackButtonPressed", _safeArea,
-                    new Vector2(0.08f, 0.96f), new Vector2(0.12f, 0.075f), backAction);
+                    "Original/images/MenuHeaderBackButtonPressed", header.transform,
+                    new Vector2(0.08f, 0.50f), new Vector2(0.12f, 0.93f), backAction);
 
             if (!string.IsNullOrEmpty(title))
             {
                 var fontSize = title.Length > 12 ? 11 : (title.Length > 9 ? 13 : 18);
-                var titleText = AddText(title.ToUpperInvariant(), _safeArea, fontSize, Ink,
-                    new Vector2(backAction != null ? 0.16f : 0.05f, 0.93f), new Vector2(0.39f, 0.99f));
+                var titleText = AddText(title.ToUpperInvariant(), header.transform, fontSize, Ink,
+                    new Vector2(backAction != null ? 0.16f : 0.05f, 0.08f), new Vector2(0.39f, 0.92f));
                 titleText.alignment = TextAnchor.MiddleLeft;
                 titleText.fontStyle = FontStyle.Bold;
                 titleText.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -8634,19 +9761,24 @@ namespace DiceSoccer
                 titleText.resizeTextMaxSize = fontSize;
             }
 
-            var cashText = AddText(_careerCash.ToString("N0"), _safeArea, 18, Ink,
-                new Vector2(0.40f, 0.93f), new Vector2(0.68f, 0.99f));
+            var cashText = AddText(_careerCash.ToString("N0"), header.transform, 18, Ink,
+                new Vector2(0.38f, 0.08f), new Vector2(0.68f, 0.92f));
             cashText.alignment = TextAnchor.MiddleRight;
             cashText.fontStyle = FontStyle.Bold;
+            cashText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            cashText.verticalOverflow = VerticalWrapMode.Truncate;
+            cashText.resizeTextForBestFit = true;
+            cashText.resizeTextMinSize = 11;
+            cashText.resizeTextMaxSize = 18;
 
-            var coinImg = AddResourceImage("CareerCoin", "Original/images/CoinSmall", _safeArea,
-                new Vector2(0.69f, 0.935f), new Vector2(0.76f, 0.985f));
+            var coinImg = AddResourceImage("CareerCoin", "Original/images/CoinSmall", header.transform,
+                new Vector2(0.69f, 0.19f), new Vector2(0.76f, 0.81f));
             coinImg.preserveAspect = true;
             coinImg.raycastTarget = false;
 
             // Authentic crest frame on top-right
-            var crestBox = AddResourceImage("HeaderCrestBox", "Original/images/CustomCrestBox", _safeArea,
-                new Vector2(0.85f, 0.925f), new Vector2(0.97f, 0.995f));
+            var crestBox = AddResourceImage("HeaderCrestBox", "Original/images/CustomCrestBox", header.transform,
+                new Vector2(0.85f, 0.06f), new Vector2(0.97f, 0.94f));
             crestBox.preserveAspect = true;
             crestBox.raycastTarget = false;
 
@@ -8654,24 +9786,29 @@ namespace DiceSoccer
                 new Vector2(0.15f, 0.15f), new Vector2(0.85f, 0.85f));
             crestDesign.preserveAspect = true;
             crestDesign.raycastTarget = false;
+
+            return header.rectTransform;
         }
 
         private void AddMenuFooter()
         {
             var footer = AddResourceImage("MenuFooter", "Original/images/FooterBG",
-                _safeArea, new Vector2(0f, 0f), new Vector2(1f, 0.12f));
+                _safeArea, new Vector2(0f, 0f), new Vector2(1f, 0f));
+            footer.rectTransform.pivot = new Vector2(0.5f, 0f);
+            footer.rectTransform.anchoredPosition = Vector2.zero;
+            footer.rectTransform.sizeDelta = new Vector2(0f, 115f);
             footer.preserveAspect = false;
             footer.raycastTarget = false;
 
             AddSpriteButton("Shop", "Original/images/BottomTab01",
-                "Original/images/BottomTab01Pressed", _safeArea,
-                new Vector2(0.17f, 0.06f), new Vector2(0.32f, 0.10f), ShowShop);
+                "Original/images/BottomTab01Pressed", footer.transform,
+                new Vector2(0.17f, 0.50f), new Vector2(0.32f, 0.833f), ShowShop);
             AddSpriteButton("Trophies", "Original/images/BottomTab02",
-                "Original/images/BottomTab02Pressed", _safeArea,
-                new Vector2(0.50f, 0.06f), new Vector2(0.32f, 0.10f), ShowTrophyRoom);
+                "Original/images/BottomTab02Pressed", footer.transform,
+                new Vector2(0.50f, 0.50f), new Vector2(0.32f, 0.833f), ShowTrophyRoom);
             AddSpriteButton("Options", "Original/images/BottomTab03",
-                "Original/images/BottomTab03Pressed", _safeArea,
-                new Vector2(0.83f, 0.06f), new Vector2(0.32f, 0.10f), ShowOptions);
+                "Original/images/BottomTab03Pressed", footer.transform,
+                new Vector2(0.83f, 0.50f), new Vector2(0.32f, 0.833f), ShowOptions);
         }
 
         private static Button AddSpriteButton(string objectName, string resourcePath,
