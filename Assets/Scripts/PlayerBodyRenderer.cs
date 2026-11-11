@@ -261,93 +261,126 @@ namespace DiceSoccer
             return rig;
         }
 
+        private static bool IsJuniorPlayer(PlayerData player, int fallbackSlot)
+        {
+            int pid = (player != null && player.id > 0) ? player.id : fallbackSlot;
+            // Exact PlayerSprite.initWithParent: (0x65f16..0x65f24): bitmask 0x5e => IDs 1, 2, 3, 4, 6
+            return pid >= 1 && pid <= 6 && ((1 << pid) & 0x5e) != 0;
+        }
+
+        private static RectTransform CreateContainer(string name, Transform parent, Vector2 anchoredPos, float uniformScale)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = anchoredPos;
+            rect.sizeDelta = new Vector2(140f, 180f);
+            rect.localScale = new Vector3(uniformScale, uniformScale, 1f);
+            return rect;
+        }
+
         private void Build(PlayerData player, MatchKitAppearance kit, bool isGoalkeeper, int fallbackSlot)
         {
             _isGoalkeeper = isGoalkeeper;
             bool isFemale = player != null && player.gender == 1;
+            bool isJunior = IsJuniorPlayer(player, fallbackSlot);
             Color32 skinColor = PlayerBodySprites.GetSkinColor(player != null ? player.skinColour : 1);
 
             const string b3 = "Original/sprites/PlayerBody3/";
             string prefix = (isGoalkeeper ? "GK_" : string.Empty) + (isFemale ? "Female" : "Male");
 
-            // Container aligned with root pivot at foot ground contact, scaled 1.45x to match iOS field height
+            // Canvas uses 640x960 Retina 2x space (= 2px per Cocos2d point), so 1.0x root scale matches iOS proportions.
+            // Junior kids use scale=0.7f on body1/body2 and shifted head/body offsets from ARMv7 PlayerSprite.initWithParent:
+            float bodyScale = isJunior ? 0.7f : 1.0f;
+            Vector2 bodyPos = isJunior ? new Vector2(0f, -59f) : new Vector2(0f, -35f);     // (0, -29.5) / (0, -17.5) pts
+            Vector2 headPos = isJunior ? new Vector2(4f, 8f) : new Vector2(4f, 56f);        // (2, +4) / (2, +28) pts
+            float groundOffsetY = -(bodyPos.y + (-46f * bodyScale));                        // Align Shadow center (0, -23pts) to y=0
+
             var rigRoot = new GameObject("PlayerBodyRig", typeof(RectTransform));
             rigRoot.transform.SetParent(transform, false);
             var rootRect = rigRoot.GetComponent<RectTransform>();
             rootRect.anchorMin = new Vector2(0.5f, 0f);
             rootRect.anchorMax = new Vector2(0.5f, 0f);
             rootRect.pivot = new Vector2(0.5f, 0.5f);
-            rootRect.anchoredPosition = new Vector2(0f, 94f);
-            rootRect.sizeDelta = new Vector2(140f, 160f);
-            rootRect.localScale = new Vector3(1.42f, 1.42f, 1f);
+            rootRect.anchoredPosition = new Vector2(0f, groundOffsetY);
+            rootRect.sizeDelta = new Vector2(140f, 200f);
+            rootRect.localScale = Vector3.one;
 
-            const float limbScale = 0.70f;
-            const float bodyScale = 0.80f;
-            const float headScale = 0.76f;
+            // Cocos2d PlayerSprite hierarchy: body2 (z=0) -> head (z=1) -> body1 (z=2)
+            var body2 = CreateContainer("BodyBack", rigRoot.transform, bodyPos, bodyScale);
 
-            Vector2 shadowPos = new Vector2(0f, -32f);
-            Vector2 shortsPos = new Vector2(-1f, -16f);
-            Vector2 shoePos = new Vector2(1f, -25f);
-            Vector2 armPos = new Vector2(3f, -1f);
-            Vector2 headPos = new Vector2(1f, 35f);
+            // Body2 back layers (all sizes in exact Retina 2x PNG pixels, positions = Cocos2d pts * 2):
+            if (!isGoalkeeper)
+            {
+                _secSleeve = PlayerBodySprites.CreateLayer("SecondarySleeve", body2, b3 + "SecondarySleeve00",
+                    kit.SleeveColor, new Vector2(10f, 34f), new Vector2(60f, 50f));
+            }
+            PlayerBodySprites.CreateLayer("Shadow", body2, b3 + "Shadow",
+                new Color32(255, 255, 255, 220), new Vector2(0f, -46f), new Vector2(126f, 84f));
+            _secShorts = PlayerBodySprites.CreateLayer("SecondaryShorts", body2,
+                b3 + (isGoalkeeper ? "GK_SecondaryShorts" : "SecondaryShorts00"),
+                kit.PantsColor, isGoalkeeper ? new Vector2(3f, 7f) : new Vector2(-4f, -25f),
+                isGoalkeeper ? new Vector2(104f, 130f) : new Vector2(84f, 66f));
+            _secArm = PlayerBodySprites.CreateLayer("SecondaryArm", body2,
+                b3 + (isGoalkeeper ? "GK_SecondaryArmOutline" : "SecondaryArmOutline00"),
+                skinColor, new Vector2(3f, 7f), new Vector2(104f, 130f));
+            _secShoe = PlayerBodySprites.CreateLayer("SecondaryShoe", body2,
+                b3 + (isGoalkeeper ? "GK_SecondaryShoe" : "SecondaryShoe00"),
+                kit.SleeveColor, new Vector2(1f, -38f), new Vector2(126f, 84f));
 
-            Vector2 shoeSize = new Vector2(126f, 84f) * limbScale;
-            Vector2 shortsSize = new Vector2(84f, 66f) * limbScale;
-            Vector2 sleeveSize = new Vector2(60f, 50f) * limbScale;
-            Vector2 armSize = new Vector2(104f, 134f) * limbScale;
-            Vector2 secArmSize = new Vector2(104f, 130f) * limbScale;
-            Vector2 bodySize = new Vector2(64f, 94f) * bodyScale;
-
-            // Z-order matches PlayerSprite.initWithParent: (0x6598a .. 0x65e36)
-            PlayerBodySprites.CreateLayer("Shadow", rigRoot.transform, b3 + "Shadow",
-                new Color32(255, 255, 255, 220), shadowPos, new Vector2(126f, 84f) * 0.75f);
-
-            _secShorts = PlayerBodySprites.CreateLayer("SecondaryShorts", rigRoot.transform, b3 + "SecondaryShorts00",
-                kit.PantsColor, shortsPos, shortsSize);
-            _secArm = PlayerBodySprites.CreateLayer("SecondaryArm", rigRoot.transform, b3 + "SecondaryArmOutline00",
-                skinColor, armPos, secArmSize);
-            _secShoe = PlayerBodySprites.CreateLayer("SecondaryShoe", rigRoot.transform, b3 + "SecondaryShoe00",
-                kit.SleeveColor, shoePos, shoeSize);
-            _secSleeve = PlayerBodySprites.CreateLayer("SecondarySleeve", rigRoot.transform, b3 + "SecondarySleeve00",
-                kit.SleeveColor, armPos, sleeveSize);
-
-            PlayerBodySprites.CreateLayer("Butt", rigRoot.transform, b3 + prefix + "ButtColour",
-                kit.PantsColor, Vector2.zero, bodySize);
-            PlayerBodySprites.CreateLayer("Shirt", rigRoot.transform, b3 + prefix + "ShirtColour",
-                kit.ShirtColor, Vector2.zero, bodySize);
+            // Torso layers at (-2, +7) Cocos2d pts = (-4, +14) Retina px:
+            Vector2 torsoPos = new Vector2(-4f, 14f);
+            Vector2 torsoSize = new Vector2(64f, 94f);
+            PlayerBodySprites.CreateLayer("Butt", body2, b3 + prefix + "ButtColour",
+                kit.PantsColor, torsoPos, torsoSize);
+            PlayerBodySprites.CreateLayer("Shirt", body2, b3 + prefix + "ShirtColour",
+                kit.ShirtColor, torsoPos, torsoSize);
             if (kit.PatternStyle > 0 && kit.PatternStyle <= 7)
             {
-                PlayerBodySprites.CreateLayer("Design", rigRoot.transform, $"{b3}{prefix}Design{kit.PatternStyle}",
-                    kit.PatternColor, Vector2.zero, bodySize);
+                PlayerBodySprites.CreateLayer("Design", body2, $"{b3}{prefix}Design{kit.PatternStyle}",
+                    kit.PatternColor, torsoPos, torsoSize);
             }
-            PlayerBodySprites.CreateLayer("BodyOutline", rigRoot.transform, b3 + prefix + "BodyOutline",
-                skinColor, Vector2.zero, bodySize);
+            PlayerBodySprites.CreateLayer("BodyOutline", body2, b3 + prefix + "BodyOutline",
+                skinColor, torsoPos, torsoSize);
 
-            _domShorts = PlayerBodySprites.CreateLayer("DominantShorts", rigRoot.transform, b3 + "DominantShorts00",
-                kit.PantsColor, shortsPos, shortsSize);
-            _domSleeve = PlayerBodySprites.CreateLayer("DominantSleeve", rigRoot.transform, b3 + "DominantSleeve00",
-                kit.SleeveColor, armPos, sleeveSize);
-            _domArm = PlayerBodySprites.CreateLayer("DominantArm", rigRoot.transform, b3 + "DominantArmOutline00",
-                skinColor, armPos, armSize);
+            // Head (z=1 relative to root, scale=1.0f -> full-size expressive caricature head)
+            var headImg = PlayerBodySprites.CreateLayer("Head", rigRoot.transform,
+                PlayerBodySprites.ResolveHeadPath(player, fallbackSlot),
+                new Color32(255, 255, 255, 255), headPos, new Vector2(92f, 72f));
+            float headHeight = 72f;
+            if (headImg.sprite != null)
+            {
+                headImg.rectTransform.sizeDelta = headImg.sprite.rect.size;
+                headHeight = headImg.sprite.rect.size.y;
+            }
+
+            // Body1 front layers (z=2 relative to root -> overlays neck/shoulder overlap cleanly)
+            var body1 = CreateContainer("BodyFront", rigRoot.transform, bodyPos, bodyScale);
+            _domShorts = PlayerBodySprites.CreateLayer("DominantShorts", body1,
+                b3 + (isGoalkeeper ? "GK_DominantShorts" : "DominantShorts00"),
+                kit.PantsColor, isGoalkeeper ? new Vector2(6f, 4f) : new Vector2(-1f, -29f),
+                isGoalkeeper ? new Vector2(104f, 134f) : new Vector2(84f, 66f));
+            _domSleeve = PlayerBodySprites.CreateLayer("DominantSleeve", body1,
+                b3 + (isGoalkeeper ? "GK_DominantSleeve" : "DominantSleeve00"),
+                kit.SleeveColor, isGoalkeeper ? new Vector2(6f, 4f) : new Vector2(10f, 33f),
+                isGoalkeeper ? new Vector2(104f, 134f) : new Vector2(60f, 50f));
+            _domArm = PlayerBodySprites.CreateLayer("DominantArm", body1,
+                b3 + (isGoalkeeper ? "GK_DominantArmOutline" : "DominantArmOutline00"),
+                skinColor, new Vector2(6f, 4f), new Vector2(104f, 134f));
 
             if (isGoalkeeper)
             {
-                _gkGloves = PlayerBodySprites.CreateLayer("GKGloves", rigRoot.transform, b3 + "GK_GloveColour",
-                    new Color32(250, 210, 60, 255), armPos, armSize);
+                _gkGloves = PlayerBodySprites.CreateLayer("GKGloves", body1, b3 + "GK_GloveColour",
+                    new Color32(250, 210, 60, 255), new Vector2(6f, 4f), new Vector2(104f, 134f));
             }
 
-            _domShoe = PlayerBodySprites.CreateLayer("DominantShoe", rigRoot.transform, b3 + "DominantShoe00",
-                kit.SleeveColor, shoePos, shoeSize);
+            _domShoe = PlayerBodySprites.CreateLayer("DominantShoe", body1,
+                b3 + (isGoalkeeper ? "GK_DominantShoe" : "DominantShoe00"),
+                kit.SleeveColor, new Vector2(1f, -38f), new Vector2(126f, 84f));
 
-            var headImg = PlayerBodySprites.CreateLayer("Head", rigRoot.transform,
-                PlayerBodySprites.ResolveHeadPath(player, fallbackSlot),
-                new Color32(255, 255, 255, 255), headPos, new Vector2(92f, 72f) * headScale);
-            if (headImg.sprite != null)
-            {
-                headImg.rectTransform.sizeDelta = headImg.sprite.rect.size * headScale;
-            }
-
-            // Card status icon floating cleanly above player's head
+            // Card status icon floating cleanly right above head top
             _cardBadge = new GameObject("CardBadge", typeof(RectTransform), typeof(Image), typeof(Outline))
                 .GetComponent<Image>();
             _cardBadge.transform.SetParent(rigRoot.transform, false);
@@ -355,7 +388,7 @@ namespace DiceSoccer
             _cardBadge.raycastTarget = false;
             var cardRect = _cardBadge.rectTransform;
             cardRect.anchorMin = cardRect.anchorMax = new Vector2(0.5f, 0.5f);
-            cardRect.anchoredPosition = new Vector2(-12f, 82f);
+            cardRect.anchoredPosition = new Vector2(-10f, headPos.y + headHeight * 0.5f + 16f);
             cardRect.sizeDelta = new Vector2(14f, 19f);
             cardRect.localEulerAngles = new Vector3(0f, 0f, 10f);
             var cardOutline = _cardBadge.GetComponent<Outline>();
@@ -411,33 +444,57 @@ namespace DiceSoccer
             ApplyFrame($"{idx:00}", isKick: true);
         }
 
+        private static void SetLayerPose(Image img, Vector2 pos, Vector2 size, string spritePath, bool enabled = true)
+        {
+            if (img == null) return;
+            img.rectTransform.anchoredPosition = pos;
+            img.rectTransform.sizeDelta = size;
+            img.sprite = PlayerBodySprites.LoadSprite(spritePath);
+            img.enabled = enabled && img.sprite != null;
+        }
+
         private void ApplyFrame(string frameSuffix, bool isKick)
         {
             const string b3 = "Original/sprites/PlayerBody3/";
+            if (_isGoalkeeper && !isKick && frameSuffix == "00")
+            {
+                SetLayerPose(_secShorts, new Vector2(3f, 7f), new Vector2(104f, 130f), b3 + "GK_SecondaryShorts");
+                SetLayerPose(_secArm, new Vector2(3f, 7f), new Vector2(104f, 130f), b3 + "GK_SecondaryArmOutline");
+                SetLayerPose(_secShoe, new Vector2(1f, -38f), new Vector2(126f, 84f), b3 + "GK_SecondaryShoe");
+                if (_secSleeve != null) _secSleeve.enabled = false;
+
+                SetLayerPose(_domShorts, new Vector2(6f, 4f), new Vector2(104f, 134f), b3 + "GK_DominantShorts");
+                SetLayerPose(_domSleeve, new Vector2(6f, 4f), new Vector2(104f, 134f), b3 + "GK_DominantSleeve");
+                SetLayerPose(_domArm, new Vector2(6f, 4f), new Vector2(104f, 134f), b3 + "GK_DominantArmOutline");
+                SetLayerPose(_domShoe, new Vector2(1f, -38f), new Vector2(126f, 84f), b3 + "GK_DominantShoe");
+                if (_gkGloves != null) _gkGloves.enabled = true;
+                return;
+            }
+
             if (isKick)
             {
-                if (_secShorts != null) _secShorts.sprite = PlayerBodySprites.LoadSprite(b3 + "KickSecondaryShorts" + frameSuffix);
-                if (_secShoe != null) _secShoe.sprite = PlayerBodySprites.LoadSprite(b3 + "KickSecondaryShoe" + frameSuffix);
-                if (_secArm != null) _secArm.sprite = PlayerBodySprites.LoadSprite(b3 + "SecondaryArmOutline00");
-                if (_secSleeve != null) _secSleeve.sprite = PlayerBodySprites.LoadSprite(b3 + "SecondarySleeve00");
-                if (_domShorts != null) _domShorts.sprite = PlayerBodySprites.LoadSprite(b3 + "DominantShorts00");
-                if (_domSleeve != null) _domSleeve.sprite = PlayerBodySprites.LoadSprite(b3 + "KickDominantSleeve" + frameSuffix);
-                if (_domArm != null) _domArm.sprite = PlayerBodySprites.LoadSprite(b3 + "KickDominantArmOutline" + frameSuffix);
-                if (_domShoe != null) _domShoe.sprite = PlayerBodySprites.LoadSprite(b3 + "DominantShoe00");
+                SetLayerPose(_secShorts, new Vector2(-4f, -25f), new Vector2(84f, 66f), b3 + "KickSecondaryShorts" + frameSuffix);
+                SetLayerPose(_secShoe, new Vector2(1f, -38f), new Vector2(126f, 84f), b3 + "KickSecondaryShoe" + frameSuffix);
+                SetLayerPose(_secArm, new Vector2(3f, 7f), new Vector2(104f, 130f), b3 + "SecondaryArmOutline00");
+                SetLayerPose(_secSleeve, new Vector2(10f, 34f), new Vector2(60f, 50f), b3 + "SecondarySleeve00");
+                SetLayerPose(_domShorts, new Vector2(-1f, -29f), new Vector2(84f, 66f), b3 + "DominantShorts00");
+                SetLayerPose(_domSleeve, new Vector2(10f, 33f), new Vector2(60f, 50f), b3 + "KickDominantSleeve" + frameSuffix);
+                SetLayerPose(_domArm, new Vector2(6f, 4f), new Vector2(104f, 134f), b3 + "KickDominantArmOutline" + frameSuffix);
+                SetLayerPose(_domShoe, new Vector2(1f, -38f), new Vector2(126f, 84f), b3 + "DominantShoe00");
             }
             else
             {
-                if (_secShorts != null) _secShorts.sprite = PlayerBodySprites.LoadSprite(b3 + "SecondaryShorts" + frameSuffix);
-                if (_secArm != null) _secArm.sprite = PlayerBodySprites.LoadSprite(b3 + "SecondaryArmOutline" + frameSuffix);
-                if (_secShoe != null) _secShoe.sprite = PlayerBodySprites.LoadSprite(b3 + "SecondaryShoe" + frameSuffix);
-                if (_secSleeve != null) _secSleeve.sprite = PlayerBodySprites.LoadSprite(b3 + "SecondarySleeve" + frameSuffix);
-                if (_domShorts != null) _domShorts.sprite = PlayerBodySprites.LoadSprite(b3 + "DominantShorts" + frameSuffix);
-                if (_domSleeve != null) _domSleeve.sprite = PlayerBodySprites.LoadSprite(b3 + "DominantSleeve" + frameSuffix);
-                if (_domArm != null) _domArm.sprite = PlayerBodySprites.LoadSprite(b3 + "DominantArmOutline" + frameSuffix);
-                if (_domShoe != null) _domShoe.sprite = PlayerBodySprites.LoadSprite(b3 + "DominantShoe" + frameSuffix);
+                SetLayerPose(_secShorts, new Vector2(-4f, -25f), new Vector2(84f, 66f), b3 + "SecondaryShorts" + frameSuffix);
+                SetLayerPose(_secArm, new Vector2(3f, 7f), new Vector2(104f, 130f), b3 + "SecondaryArmOutline" + frameSuffix);
+                SetLayerPose(_secShoe, new Vector2(1f, -38f), new Vector2(126f, 84f), b3 + "SecondaryShoe" + frameSuffix);
+                SetLayerPose(_secSleeve, new Vector2(10f, 34f), new Vector2(60f, 50f), b3 + "SecondarySleeve" + frameSuffix);
+                SetLayerPose(_domShorts, new Vector2(-1f, -29f), new Vector2(84f, 66f), b3 + "DominantShorts" + frameSuffix);
+                SetLayerPose(_domSleeve, new Vector2(10f, 33f), new Vector2(60f, 50f), b3 + "DominantSleeve" + frameSuffix);
+                SetLayerPose(_domArm, new Vector2(6f, 4f), new Vector2(104f, 134f), b3 + "DominantArmOutline" + frameSuffix);
+                SetLayerPose(_domShoe, new Vector2(1f, -38f), new Vector2(126f, 84f), b3 + "DominantShoe" + frameSuffix);
             }
 
-            if (_gkGloves != null) _gkGloves.enabled = _isGoalkeeper && !isKick && frameSuffix == "00";
+            if (_gkGloves != null) _gkGloves.enabled = false;
         }
     }
 }

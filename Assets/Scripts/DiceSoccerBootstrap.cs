@@ -235,7 +235,8 @@ namespace DiceSoccer
             _previousAcceleration = acceleration;
 
             if (_match == null || _match.IsFinished || _encounterButton == null ||
-                !_encounterButton.interactable || _inEncounterAnimation)
+                !_encounterButton.interactable || _inEncounterAnimation ||
+                Time.timeScale <= 0f || (_overlayContainer != null && _overlayContainer.childCount > 0))
                 return;
 
             if (accelerationDelta >= ShakeDeltaThreshold)
@@ -259,22 +260,37 @@ namespace DiceSoccer
                 _shakeArmed = true;
         }
 
+        private static bool IsPointerOverHudButton(Vector2 screenPos)
+        {
+            if (EventSystem.current == null) return false;
+            var ped = new PointerEventData(EventSystem.current) { position = screenPos };
+            var results = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(ped, results);
+            if (results.Count == 0) return false;
+            var top = results[0].gameObject;
+            if (top == null) return false;
+            return top.name != "FieldTapTrigger" && top.name != "ShakePrompt" &&
+                   top.GetComponentInParent<Button>() != null;
+        }
+
         private void DetectEdgeTap()
         {
             if (_match == null || _match.IsFinished || _encounterButton == null ||
-                !_encounterButton.interactable || _inEncounterAnimation)
+                !_encounterButton.interactable || _inEncounterAnimation ||
+                Time.timeScale <= 0f || (_overlayContainer != null && _overlayContainer.childCount > 0))
                 return;
 
             if (_isLocalMultiplayer)
             {
                 if (Input.GetMouseButtonDown(0))
                 {
-                    PlayEncounter();
+                    if (!IsPointerOverHudButton(Input.mousePosition))
+                        PlayEncounter();
                     return;
                 }
                 foreach (var touch in Input.touches)
                 {
-                    if (touch.phase == TouchPhase.Began)
+                    if (touch.phase == TouchPhase.Began && !IsPointerOverHudButton(touch.position))
                     {
                         PlayEncounter();
                         return;
@@ -287,7 +303,8 @@ namespace DiceSoccer
             if (Input.GetMouseButtonDown(0) &&
                 (Input.mousePosition.x <= edgeWidth || Input.mousePosition.x >= Screen.width - edgeWidth))
             {
-                PlayEncounter();
+                if (!IsPointerOverHudButton(Input.mousePosition))
+                    PlayEncounter();
                 return;
             }
 
@@ -296,7 +313,8 @@ namespace DiceSoccer
                 if (touch.phase == TouchPhase.Began &&
                     (touch.position.x <= edgeWidth || touch.position.x >= Screen.width - edgeWidth))
                 {
-                    PlayEncounter();
+                    if (!IsPointerOverHudButton(touch.position))
+                        PlayEncounter();
                     return;
                 }
             }
@@ -2248,9 +2266,12 @@ namespace DiceSoccer
             shakeBtn.onClick.AddListener(PlayEncounter);
 
             // Invisible full-field tap trigger for rolling:
-            var tapFieldGo = new GameObject("FieldTapTrigger", typeof(RectTransform), typeof(Button));
+            var tapFieldGo = new GameObject("FieldTapTrigger", typeof(RectTransform), typeof(Image), typeof(Button));
             tapFieldGo.transform.SetParent(_field, false);
             tapFieldGo.transform.SetAsFirstSibling();
+            var tapFieldImg = tapFieldGo.GetComponent<Image>();
+            tapFieldImg.color = Color.clear;
+            tapFieldImg.raycastTarget = true;
             var tapFieldRect = tapFieldGo.GetComponent<RectTransform>();
             tapFieldRect.anchorMin = Vector2.zero;
             tapFieldRect.anchorMax = Vector2.one;
@@ -5276,7 +5297,8 @@ namespace DiceSoccer
                 for (int i = 0; i < facesArr.Length; i++)
                 {
                     int finalRaw = facesArr[i];
-                    int baseNum = (finalRaw == 31 || finalRaw == 32 || finalRaw == 23 || finalRaw == 26) ? 0 : finalRaw;
+                    int cleanRaw = finalRaw >= 101 ? finalRaw - 100 : finalRaw;
+                    int baseNum = (cleanRaw == 31 || cleanRaw == 32 || cleanRaw == 23 || cleanRaw == 26) ? 0 : cleanRaw;
                     origArr[i] = baseNum;
 
                     if (seqs != null && i < seqs.Length && seqs[i] != null && seqs[i].Length > 0)
@@ -5502,6 +5524,7 @@ namespace DiceSoccer
 
             bool homeProduced2x = false;
             bool awayProduced2x = false;
+            int pendingThroughPassSide = -1;
 
             foreach (var (side, activeAbility, triggeringSlot, triggeringPlayer) in allAbilities)
             {
@@ -5714,7 +5737,7 @@ namespace DiceSoccer
                     }
                     yield return new WaitForSeconds(0.65f);
                 }
-                // A. Through Pass (ID 47, 80): Instantly move forward on possession!
+                // A. Through Pass (ID 47, 80): Mark extra forward advance once duel completes!
                 else if (activeAbility.id == 47 || activeAbility.id == 80)
                 {
                     if (_match.Possession == side)
@@ -5726,13 +5749,7 @@ namespace DiceSoccer
                             _buffBeltText.text = "THROUGH PASS! ADVANCING!";
                         }
                         yield return StartCoroutine(PlayThroughPassAnimation(isHome));
-                        int oldLoc = _match.Location;
-                        _match.AdvanceLocation(side);
-                        int newLoc = _match.Location;
-                        if (oldLoc != newLoc)
-                        {
-                            yield return StartCoroutine(AnimateZoneTransition(oldLoc, newLoc, side, side));
-                        }
+                        pendingThroughPassSide = side;
                         yield return new WaitForSeconds(0.50f);
                     }
                 }
@@ -6424,6 +6441,12 @@ namespace DiceSoccer
                 else
                 {
                     AudioManager.Instance.PlayTap();
+                }
+
+                if (pendingThroughPassSide >= 0 && !_match.IsFinished && _match.Possession == pendingThroughPassSide && Math.Abs(_match.Location) < 2)
+                {
+                    _match.AdvanceLocation(pendingThroughPassSide);
+                    AudioManager.Instance.PlayWhistle();
                 }
 
                 // Smoothly shift field and walk players to new location
@@ -7662,7 +7685,7 @@ namespace DiceSoccer
                     {
                         Time.timeScale = _matchSpeed;
                         Destroy(backdrop.gameObject);
-                        ShowSubstitutionSlots();
+                        ShowInMatchSubstitutionBar();
                     }
                 });
             if (_remainingSubs <= 0 || _ownedPlayerIds.Count <= 7)
@@ -7710,6 +7733,7 @@ namespace DiceSoccer
                 {
                     Destroy(parent.gameObject);
                     _match.ForfeitMatch();
+                    _currentResultRecorded = true;
                     RecordFixtureResult();
                     ShowGameOverModal();
                 });
@@ -8106,30 +8130,26 @@ namespace DiceSoccer
                     : _currentFixture.cashLose
                 : 0;
 
-            // Check Entourage bonuses:
+            // Check Entourage bonuses (accumulate into _lastPayout first to avoid double-counting):
             if (_equippedEntourageIds.Contains(11) && won) // Sheikh Abdullah: +10,000 cash for victory
             {
-                _careerCash += 10000;
                 _lastPayout += 10000;
             }
             if (_equippedEntourageIds.Contains(12) && drew) // Ronin Chelskovic: Draw awards win money
             {
                 var extra = _currentFixture.cashWin - _currentFixture.cashDraw;
-                _careerCash += extra;
                 _lastPayout += extra;
             }
             if (_equippedEntourageIds.Contains(13)) // Sylvester Punter: +15k on win, -15k if you don't win or abandon
             {
-                if (won) { _careerCash += 15000; _lastPayout += 15000; }
-                else { _careerCash = Mathf.Max(0, _careerCash - 15000); _lastPayout -= 15000; }
+                _lastPayout += won ? 15000 : -15000;
             }
             if (_equippedEntourageIds.Contains(14)) // Hilly Will: +50k on win, -50k if you don't win or abandon
             {
-                if (won) { _careerCash += 50000; _lastPayout += 50000; }
-                else { _careerCash = Mathf.Max(0, _careerCash - 50000); _lastPayout -= 50000; }
+                _lastPayout += won ? 50000 : -50000;
             }
 
-            _careerCash += _lastPayout;
+            _careerCash = Mathf.Max(0, _careerCash + _lastPayout);
             if (_competitionName == "League")
             {
                 int matchStars = Mathf.Clamp(_match.CalculateStars(), 0, 3);
