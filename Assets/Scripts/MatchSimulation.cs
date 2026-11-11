@@ -62,6 +62,17 @@ namespace DiceSoccer
         public int BallHolderSlotIndex { get; private set; } = 1; // 0 = bottom, 1 = center, 2 = top
         public bool IsFinished => SecondsRemaining <= 0;
 
+        public int HomeShots { get; private set; }
+        public int AwayShots { get; private set; }
+        public int HomeSaves { get; private set; }
+        public int AwaySaves { get; private set; }
+        public int HomeTackles { get; private set; }
+        public int AwayTackles { get; private set; }
+        public int HomeAbilitiesTriggered { get; private set; }
+        public int AwayAbilitiesTriggered { get; private set; }
+        public int HomePossessionTicks { get; private set; }
+        public int AwayPossessionTicks { get; private set; }
+
         // BallZone 0..4 maps location (-2..+2) + 2 for 100% backward compatibility with HUD
         public int BallZone => _location + 2;
         public int Location => _location;
@@ -178,6 +189,9 @@ namespace DiceSoccer
                 throw new InvalidOperationException("The match has already ended.");
             if (_pendingEncounter != null)
                 throw new InvalidOperationException("The current encounter has not been resolved.");
+
+            if (_possession == 0) HomePossessionTicks++;
+            else AwayPossessionTicks++;
 
             // Verified 5-location dispatch from rollDice (0x06fbf4, tbh 0x06fdaa):
             int[] homeSlots;
@@ -326,6 +340,18 @@ namespace DiceSoccer
             return (HomeScore - AwayScore >= 2) ? 4 : 3;
         }
 
+        public static int PromotionThresholdForSeason(int season)
+        {
+            return season switch
+            {
+                0 => 0,
+                1 => 20,
+                2 => 30,
+                3 => 30,
+                _ => 30
+            };
+        }
+
         public static bool CanPromoteToSeason(int currentSeason, int accumulatedStars)
         {
             // Verified thresholds: S0 -> S1 (Training finished), S1 -> S2 (20 stars), S2 -> S3 (30 stars), S3 -> S4 (30 stars)
@@ -343,6 +369,7 @@ namespace DiceSoccer
         {
             if (_location == 2) // Home CF shooting on Away GK
             {
+                HomeShots++;
                 bool homeScored = encounter.HomeTotal > encounter.AwayTotal ||
                                  (encounter.HomeTotal == encounter.AwayTotal && homeWinsTie);
 
@@ -357,6 +384,7 @@ namespace DiceSoccer
                            $"against {AwayName} goalkeeper's {encounter.AwayTotal}!";
                 }
 
+                AwaySaves++;
                 // Goalkeeper save (runSaveAnimation & goalieToDefenderAnimation)
                 _possession = 1; // Away GK takes ball
                 _location = 1; // Cleared to defending half
@@ -365,6 +393,7 @@ namespace DiceSoccer
             }
             else // _location == -2: Away CF shooting on Home GK
             {
+                AwayShots++;
                 bool awayScored = encounter.AwayTotal > encounter.HomeTotal ||
                                  (encounter.AwayTotal == encounter.HomeTotal && awayWinsTie);
 
@@ -379,6 +408,7 @@ namespace DiceSoccer
                            $"against {HomeName} goalkeeper's {encounter.HomeTotal}!";
                 }
 
+                HomeSaves++;
                 // Goalkeeper save
                 _possession = 0; // Home GK takes ball
                 _location = -1; // Cleared to defending half
@@ -407,6 +437,7 @@ namespace DiceSoccer
                 else
                 {
                     // Away had ball: turnover tackle (changePossessionAnimation1)
+                    HomeTackles++;
                     _possession = 0;
                     return $"{header} Tackled! {HomeName} dispossess the opponent and win the ball.";
                 }
@@ -423,6 +454,7 @@ namespace DiceSoccer
                 else
                 {
                     // Home had ball: turnover tackle
+                    AwayTackles++;
                     _possession = 1;
                     return $"{header} Dispossessed! {AwayName} win the ball on a tackle.";
                 }

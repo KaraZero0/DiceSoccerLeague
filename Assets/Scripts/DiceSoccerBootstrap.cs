@@ -108,11 +108,23 @@ namespace DiceSoccer
         private bool _inEncounterAnimation;
         private Coroutine _idleBobbingCoroutine;
         private bool _isLocalMultiplayer;
+        private int _p2RivalTeamIndex = 0;
+        private float _matchSpeed = 1f;
         private bool _isKickoffPlayed;
         private int _lastSubstitutedSlot = -1;
         private int _remainingSubs = 3;
         private readonly Vector2[] _homeBasePositions = new Vector2[7];
         private readonly Vector2[] _awayBasePositions = new Vector2[7];
+
+        private void TriggerHaptic()
+        {
+            if (PlayerPrefs.GetInt("diceSoccer.vibration", 1) != 0)
+            {
+#if UNITY_IOS || UNITY_ANDROID
+                Handheld.Vibrate();
+#endif
+            }
+        }
         private static readonly Dictionary<int, Sprite> DiceSprites = new Dictionary<int, Sprite>();
         private static readonly Dictionary<string, Sprite> UiSprites =
             new Dictionary<string, Sprite>();
@@ -1119,19 +1131,35 @@ namespace DiceSoccer
                 new Vector2(0.44f, 0.58f), new Vector2(0.56f, 0.68f));
             vsText.fontStyle = FontStyle.Bold;
 
-            // Player 2 Team Box (Right)
+            // Player 2 Team Box (Right) - Tap to cycle rival team
+            string[] p2TeamNames = new string[] { "BLUE TEAM", "GREEN STARS", "GOLD TITANS", "ROYAL UNITED" };
+            int[] p2CrestIds = new int[] { 2, 3, 1, 2 };
+            _p2RivalTeamIndex = Mathf.Clamp(_p2RivalTeamIndex, 0, p2TeamNames.Length - 1);
+
             var p2Box = AddResourceImage("P2Box", "Original/sprites/ShopSS/ShopBox", _safeArea,
                 new Vector2(0.56f, 0.48f), new Vector2(0.96f, 0.78f));
             p2Box.preserveAspect = false;
+            p2Box.raycastTarget = true;
+            var p2Btn = p2Box.gameObject.AddComponent<Button>();
+            p2Btn.transition = Selectable.Transition.None;
+            p2Btn.onClick.AddListener(() =>
+            {
+                _p2RivalTeamIndex = (_p2RivalTeamIndex + 1) % p2TeamNames.Length;
+                AudioManager.Instance.PlayTap();
+                ShowMultiplayer();
+            });
 
-            var p2Badge = AddResourceImage("P2Badge", "Original/images/CustomCrest2", p2Box.transform,
+            var p2Badge = AddResourceImage("P2Badge", $"Original/images/CustomCrest{p2CrestIds[_p2RivalTeamIndex]}", p2Box.transform,
                 new Vector2(0.5f, 0.70f), new Vector2(0.5f, 0.70f));
             p2Badge.rectTransform.sizeDelta = new Vector2(64f, 64f);
             p2Badge.preserveAspect = true;
+            p2Badge.raycastTarget = false;
 
-            var p2Title = AddText("PLAYER 2\n(BLUE TEAM)", p2Box.transform, 15, Ink,
-                new Vector2(0.08f, 0.32f), new Vector2(0.92f, 0.56f));
+            var p2Title = AddText($"PLAYER 2\n({p2TeamNames[_p2RivalTeamIndex]})\n<size=10><color=#505050>(Tap to switch)</color></size>", p2Box.transform, 13, Ink,
+                new Vector2(0.04f, 0.28f), new Vector2(0.96f, 0.58f));
             p2Title.fontStyle = FontStyle.Bold;
+            p2Title.alignment = TextAnchor.MiddleCenter;
+            p2Title.raycastTarget = false;
 
             AddText("Tap Right Edge to Roll", p2Box.transform, 12, new Color32(80, 80, 80, 255),
                 new Vector2(0.05f, 0.08f), new Vector2(0.95f, 0.28f));
@@ -1167,22 +1195,31 @@ namespace DiceSoccer
 
             var p1Lineup = _catalog.ResolveLineup(_lineupIds);
 
-            // Rival team for Player 2
-            var fixtures = _catalog.GetFixtures(0, "League");
-            var p2Lineup = (fixtures != null && fixtures.Length > 2)
-                ? _catalog.ResolveLineup(fixtures[2].lineup)
-                : _catalog.ResolveLineup(new int[] { 8, 9, 10, 11, 12, 13, 14 });
+            // Rival team preset for Player 2
+            string[] p2TeamNames = new string[] { "BLUE TEAM", "GREEN STARS", "GOLD TITANS", "ROYAL UNITED" };
+            int[] p2Shirts = new int[] { 2, 3, 4, 10 };
+            int[] p2Pants = new int[] { 2, 3, 4, 10 };
+            int[][] p2Lineups = new int[][]
+            {
+                new int[] { 8, 9, 10, 11, 12, 13, 14 },
+                new int[] { 15, 16, 17, 18, 19, 20, 21 },
+                new int[] { 22, 23, 24, 25, 26, 27, 28 },
+                new int[] { 29, 30, 31, 32, 33, 34, 35 }
+            };
+
+            var p2Idx = Mathf.Clamp(_p2RivalTeamIndex, 0, p2Lineups.Length - 1);
+            var p2Lineup = _catalog.ResolveLineup(p2Lineups[p2Idx]);
 
             _currentFixture = new FixtureData
             {
                 id = 999,
-                teamName = "PLAYER 2",
+                teamName = $"PLAYER 2 ({p2TeamNames[p2Idx]})",
                 lineup = p2Lineup.Select(p => p.id).ToArray(),
                 cashWin = 1000,
                 cashDraw = 500,
                 cashLose = 200,
-                shirt = 2,
-                pants = 2
+                shirt = p2Shirts[p2Idx],
+                pants = p2Pants[p2Idx]
             };
 
             _currentResultRecorded = false;
@@ -1432,12 +1469,33 @@ namespace DiceSoccer
                 var comp = availableComps[i];
                 var cName = comp.name;
                 var isSel = cName == _competitionName;
+                var isAvailable = IsCompetitionAvailable(cName);
                 var tabPath = $"Original/sprites/MatchSelectionSS1/Campaign{cName}Tab" + (isSel ? "Selected" : string.Empty);
                 var xCenter = 0.15f + i * 0.24f;
                 var tabBtn = AddSpriteButton($"Tab_{cName}", tabPath, tabPath, _safeArea,
                     new Vector2(xCenter, 0.045f), new Vector2(tabWidth, 0.08f),
-                    () => SelectCompetition(cName));
-                tabBtn.interactable = IsCompetitionAvailable(cName);
+                    () =>
+                    {
+                        if (isAvailable)
+                        {
+                            SelectCompetition(cName);
+                        }
+                        else
+                        {
+                            AudioManager.Instance.PlayDisappoint();
+                            ShowLockedTournamentModal(cName);
+                        }
+                    });
+                tabBtn.interactable = true;
+                if (!isAvailable)
+                {
+                    tabBtn.image.color = new Color(0.6f, 0.6f, 0.6f, 0.85f);
+                    var lockImg = AddResourceImage($"Lock_{cName}", "Original/sprites/MatchSelectionSS1/TournamentLocked", tabBtn.transform,
+                        new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+                    lockImg.rectTransform.sizeDelta = new Vector2(40f, 50f);
+                    lockImg.preserveAspect = true;
+                    lockImg.raycastTarget = false;
+                }
             }
 
             if (_seasonIndex == 0 && _fixtureIndex == 0 && PlayerPrefs.GetInt("diceSoccer.tutorial.5", 0) == 0)
@@ -1448,6 +1506,171 @@ namespace DiceSoccer
                         ShowTutorialPopup(24);
                 });
             }
+        }
+
+        private void ShowLockedTournamentModal(string compName)
+        {
+            if (_overlayContainer == null) return;
+            var modal = AddPanel("LockedTournamentModal", _overlayContainer,
+                new Color(0f, 0f, 0f, 0.78f), new Vector2(0.5f, 0.5f), Vector2.one);
+            modal.raycastTarget = true;
+
+            var box = AddResourceImage("Box", "Original/sprites/AchievementsSS4/LongDialogBox", modal.transform,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            box.rectTransform.sizeDelta = new Vector2(400f, 320f);
+            box.preserveAspect = false;
+
+            StartCoroutine(PopInBounceAnimation(box.rectTransform));
+
+            var lockIcon = AddResourceImage("LockIcon", "Original/sprites/MatchSelectionSS1/TournamentLocked", box.transform,
+                new Vector2(0.5f, 0.76f), new Vector2(0.5f, 0.76f));
+            lockIcon.rectTransform.sizeDelta = new Vector2(65f, 80f);
+            lockIcon.preserveAspect = true;
+
+            var title = AddText("TOURNAMENT LOCKED", box.transform, 20, Gold,
+                new Vector2(0.05f, 0.52f), new Vector2(0.95f, 0.64f));
+            title.fontStyle = FontStyle.Bold;
+            title.alignment = TextAnchor.MiddleCenter;
+
+            var seasonName = (_catalog?.Data?.seasons != null && _seasonIndex < _catalog.Data.seasons.Length)
+                ? _catalog.Data.seasons[_seasonIndex].name : "current";
+
+            var msg = AddText($"Complete all fixtures in the\n{seasonName} League\nto unlock this tournament!",
+                box.transform, 14, Paper,
+                new Vector2(0.08f, 0.28f), new Vector2(0.92f, 0.50f));
+            msg.alignment = TextAnchor.MiddleCenter;
+
+            AddSpriteButton("OkBtn", "Original/images/ContinueButton", "Original/images/ContinueButtonPressed", box.transform,
+                new Vector2(0.5f, 0.12f), new Vector2(0.48f, 0.15f), () => Destroy(modal.gameObject));
+        }
+
+        private void ShowTournamentVictoryModal(string compName)
+        {
+            if (_overlayContainer == null)
+            {
+                ShowLeagueFixtures();
+                return;
+            }
+
+            AudioManager.Instance.PlayMedalCeremonyLong();
+            AudioManager.Instance.PlayEffect("KidsCheering", 1f, 1f);
+            AudioManager.Instance.PlayCash();
+            TriggerHaptic();
+
+            int cupPrize = 25000 * (_seasonIndex + 1);
+            _careerCash += cupPrize;
+            PlayerPrefs.SetInt($"diceSoccer.season.{_seasonIndex}.{compName}.trophyWon", 1);
+            SaveCareerState();
+
+            var modal = AddPanel("TournamentVictoryModal", _overlayContainer,
+                new Color(0f, 0f, 0f, 0.85f), new Vector2(0.5f, 0.5f), Vector2.one);
+            modal.raycastTarget = true;
+
+            for (var i = 0; i < 30; i++)
+            {
+                var cId = UnityEngine.Random.Range(1, 4);
+                var x = UnityEngine.Random.Range(0.05f, 0.95f);
+                var y = UnityEngine.Random.Range(0.40f, 0.95f);
+                var cImg = AddResourceImage($"VictoryConfetti{i}",
+                    $"Original/sprites/ConfettiSS/Confetti{cId}", modal.transform,
+                    new Vector2(x, y), new Vector2(x, y));
+                cImg.rectTransform.sizeDelta = new Vector2(26f, 26f);
+                cImg.rectTransform.localEulerAngles = new Vector3(0f, 0f, UnityEngine.Random.Range(0f, 360f));
+                cImg.raycastTarget = false;
+            }
+
+            var box = AddResourceImage("Box", "Original/sprites/AchievementsSS4/LongDialogBox", modal.transform,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            box.rectTransform.sizeDelta = new Vector2(430f, 540f);
+            box.preserveAspect = false;
+
+            StartCoroutine(PopInBounceAnimation(box.rectTransform));
+
+            int tier = Mathf.Clamp(_seasonIndex + 1, 1, 6);
+            var trophy = AddResourceImage("Trophy", $"Original/sprites/MultiplayerSS3/TrophyTier{tier}Trophy", box.transform,
+                new Vector2(0.5f, 0.68f), new Vector2(0.5f, 0.68f));
+            trophy.rectTransform.sizeDelta = new Vector2(160f, 220f);
+            trophy.preserveAspect = true;
+
+            var title = AddText($"{compName.ToUpperInvariant()} CHAMPIONS!", box.transform, 22, Gold,
+                new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.97f));
+            title.fontStyle = FontStyle.Bold;
+            title.alignment = TextAnchor.MiddleCenter;
+
+            var seasonName = (_catalog?.Data?.seasons != null && _seasonIndex < _catalog.Data.seasons.Length)
+                ? _catalog.Data.seasons[_seasonIndex].name : "";
+
+            var desc = AddText($"Congratulations!\nYour team has conquered the\n{seasonName} {compName} Tournament!",
+                box.transform, 16, Paper,
+                new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.49f));
+            desc.alignment = TextAnchor.MiddleCenter;
+
+            var prizeText = AddText($"+{cupPrize:N0} CASH BONUS", box.transform, 20, Gold,
+                new Vector2(0.08f, 0.24f), new Vector2(0.92f, 0.33f));
+            prizeText.fontStyle = FontStyle.Bold;
+            prizeText.alignment = TextAnchor.MiddleCenter;
+
+            AddSpriteButton("ContinueBtn", "Original/images/ContinueButton", "Original/images/ContinueButtonPressed", box.transform,
+                new Vector2(0.5f, 0.08f), new Vector2(0.55f, 0.11f), () =>
+                {
+                    Destroy(modal.gameObject);
+                    ShowLeagueFixtures();
+                });
+        }
+
+        private void ShowSeasonPromotedModal(int newSeasonIndex)
+        {
+            if (_overlayContainer == null)
+            {
+                ShowLeagueFixtures();
+                return;
+            }
+
+            AudioManager.Instance.PlayMedalCeremonyLong();
+            AudioManager.Instance.PlayEffect("KidsCheering", 1f, 1f);
+            TriggerHaptic();
+
+            var modal = AddPanel("SeasonPromotedModal", _overlayContainer,
+                new Color(0f, 0f, 0f, 0.85f), new Vector2(0.5f, 0.5f), Vector2.one);
+            modal.raycastTarget = true;
+
+            var box = AddResourceImage("Box", "Original/sprites/AchievementsSS4/LongDialogBox", modal.transform,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            box.rectTransform.sizeDelta = new Vector2(430f, 540f);
+            box.preserveAspect = false;
+
+            StartCoroutine(PopInBounceAnimation(box.rectTransform));
+
+            var season = _catalog.Data.seasons[newSeasonIndex];
+            string crestPath = newSeasonIndex switch
+            {
+                0 => "Original/sprites/SeasonCrest/Season0Crest",
+                1 => "Original/sprites/SeasonCrest1/Season1Crest",
+                2 => "Original/sprites/SeasonCrest/Season2Crest",
+                3 => "Original/sprites/SeasonCrest/Season3Crest",
+                _ => "Original/sprites/SeasonCrest/Season4Crest"
+            };
+            var crest = AddResourceImage("NewSeasonCrest", crestPath, box.transform,
+                new Vector2(0.5f, 0.68f), new Vector2(0.5f, 0.68f));
+            crest.rectTransform.sizeDelta = new Vector2(170f, 170f);
+            crest.preserveAspect = true;
+
+            var title = AddText("PROMOTED!", box.transform, 24, Gold,
+                new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.97f));
+            title.fontStyle = FontStyle.Bold;
+            title.alignment = TextAnchor.MiddleCenter;
+
+            var desc = AddText($"WELCOME TO\n{season.name.ToUpperInvariant()}!\n\nNew competitions, stronger rivals,\nand elite players are now available!",
+                box.transform, 16, Paper,
+                new Vector2(0.08f, 0.28f), new Vector2(0.92f, 0.49f));
+            desc.alignment = TextAnchor.MiddleCenter;
+
+            AddSpriteButton("PlayNowBtn", "Original/images/ContinueButton", "Original/images/ContinueButtonPressed", box.transform,
+                new Vector2(0.5f, 0.10f), new Vector2(0.55f, 0.11f), () =>
+                {
+                    Destroy(modal.gameObject);
+                    ShowLeagueFixtures();
+                });
         }
 
         private void SelectCompetition(string competitionName)
@@ -1515,20 +1738,76 @@ namespace DiceSoccer
             ClearCanvas();
             AddMenuBackdrop(true);
             AddMenuHeader("SEASON SUMMARY", ShowLeagueFixtures);
-            AddText($"{_catalog.Data.seasons[_seasonIndex].name.ToUpperInvariant()} LEAGUE COMPLETE",
-                _safeArea, 25, Gold,
-                new Vector2(0.05f, 0.62f), new Vector2(0.95f, 0.7f));
-            AddText($"{_careerCash:N0} CASH",
-                _safeArea, 19, Paper, new Vector2(0.05f, 0.53f), new Vector2(0.95f, 0.59f));
-            if (_seasonIndex > 0)
+
+            var season = _catalog.Data.seasons[_seasonIndex];
+            int earnedStars = GetEarnedStarsForSeason(_seasonIndex);
+            var leagueFixtures = _catalog.GetFixtures(_seasonIndex, "League");
+            int maxStars = (leagueFixtures != null && leagueFixtures.Length > 0) ? leagueFixtures.Length * 3 : 9;
+            int threshold = MatchSimulation.PromotionThresholdForSeason(_seasonIndex);
+            bool canPromote = MatchSimulation.CanPromoteToSeason(_seasonIndex, earnedStars);
+            bool isFinalSeason = _seasonIndex >= _catalog.Data.seasons.Length - 1;
+
+            string crestPath = _seasonIndex switch
             {
-                AddText("Season-star promotion rules are not reconstructed yet.",
-                    _safeArea, 14, Paper, new Vector2(0.08f, 0.45f), new Vector2(0.92f, 0.51f));
+                0 => "Original/sprites/SeasonCrest/Season0Crest",
+                1 => "Original/sprites/SeasonCrest1/Season1Crest",
+                2 => "Original/sprites/SeasonCrest/Season2Crest",
+                3 => "Original/sprites/SeasonCrest/Season3Crest",
+                _ => "Original/sprites/SeasonCrest/Season4Crest"
+            };
+            var crest = AddResourceImage("SeasonCrest", crestPath, _safeArea,
+                new Vector2(0.5f, 0.70f), new Vector2(0.5f, 0.70f));
+            crest.rectTransform.sizeDelta = new Vector2(170f, 170f);
+            crest.preserveAspect = true;
+
+            var title = AddText($"{season.name.ToUpperInvariant()} LEAGUE COMPLETE",
+                _safeArea, 22, Gold,
+                new Vector2(0.05f, 0.53f), new Vector2(0.95f, 0.60f));
+            title.fontStyle = FontStyle.Bold;
+            title.alignment = TextAnchor.MiddleCenter;
+
+            var starText = AddText($"★ {earnedStars} / {maxStars} STARS EARNED",
+                _safeArea, 20, Paper,
+                new Vector2(0.05f, 0.46f), new Vector2(0.95f, 0.52f));
+            starText.fontStyle = FontStyle.Bold;
+            starText.alignment = TextAnchor.MiddleCenter;
+
+            if (isFinalSeason)
+            {
+                var finalMsg = AddText("CONGRATULATIONS!\nYou have conquered the highest league!",
+                    _safeArea, 16, Gold,
+                    new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.44f));
+                finalMsg.fontStyle = FontStyle.Bold;
+                finalMsg.alignment = TextAnchor.MiddleCenter;
+
+                AddButton("BACK TO SEASONS", _safeArea, Grass,
+                    new Vector2(0.5f, 0.25f), new Vector2(0.72f, 0.08f), ShowLeagueSelect);
             }
-            AddButton(SeasonEndButtonLabel(), _safeArea, Grass,
-                new Vector2(0.5f, 0.38f), new Vector2(0.82f, 0.085f), AdvanceCareer);
+            else if (canPromote)
+            {
+                var nextSeason = _catalog.Data.seasons[_seasonIndex + 1];
+                var promoMsg = AddText($"PROMOTION EARNED!\nYou have qualified for {nextSeason.name}!",
+                    _safeArea, 16, Gold,
+                    new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.44f));
+                promoMsg.fontStyle = FontStyle.Bold;
+                promoMsg.alignment = TextAnchor.MiddleCenter;
+
+                AddButton($"UNLOCK {nextSeason.name.ToUpperInvariant()}", _safeArea, Grass,
+                    new Vector2(0.5f, 0.25f), new Vector2(0.75f, 0.085f), AdvanceCareer);
+            }
+            else
+            {
+                var lockMsg = AddText($"PROMOTION REQUIRES {threshold} STARS\nEarn {threshold - earnedStars} more stars to unlock {_catalog.Data.seasons[_seasonIndex + 1].name}!",
+                    _safeArea, 15, new Color32(235, 90, 75, 255),
+                    new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.44f));
+                lockMsg.alignment = TextAnchor.MiddleCenter;
+
+                AddButton("REPLAY FIXTURES", _safeArea, Grass,
+                    new Vector2(0.5f, 0.25f), new Vector2(0.72f, 0.08f), ShowLeagueFixtures);
+            }
+
             AddButton("BACK TO FIXTURES", _safeArea, new Color32(68, 79, 84, 255),
-                new Vector2(0.5f, 0.27f), new Vector2(0.65f, 0.07f), ShowLeagueFixtures);
+                new Vector2(0.5f, 0.15f), new Vector2(0.65f, 0.065f), ShowLeagueFixtures);
         }
 
         private void StartCurrentFixture()
@@ -1867,6 +2146,33 @@ namespace DiceSoccer
             pauseSpriteState.highlightedSprite = GetUiSprite("Original/images/PauseButtonPressed");
             pauseSpriteState.pressedSprite = GetUiSprite("Original/images/PauseButtonPressed");
             pauseBtn.spriteState = pauseSpriteState;
+
+            // Speed toggle button docked directly right of pause button:
+            var speedBtnGo = new GameObject("MatchSpeedBtn", typeof(RectTransform), typeof(Image), typeof(Button));
+            speedBtnGo.transform.SetParent(scoreboard.transform, false);
+            var speedRect = speedBtnGo.GetComponent<RectTransform>();
+            speedRect.anchorMin = speedRect.anchorMax = new Vector2(0.5f, 1f);
+            speedRect.anchoredPosition = new Vector2(68f, -124f);
+            speedRect.sizeDelta = new Vector2(58f, 52f);
+            var speedImg = speedBtnGo.GetComponent<Image>();
+            speedImg.sprite = GetUiSprite("Original/images/BlueButton");
+            speedImg.type = Image.Type.Sliced;
+            var speedBtn = speedBtnGo.GetComponent<Button>();
+
+            var speedText = AddText($"{_matchSpeed:0}X", speedBtnGo.transform, 18, (_matchSpeed > 1f) ? Gold : Paper,
+                Vector2.zero, Vector2.one);
+            speedText.fontStyle = FontStyle.Bold;
+            speedText.alignment = TextAnchor.MiddleCenter;
+
+            speedBtn.onClick.AddListener(() =>
+            {
+                _matchSpeed = (_matchSpeed <= 1f) ? 2f : 1f;
+                Time.timeScale = _matchSpeed;
+                speedText.text = $"{_matchSpeed:0}X";
+                speedText.color = (_matchSpeed > 1f) ? (Color)Gold : (Color)Paper;
+                AudioManager.Instance.PlayTap();
+                TriggerHaptic();
+            });
 
             // Authentic in-match digital clock centered in bottom grass field area (matching 2012 iOS original)
             var clockGo = new GameObject("MatchClock", typeof(RectTransform), typeof(Text), typeof(Shadow));
@@ -4277,6 +4583,7 @@ namespace DiceSoccer
 
                 // 4. Settle dice on INITIAL faces (so Dribble 16..18 and Cross 24 are visibly shown first!)
                 AudioManager.Instance.PlayTap();
+                TriggerHaptic();
                 var diceBaseSprite = GetUiSprite("Original/sprites/Buff6/DiceBackground");
                 for (var i = 0; i < homeFaces.Length; i++)
                 {
@@ -5631,6 +5938,7 @@ namespace DiceSoccer
             AudioManager.Instance.PlayGoal();
             AudioManager.Instance.PlayHighlightReel();
             AudioManager.Instance.PlayWhistle();
+            TriggerHaptic();
 
             // Bring header scoreboard to front so it remains visible on top of sunburst rays (matching media_1792577925152_01871c83.png)
             if (_matchScoreboard != null) _matchScoreboard.transform.SetAsLastSibling();
@@ -5833,6 +6141,7 @@ namespace DiceSoccer
         {
             if (_overlayContainer == null) yield break;
             AudioManager.Instance.PlayWhistle();
+            TriggerHaptic();
             var path = home
                 ? "Original/sprites/BuffTrigger1/ThroughPassGreen"
                 : "Original/sprites/BuffTrigger1/ThroughPassRed";
@@ -5909,6 +6218,7 @@ namespace DiceSoccer
                     AudioManager.Instance.PlayWhistle();
                 else
                     AudioManager.Instance.PlayDisappoint();
+                TriggerHaptic();
 
                 var elapsed = 0f;
                 while (elapsed < 0.22f)
@@ -5962,6 +6272,7 @@ namespace DiceSoccer
         private void ShowGameOverModal()
         {
             if (_overlayContainer == null) return;
+            Time.timeScale = 1.0f;
 
             if (_isLocalMultiplayer)
             {
@@ -5997,30 +6308,43 @@ namespace DiceSoccer
                 var winnerColor = isDraw ? (Color)Ink : (Color)(p1Won ? new Color32(215, 45, 45, 255) : new Color32(45, 115, 215, 255));
 
                 var mpTitle = AddText(winnerText, mpBox.transform, 22, winnerColor,
-                    new Vector2(0.08f, 0.72f), new Vector2(0.92f, 0.82f));
+                    new Vector2(0.08f, 0.74f), new Vector2(0.92f, 0.84f));
                 mpTitle.fontStyle = FontStyle.Bold;
                 mpTitle.alignment = TextAnchor.MiddleCenter;
 
                 var scoreText = AddText($"P1 (RED)  {_match.HomeScore} - {_match.AwayScore}  P2 (BLUE)", mpBox.transform, 22, Ink,
-                    new Vector2(0.08f, 0.58f), new Vector2(0.92f, 0.68f));
+                    new Vector2(0.08f, 0.61f), new Vector2(0.92f, 0.71f));
                 scoreText.fontStyle = FontStyle.Bold;
                 scoreText.alignment = TextAnchor.MiddleCenter;
 
+                int homePossPct = (_match.HomePossessionTicks + _match.AwayPossessionTicks > 0)
+                    ? Mathf.RoundToInt((float)_match.HomePossessionTicks / (_match.HomePossessionTicks + _match.AwayPossessionTicks) * 100f)
+                    : 50;
+                int awayPossPct = 100 - homePossPct;
+
+                var mpStats = AddText(
+                    $"Possession: {homePossPct}% - {awayPossPct}%\n" +
+                    $"Shots: {_match.HomeShots} - {_match.AwayShots}   Saves: {_match.HomeSaves} - {_match.AwaySaves}\n" +
+                    $"Tackles Won: {_match.HomeTackles} - {_match.AwayTackles}",
+                    mpBox.transform, 13, Ink,
+                    new Vector2(0.08f, 0.44f), new Vector2(0.92f, 0.58f));
+                mpStats.alignment = TextAnchor.MiddleCenter;
+
                 var subTitle = AddText(isDraw ? "Great battle between both managers!" : (p1Won ? "Player 1 takes the victory!" : "Player 2 takes the victory!"),
-                    mpBox.transform, 14, Ink,
-                    new Vector2(0.08f, 0.44f), new Vector2(0.92f, 0.54f));
+                    mpBox.transform, 13, new Color32(70, 75, 80, 255),
+                    new Vector2(0.08f, 0.38f), new Vector2(0.92f, 0.44f));
                 subTitle.alignment = TextAnchor.MiddleCenter;
 
                 // Rematch button
                 AddButton("⚔ REMATCH (1v1)", mpBox.transform, Grass,
-                    new Vector2(0.5f, 0.30f), new Vector2(0.75f, 0.09f), () =>
+                    new Vector2(0.5f, 0.26f), new Vector2(0.75f, 0.085f), () =>
                     {
                         StartLocalMultiplayerMatch();
                     });
 
                 // Main menu button
                 AddButton("MAIN MENU", mpBox.transform, new Color32(68, 79, 84, 255),
-                    new Vector2(0.5f, 0.16f), new Vector2(0.75f, 0.08f), () =>
+                    new Vector2(0.5f, 0.14f), new Vector2(0.75f, 0.075f), () =>
                     {
                         _isLocalMultiplayer = false;
                         ShowHome();
@@ -6099,8 +6423,14 @@ namespace DiceSoccer
             scoreTextSingle.fontStyle = FontStyle.Bold;
 
             var rewardTextSingle = AddText($"REWARD:\n{_lastPayout:N0} credits", box.transform, 20, Ink,
-                new Vector2(0.1f, 0.43f), new Vector2(0.9f, 0.57f));
+                new Vector2(0.1f, 0.44f), new Vector2(0.9f, 0.58f));
             rewardTextSingle.fontStyle = FontStyle.Bold;
+
+            var statsTextSingle = AddText(
+                $"Shots: {_match.HomeShots} - {_match.AwayShots}   Saves: {_match.HomeSaves} - {_match.AwaySaves}\nTackles Won: {_match.HomeTackles} - {_match.AwayTackles}",
+                box.transform, 12, Ink,
+                new Vector2(0.08f, 0.33f), new Vector2(0.92f, 0.42f));
+            statsTextSingle.alignment = TextAnchor.MiddleCenter;
 
             if (won)
             {
@@ -6115,7 +6445,7 @@ namespace DiceSoccer
             var starIndex = Mathf.Clamp(stars, 0, 3);
             var starImg = AddResourceImage("StarRating",
                 $"Original/sprites/GameOver/Gold{starIndex}Star", box.transform,
-                new Vector2(0.5f, 0.20f), new Vector2(0.5f, 0.20f));
+                new Vector2(0.5f, 0.19f), new Vector2(0.5f, 0.19f));
             starImg.rectTransform.sizeDelta = new Vector2(280f, 115f);
             starImg.preserveAspect = true;
 
@@ -6142,10 +6472,21 @@ namespace DiceSoccer
                 () => {
                     Action proceedToFixtures = () =>
                     {
-                        ShowLeagueFixtures();
-                        if (_seasonIndex == 0 && _selectedFixtureIndex == 0 && PlayerPrefs.GetInt("diceSoccer.tutorial.21", 0) == 0)
+                        if (_competitionName == "League" && _selectedFixtureIndex >= _seasonFixtures.Length - 1)
                         {
-                            ShowTutorialPopup(21);
+                            ShowSeasonCompletion();
+                        }
+                        else if (_competitionName != "League" && _selectedFixtureIndex >= _seasonFixtures.Length - 1 && won)
+                        {
+                            ShowTournamentVictoryModal(_competitionName);
+                        }
+                        else
+                        {
+                            ShowLeagueFixtures();
+                            if (_seasonIndex == 0 && _selectedFixtureIndex == 0 && PlayerPrefs.GetInt("diceSoccer.tutorial.21", 0) == 0)
+                            {
+                                ShowTutorialPopup(21);
+                            }
                         }
                     };
 
@@ -6266,6 +6607,7 @@ namespace DiceSoccer
         private void ShowPauseMenu()
         {
             if (_overlayContainer == null || _match == null || _match.IsFinished) return;
+            Time.timeScale = 0f;
             var backdrop = AddPanel("PauseBackdrop", _overlayContainer,
                 new Color(0f, 0f, 0f, 0.78f), new Vector2(0.5f, 0.5f), Vector2.one);
             backdrop.raycastTarget = true;
@@ -6285,7 +6627,10 @@ namespace DiceSoccer
             AddSpriteButton("Resume", "Original/images/ResumeButton",
                 "Original/images/ResumeButtonPressed", box.transform,
                 new Vector2(0.5f, 0.69f), new Vector2(0.68f, 0.12f),
-                () => Destroy(backdrop.gameObject));
+                () => {
+                    Time.timeScale = _matchSpeed;
+                    Destroy(backdrop.gameObject);
+                });
 
             // 2. Substitution Button:
             var subBtn = AddSpriteButton("Substitution", "Original/images/SubstitutionButton",
@@ -6294,6 +6639,7 @@ namespace DiceSoccer
                 () => {
                     if (_remainingSubs > 0 && _ownedPlayerIds.Count > 7)
                     {
+                        Time.timeScale = _matchSpeed;
                         Destroy(backdrop.gameObject);
                         ShowSubstitutionSlots();
                     }
@@ -6314,7 +6660,11 @@ namespace DiceSoccer
             AddSpriteButton("Forfeit", "Original/images/ForfeitButton",
                 "Original/images/ForfeitButtonPressed", box.transform,
                 new Vector2(0.5f, 0.16f), new Vector2(0.65f, 0.12f),
-                () => ShowForfeitConfirmation(backdrop.transform));
+                () => {
+                    Time.timeScale = 1f;
+                    _matchSpeed = 1f;
+                    ShowForfeitConfirmation(backdrop.transform);
+                });
         }
 
         private void ShowForfeitConfirmation(Transform parent)
@@ -6442,17 +6792,17 @@ namespace DiceSoccer
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
             vibTick.rectTransform.sizeDelta = new Vector2(24f, 24f);
             vibTick.preserveAspect = true;
-            var vibEnabled = PlayerPrefs.GetInt("diceSoccer.vibration", 0) != 0;
+            var vibEnabled = PlayerPrefs.GetInt("diceSoccer.vibration", 1) != 0;
             vibTick.gameObject.SetActive(vibEnabled);
 
             void ToggleVibration()
             {
-                var cur = PlayerPrefs.GetInt("diceSoccer.vibration", 0) != 0;
+                var cur = PlayerPrefs.GetInt("diceSoccer.vibration", 1) != 0;
                 var next = !cur;
                 PlayerPrefs.SetInt("diceSoccer.vibration", next ? 1 : 0);
                 PlayerPrefs.Save();
                 vibTick.gameObject.SetActive(next);
-                if (next) Handheld.Vibrate();
+                if (next) TriggerHaptic();
                 AudioManager.Instance.PlayTap();
             }
 
@@ -6787,29 +7137,52 @@ namespace DiceSoccer
 
         private string SeasonEndButtonLabel()
         {
-            if (_seasonIndex == 0 && _catalog.Data.seasons.Length > 1)
-                return $"UNLOCK {_catalog.Data.seasons[1].name.ToUpperInvariant()}";
-            return "BACK TO COMPETITIONS";
+            if (_catalog?.Data?.seasons == null) return "BACK TO FIXTURES";
+            int earnedStars = GetEarnedStarsForSeason(_seasonIndex);
+            if (_seasonIndex < _catalog.Data.seasons.Length - 1 && MatchSimulation.CanPromoteToSeason(_seasonIndex, earnedStars))
+            {
+                var nextSeason = _catalog.Data.seasons[_seasonIndex + 1];
+                return $"UNLOCK {nextSeason.name.ToUpperInvariant()}";
+            }
+            return "BACK TO FIXTURES";
         }
 
         private void AdvanceCareer()
         {
-            if (_seasonIndex != 0 || _fixtureIndex < _seasonFixtures.Length ||
-                _catalog.Data.seasons.Length < 2)
+            if (_catalog?.Data?.seasons == null)
             {
                 ShowLeagueFixtures();
                 return;
             }
 
-            _seasonIndex = 1;
-            _competitionName = "League";
-            _seasonFixtures = _catalog.GetFixtures(_seasonIndex, _competitionName);
-            _fixtureIndex = 0;
-            PlayerPrefs.SetInt("diceSoccer.season", _seasonIndex);
-            PlayerPrefs.SetInt(CompetitionProgressKey(_competitionName), _fixtureIndex);
-            PlayerPrefs.SetInt("diceSoccer.fixture", _fixtureIndex);
-            SaveCareerState();
-            ShowHome();
+            int earnedStars = GetEarnedStarsForSeason(_seasonIndex);
+            if (!MatchSimulation.CanPromoteToSeason(_seasonIndex, earnedStars))
+            {
+                ShowLeagueFixtures();
+                return;
+            }
+
+            if (_seasonIndex < _catalog.Data.seasons.Length - 1)
+            {
+                _seasonIndex++;
+                _selectedLeagueSeasonIndex = _seasonIndex;
+                _competitionName = "League";
+                _seasonFixtures = _catalog.GetFixtures(_seasonIndex, _competitionName);
+                _fixtureIndex = 0;
+                _selectedFixtureIndex = 0;
+
+                PlayerPrefs.SetInt("diceSoccer.season", _seasonIndex);
+                PlayerPrefs.SetInt($"diceSoccer.profile.{_currentProfileSlot}.season", _seasonIndex);
+                PlayerPrefs.SetInt(CompetitionProgressKey(_competitionName), 0);
+                PlayerPrefs.SetInt("diceSoccer.fixture", 0);
+                SaveCareerState();
+
+                ShowSeasonPromotedModal(_seasonIndex);
+            }
+            else
+            {
+                ShowLeagueSelect();
+            }
         }
 
         private void LoadCareerProgress()
@@ -6818,6 +7191,7 @@ namespace DiceSoccer
             _teamName = PlayerPrefs.GetString($"diceSoccer.profile.{_currentProfileSlot}.name",
                 PlayerPrefs.GetString("diceSoccer.teamName", "SANUKU"));
             _seasonIndex = Mathf.Max(0, PlayerPrefs.GetInt($"diceSoccer.profile.{_currentProfileSlot}.season", PlayerPrefs.GetInt("diceSoccer.season", 0)));
+            _selectedLeagueSeasonIndex = _seasonIndex;
             _fixtureIndex = Mathf.Max(0, PlayerPrefs.GetInt($"diceSoccer.profile.{_currentProfileSlot}.fixture", PlayerPrefs.GetInt("diceSoccer.fixture", 0)));
             _careerCash = Mathf.Max(0, PlayerPrefs.GetInt($"diceSoccer.profile.{_currentProfileSlot}.cash", PlayerPrefs.GetInt("diceSoccer.cash", 1000)));
             _currentShirtId = Mathf.Max(1, PlayerPrefs.GetInt("diceSoccer.currentShirt", 1));
@@ -8126,6 +8500,7 @@ namespace DiceSoccer
 
         private void ClearCanvas()
         {
+            Time.timeScale = 1.0f;
             if (_idleBobbingCoroutine != null)
             {
                 StopCoroutine(_idleBobbingCoroutine);
