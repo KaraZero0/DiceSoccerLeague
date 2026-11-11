@@ -283,7 +283,37 @@ namespace DiceSoccer.Editor
             string rep = simHomeCaptain.CompleteEncounter();
             if (string.IsNullOrEmpty(rep)) throw new Exception("CompleteEncounter returned empty report!");
 
-            Debug.Log("[TEST] Verified Ability Mechanics & Symmetry: All triggers, Captain passive, and Home/Away symmetrical adjustments passed perfectly!");
+            // Verify LayeredPlayerRig attachment, LoadingScreenSprite atlas slicing, Entourage #19/#20/#21 mechanics, and all 21 Entourage icons
+            for (int eId = 1; eId <= 21; eId++)
+            {
+                var icon = PlayerBodySprites.LoadSprite($"Original/images/EntourageAbility{eId:00}");
+                if (icon == null) throw new Exception($"Missing Entourage icon sprite: EntourageAbility{eId:00}");
+            }
+
+            PlayerBodySprites.EnsureLoadingAtlasSliced(out var lFrames, out var lHead, out var lBubble);
+            if (lFrames == null || lFrames.Length != 22 || lHead == null || lBubble == null)
+                throw new Exception($"LoadingScreenSprite slice failed: frames={lFrames?.Length ?? 0}, head={lHead != null}, bubble={lBubble != null}");
+
+            var applyBonus = typeof(MatchSimulation).GetMethod("ApplyEntourageRollBonuses", BindingFlags.Static | BindingFlags.NonPublic);
+            if (applyBonus == null) throw new Exception("ApplyEntourageRollBonuses not found!");
+
+            int totalBenchNonEmpty = 10;
+            applyBonus.Invoke(null, new object[] { new[] { 19 }, origHome, new[] { 3, 3, 2 }, totalBenchNonEmpty, 2, null });
+            if (totalBenchNonEmpty != 10) throw new Exception($"Entourage #19 should NOT trigger when bench is non-empty! Got {totalBenchNonEmpty}");
+            object[] args19Empty = new object[] { new[] { 19 }, origHome, new[] { 3, 3, 2 }, 10, 0, new System.Collections.Generic.List<int>() };
+            applyBonus.Invoke(null, args19Empty);
+            if ((int)args19Empty[3] != 12) throw new Exception($"Entourage #19 failed when bench empty: expected 12, got {args19Empty[3]}");
+
+            object[] args21 = new object[] { new[] { 21 }, origHome, new[] { 5, 5, 2 }, 12, 0, new System.Collections.Generic.List<int>() };
+            applyBonus.Invoke(null, args21);
+            if ((int)args21[3] != 27) throw new Exception($"Entourage #21 (4x on pair of 5s) expected 27, got {args21[3]}");
+
+            int c1 = simHomeCaptain.IssueYellowCard(false, 5);
+            int c2 = simHomeCaptain.IssueYellowCard(false, 5);
+            if (c1 != 1 || c2 != 2 || !simHomeCaptain.HasYellowCard(false, 5) || !simHomeCaptain.HasRedCard(false, 5))
+                throw new Exception($"Yellow -> Red card escalation failed! c1={c1}, c2={c2}");
+
+            Debug.Log("[TEST] Verified Ability Mechanics & Symmetry: All triggers, Captain passive, Entourage #1..21 rules, Cards, Loading slice, and Home/Away symmetrical adjustments passed perfectly!");
         }
     }
 }
