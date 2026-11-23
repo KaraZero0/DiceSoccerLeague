@@ -7991,7 +7991,7 @@ namespace DiceSoccer
             var body = AddText(
                 "DICE SOCCER (2012)\n\n" +
                 "Original Game Design & Art:\n" +
-                "Red Robot Labs & Foursaken Media\n\n" +
+                "LambdaMu Games\n\n" +
                 "Sound & Music:\n" +
                 "Original 2012 Audio Archive\n\n" +
                 "2026 Preservation & Remake:\n" +

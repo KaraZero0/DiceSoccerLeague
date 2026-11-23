@@ -1,3 +1,9 @@
+🇬🇧 [Read in English](#-english) | 🇮🇹 [Leggi in Italiano](#-italiano)
+
+---
+
+# 🇬🇧 English
+
 # Dice Soccer — Fan Remaster (2012 iOS Classic)
 
 <p align="center">
@@ -6,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/KaraZero0/DiceSoccerLeague/releases/latest"><img src="https://img.shields.io/badge/Download%20APK%20%26%20IPA-v1.0.0%20Latest-success?style=for-the-badge&logo=android" alt="Download APK and IPA" /></a>
-  <img src="https://img.shields.io/badge/Unity-6000.0%20LTS-black?style=for-the-badge&logo=unity" alt="Unity 6" />
+  <img src="https://img.shields.io/badge/Unity-6000.6%20LTS-black?style=for-the-badge&logo=unity" alt="Unity 6 (6000.6 LTS)" />
   <img src="https://img.shields.io/badge/Platforms-Android%20%7C%20iOS%20(IPA)-green?style=for-the-badge" alt="Platforms" />
   <img src="https://img.shields.io/badge/Architecture-ARM64%20IL2CPP-blue?style=for-the-badge" alt="ARM64" />
   <img src="https://img.shields.io/badge/License-100%25%20Free%20Fan%20Remaster-brightgreen?style=for-the-badge" alt="Free" />
@@ -38,14 +44,13 @@ When Apple deprecated 32-bit application support in iOS 11, the original game va
 
 ---
 
-## 🗂️ Repository Branches Structure
+## 🗂️ Project Architecture
 
-This repository is organized into two primary branches:
-
-| Branch | Description |
+| Component | Description |
 |:---|:---|
-| **[`unity`](https://github.com/KaraZero0/DiceSoccerLeague/tree/unity)** | **The Modern Remaster**: The complete, standalone Unity 6 project containing the full C# simulation engine, extracted assets, high-res adaptive icons, automated mobile build pipeline, and verification suites. |
-| **[`original-ipa`](https://github.com/KaraZero0/DiceSoccerLeague/tree/original-ipa)** | **Historical Archive**: The raw, decrypted 2012 iOS `.ipa` bundle (`Payload/Dice Soccer.app` and `iTunesArtwork`), preserved strictly for reverse engineering and digital archiving purposes. |
+| **[`unity`](https://github.com/KaraZero0/DiceSoccerLeague/tree/unity)** | **Main Unity 6 Branch**: Complete C# simulation engine (`Assets/Scripts/`), catalog & extracted assets, adaptive icons, verification test suite, and automated mobile CI/CD. |
+| **[`Tools/`](https://github.com/KaraZero0/DiceSoccerLeague/tree/unity/Tools)** | **Reverse Engineering & Asset Pipeline**: Custom Python scripts (`cgbi.py`, `extract_assets.py`) to unpack Apple CgBI PNGs, Cocos2d `.plist` atlases, and ARMv7 catalog data from an offline `.ipa` archive. |
+| **[`.github/workflows/`](https://github.com/KaraZero0/DiceSoccerLeague/tree/unity/.github/workflows)** | **Automated Builds**: macOS `xcodebuild` pipeline compiling and packaging signed `.ipa` alongside the Android `.apk` into GitHub Releases. |
 
 ---
 
@@ -54,12 +59,12 @@ This repository is organized into two primary branches:
 * **1:1 Authentic Match Simulation**:
   * 5 discrete tactical field zones (`-2` to `+2`) with authentic ball possession transfer.
   * Faithful 1-3-3 team formation (Goalkeeper on net, 3 outfielders per duel).
-  * 3v3 outfield dice rolls with authentic player dice faces (values 1–32).
+  * 3v3 outfield dice rolls with authentic player dice faces (numeric values, `0`, `15+` buffs, Wild `31`, Whistle `32`).
   * Intense 1v1 Central Forward vs Goalkeeper penalty duels when reaching the net zone.
   * 15-minute decrementing game clock with stoppage time.
-* **All 96 Historical Players Unlocked**:
-  * Every character from Novice, Amateur, Pro, Champion, and Legend leagues.
-  * Real special abilities: *Tackle, Slide, Save, Header, Bicycle Kick, Charge, Dribble*.
+* **All 96 Historical Players & 21 Entourage Staff**:
+  * Earn every character across all 5 original seasons & cups (*Training Season, Bootcamp, Turf War, High Rollers, Just for Kicks*) and all 72 achievements with zero paywalls.
+  * All 67 original abilities across phases 0–5: *Dribble, Cross, Tackle, Steal, Step-Over, Anchor, Intercept, Charge, Feint, Through Pass, Dive!, Critical Striker, Bicycle Kick, Captain*.
 * **100% Original Graphics & Audio**:
   * Original pixel-art character spritesheets (`PlayerFigureSS`, `Prompt1`, `ShopSS`).
   * Authentic stadium audio, crowd chants (`CrowdMix`), referee whistles, and chiptune theme music.
@@ -175,18 +180,18 @@ You do **NOT** need an Apple Developer Account, a Mac, or the App Store. Any per
 ## 🛠️ Building from Source
 
 ### Prerequisites
-* **Unity 6 (6000.0 LTS or newer)** (Tested on `6000.6.6f1`).
-* Unity Android Build Support module (OpenSDK, NDK r23b+, Android SDK platform tools).
+* **Unity 6 (`6000.6 LTS` or newer)** (Tested on `6000.6.6f1`).
+* Unity Android Build Support module (OpenJDK, NDK r23b+, Android SDK platform tools).
 
 ### Build Steps
-1. Clone the repository and switch to the `unity` branch:
+1. Clone the repository on the `unity` branch:
    ```bash
    git clone https://github.com/KaraZero0/DiceSoccerLeague.git -b unity
    cd DiceSoccerLeague
    ```
 2. Open the project folder in **Unity Hub**.
 3. Open the main startup scene: `Assets/Scenes/Main.unity`
-4. To build the signed APK from command line:
+4. To build the Android APK from command line (optionally pass release signing via environment variables `DICE_SOCCER_KEYSTORE`, `DICE_SOCCER_KEYSTORE_PASS`, `DICE_SOCCER_KEY_ALIAS`, `DICE_SOCCER_KEY_PASS`; if unset, builds unsigned/debug):
    ```bash
    Unity -quit -batchmode -projectPath . -executeMethod DiceSoccer.Editor.ConfigureMobileBuild.BuildAndroid -logFile build_android.log
    ```
@@ -210,3 +215,67 @@ This is a non-profit fan-made remaster developed solely for educational, archiva
 * All original visual assets, character designs, game concepts, and audio tracks remain the intellectual property of their original creators and rights holders (**LambdaMu Games**).
 * This project is completely free of charge, contains no advertisements, no in-app purchases, and does not generate revenue.
 * If you are a copyright holder and have concerns, please contact the repository owner.
+
+
+<br><br>
+
+---
+
+# 🇮🇹 Italiano
+
+# Dice Soccer — Fan Remaster (Classico iOS 2012)
+
+<p align="center">
+  <img src="Screenshots/AppIcon.png" alt="Icona App Dice Soccer" width="160" height="160" style="border-radius: 28px;" />
+</p>
+
+## 📖 Panoramica
+
+**Dice Soccer** è un remaster 1:1 fedele e un progetto di conservazione storica del titolo cult iOS del 2011/2012 sviluppato originariamente da **LambdaMu Games**.
+
+Quando Apple ha rimosso il supporto alle app a 32 bit in iOS 11, il gioco originale è scomparso diventando abandonware. Questo progetto ne ripristina ogni singolo aspetto — estraendo al 100% gli sprite sheet Cocos2d originali, gli effetti audio, il font Krungthep e i roster dei personaggi — ricostruito da zero in **Unity 6 (6000.6 LTS)** come applicazione nativa a 64 bit per Android e iOS.
+
+> [!IMPORTANT]
+> **Fan Remaster 100% No-Profit**: Tutti i 96 giocatori storici, le divise, i tornei e i pacchetti di monete sono sbloccati gratuitamente. Zero pubblicità, zero tracciamento, zero paywall.
+
+---
+
+## 👑 Dedica Speciale: Le Leggende dell'Archivio
+
+* **Karazero**: Creatore del progetto, Ingegnerizzazione & Conservazione 1:1
+* **jairsldn**: Custode dell'Archivio Originale
+
+In tutta la rete, **jairsldn** è stato l'unico ad aver conservato i binari e i file originali iOS del 2012 di Dice Soccer, permettendoci di riportarlo in vita. 🏆
+
+---
+
+## 🗂️ Struttura del Progetto
+
+| Componente | Descrizione |
+|:---|:---|
+| **[`unity`](https://github.com/KaraZero0/DiceSoccerLeague/tree/unity)** | **Branch Principale Unity 6**: Il progetto Unity completo con motore di simulazione in C#, asset estratti, icone adattive, suite di test automatici e pipeline CI/CD mobile. |
+| **[`Tools/`](https://github.com/KaraZero0/DiceSoccerLeague/tree/unity/Tools)** | **Reverse Engineering & Asset Pipeline**: Script Python custom (`cgbi.py`, `extract_assets.py`) per convertire PNG CgBI Apple, sprite sheet Cocos2d `.plist` e catalogo dati da un archivio `.ipa` offline. |
+| **[`.github/workflows/`](https://github.com/KaraZero0/DiceSoccerLeague/tree/unity/.github/workflows)** | **Build Automatizzate**: Workflow macOS (`xcodebuild`) che compila e impacchetta `.ipa` insieme all'`.apk` Android nelle GitHub Releases. |
+
+---
+
+## 🎮 Funzionalità Principali
+
+* **Simulazione Partita 1:1**: 5 zone tattiche di campo (`-2` a `+2`), formazione 1-3-3, tiri 3v3 con facce dei dadi autentiche (valori numerici, `0`, buff `15+`, Wild `31`, Whistle `32`), duelli 1v1 attaccante vs portiere e cronometro da 15 minuti con recupero.
+* **Tutti i 96 Giocatori Storici & 21 Staff Entourage**: tutte le 5 stagioni e coppe originali (*Training Season, Bootcamp, Turf War, High Rollers, Just for Kicks*), 72 achievement e tutte le 67 abilità originali (*Dribble, Cross, Tackle, Steal, Step-Over, Anchor, Intercept, Charge, Feint, Through Pass, Dive!, Critical Striker, Bicycle Kick, Captain*).
+* **Grafica e Audio Originali al 100%**: sprite sheet, cori, fischietti, musica chiptune e font `Krungthep.ttf` originali.
+* **Multigiocatore Locale 1v1 "Pass & Play"**: sfida un amico sullo stesso dispositivo.
+* **Supporto Schermi Moderni & Architettura 64-bit**: build nativa ARM64 IL2CPP (`com.karazero.dicesoccer`), opzione aspect ratio classico 2:3 o Fullscreen Edge-to-Edge (18:9 / 19.5:9 / 20:9), velocità `2X` dalle Opzioni e icone adattive Android.
+
+---
+
+## 📥 Installazione e Compilazione
+
+* **Android (APK)** e **iOS (IPA tramite Sideloadly / AltStore / TrollStore)**: disponibili nella sezione **[Latest Release](https://github.com/KaraZero0/DiceSoccerLeague/releases/latest)**.
+* **Build da sorgente**: richiede **Unity 6 (`6000.6 LTS` o superiore)** sul branch `unity` (`git clone https://github.com/KaraZero0/DiceSoccerLeague.git -b unity`). La firma release Android usa opzionalmente variabili d'ambiente (`DICE_SOCCER_KEYSTORE*`), mai committate nel repository.
+
+---
+
+## ⚖️ Disclaimer Legale
+
+Progetto amatoriale no-profit sviluppato esclusivamente a scopo educativo, di archiviazione e preservazione storica del software. Tutti gli asset grafici, i personaggi e le tracce audio originali appartengono ai rispettivi detentori dei diritti (**LambdaMu Games**). Nessuna monetizzazione, pubblicità o acquisto in-app presente.

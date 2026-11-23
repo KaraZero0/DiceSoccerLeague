@@ -34,15 +34,7 @@ namespace DiceSoccer.Editor
             PlayerSettings.Android.preferredInstallLocation = AndroidPreferredInstallLocation.Auto;
             PlayerSettings.Android.renderOutsideSafeArea = true;
 
-            string keystorePath = System.Environment.GetEnvironmentVariable("DICE_SOCCER_KEYSTORE") ?? string.Empty;
-            if (File.Exists(keystorePath))
-            {
-                PlayerSettings.Android.useCustomKeystore = true;
-                PlayerSettings.Android.keystoreName = keystorePath;
-                PlayerSettings.Android.keystorePass = System.Environment.GetEnvironmentVariable("DICE_SOCCER_KEYSTORE_PASS") ?? string.Empty;
-                PlayerSettings.Android.keyaliasName = System.Environment.GetEnvironmentVariable("DICE_SOCCER_KEY_ALIAS") ?? string.Empty;
-                PlayerSettings.Android.keyaliasPass = System.Environment.GetEnvironmentVariable("DICE_SOCCER_KEY_PASS") ?? string.Empty;
-            }
+            ClearCustomKeystoreSettings();
 
             EditorPrefs.SetBool("SdkUseEmbedded", true);
             EditorPrefs.SetBool("NdkUseEmbedded", true);
@@ -151,23 +143,49 @@ namespace DiceSoccer.Editor
             Configure();
             var outputPath = Path.GetFullPath("Builds/Android/DiceSoccer.apk");
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
-            var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+
+            var hasSigning = TryLoadSigningConfig(out var ksPath, out var ksPass, out var keyAlias, out var keyPass);
+            try
             {
-                scenes = EditorBuildSettings.scenes
-                    .Where(scene => scene.enabled)
-                    .Select(scene => scene.path)
-                    .ToArray(),
-                locationPathName = outputPath,
-                target = BuildTarget.Android,
-                options = BuildOptions.None
-            });
+                if (hasSigning)
+                {
+                    PlayerSettings.Android.useCustomKeystore = true;
+                    PlayerSettings.Android.keystoreName = ksPath;
+                    PlayerSettings.Android.keystorePass = ksPass;
+                    PlayerSettings.Android.keyaliasName = keyAlias;
+                    PlayerSettings.Android.keyaliasPass = keyPass;
+                }
 
-            if (report.summary.result != BuildResult.Succeeded)
-                throw new InvalidOperationException(
-                    $"Android build failed with result {report.summary.result}.");
+                var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+                {
+                    scenes = EditorBuildSettings.scenes
+                        .Where(scene => scene.enabled)
+                        .Select(scene => scene.path)
+                        .ToArray(),
+                    locationPathName = outputPath,
+                    target = BuildTarget.Android,
+                    options = BuildOptions.None
+                });
 
-            SignApk(outputPath);
-            Debug.Log($"Android APK created and signed at {outputPath}.");
+                if (report.summary.result != BuildResult.Succeeded)
+                    throw new InvalidOperationException(
+                        $"Android build failed with result {report.summary.result}.");
+
+                if (hasSigning)
+                {
+                    SignApk(outputPath, ksPath, ksPass, keyAlias, keyPass);
+                    Debug.Log($"Android APK created and signed at {outputPath}.");
+                }
+                else
+                {
+                    Debug.Log($"Android APK created (debug/unsigned — set DICE_SOCCER_KEYSTORE* env vars for release signing) at {outputPath}.");
+                }
+            }
+            finally
+            {
+                ClearCustomKeystoreSettings();
+                AssetDatabase.SaveAssets();
+            }
         }
 
         public static void BuildIOS()
@@ -206,25 +224,87 @@ namespace DiceSoccer.Editor
             Debug.Log($"iOS Xcode project successfully generated at {outputFolder}.");
         }
 
-        private static void SignApk(string apkPath)
+        private static void ClearCustomKeystoreSettings()
         {
-            string keystorePath = System.Environment.GetEnvironmentVariable("DICE_SOCCER_KEYSTORE") ?? string.Empty;
+            PlayerSettings.Android.useCustomKeystore = false;
+            PlayerSettings.Android.keystoreName = string.Empty;
+            PlayerSettings.Android.keystorePass = string.Empty;
+            PlayerSettings.Android.keyaliasName = string.Empty;
+            PlayerSettings.Android.keyaliasPass = string.Empty;
+        }
+
+        private static bool TryLoadSigningConfig(out string keystorePath, out string keystorePass, out string keyAlias, out string keyPass)
+        {
+            var envVars = new System.Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal);
+            var localEnvFile = Path.GetFullPath("Keystores/signing.env");
+            if (File.Exists(localEnvFile))
+            {
+                foreach (var rawLine in File.ReadAllLines(localEnvFile))
+                {
+                    var line = rawLine.Trim();
+                    if (string.IsNullOrEmpty(line) || line.StartsWith("#")) continue;
+                    var eq = line.IndexOf('=');
+                    if (eq <= 0) continue;
+                    envVars[line.Substring(0, eq).Trim()] = line.Substring(eq + 1).Trim();
+                }
+            }
+
+            string ReadSetting(string key)
+            {
+                var fromProc = Environment.GetEnvironmentVariable(key);
+                if (!string.IsNullOrEmpty(fromProc)) return fromProc;
+                return envVars.TryGetValue(key, out var fromFile) ? fromFile : null;
+            }
+
+            var rawPath = ReadSetting("DICE_SOCCER_KEYSTORE");
+            keystorePass = ReadSetting("DICE_SOCCER_KEYSTORE_PASS");
+            keyAlias = ReadSetting("DICE_SOCCER_KEY_ALIAS");
+            keyPass = ReadSetting("DICE_SOCCER_KEY_PASS") ?? keystorePass;
+
+            keystorePath = string.IsNullOrEmpty(rawPath) ? null : Path.GetFullPath(rawPath);
+            return !string.IsNullOrEmpty(keystorePath) &&
+                   File.Exists(keystorePath) &&
+                   !string.IsNullOrEmpty(keystorePass) &&
+                   !string.IsNullOrEmpty(keyAlias) &&
+                   !string.IsNullOrEmpty(keyPass);
+        }
+
+        private static void SignApk(string apkPath, string keystorePath, string keystorePass, string keyAlias, string keyPass)
+        {
             if (!File.Exists(keystorePath)) return;
 
             string contentsPath = EditorApplication.applicationContentsPath;
-            string apksignerPath = Path.Combine(contentsPath, "PlaybackEngines/AndroidPlayer/SDK/build-tools/36.0.0/apksigner");
-            if (!File.Exists(apksignerPath)) return;
+            string buildToolsRoot = Path.Combine(contentsPath, "PlaybackEngines/AndroidPlayer/SDK/build-tools");
+            string apksignerPath = null;
+            if (Directory.Exists(buildToolsRoot))
+            {
+                foreach (var dir in Directory.GetDirectories(buildToolsRoot).OrderByDescending(d => d))
+                {
+                    var candidate = Path.Combine(dir, "apksigner");
+                    if (File.Exists(candidate))
+                    {
+                        apksignerPath = candidate;
+                        break;
+                    }
+                }
+            }
+            if (string.IsNullOrEmpty(apksignerPath))
+                throw new FileNotFoundException("Android SDK apksigner was not found under PlaybackEngines/AndroidPlayer/SDK/build-tools.");
 
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = apksignerPath,
-                Arguments = $"sign --ks \"{keystorePath}\" --ks-pass env:DICE_SOCCER_KEYSTORE_PASS --key-pass env:DICE_SOCCER_KEY_PASS --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \"{apkPath}\"",
+                Arguments = $"sign --ks \"{keystorePath}\" --ks-pass env:DICE_SOCCER_KEYSTORE_PASS --ks-key-alias \"{keyAlias}\" --key-pass env:DICE_SOCCER_KEY_PASS --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \"{apkPath}\"",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            psi.Environment["DICE_SOCCER_KEYSTORE_PASS"] = keystorePass;
+            psi.Environment["DICE_SOCCER_KEY_PASS"] = keyPass;
             var proc = System.Diagnostics.Process.Start(psi);
             proc.WaitForExit();
+            if (proc.ExitCode != 0)
+                throw new InvalidOperationException($"apksigner failed with exit code {proc.ExitCode}: {proc.StandardError.ReadToEnd()}");
             Debug.Log($"apksigner result: {proc.ExitCode}");
         }
     }

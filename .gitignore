@@ -40,3 +40,12 @@ CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 compile_commands.json*
+
+# Signing credentials & local secrets
+Keystores/
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+*.env
+signing.env
